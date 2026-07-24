@@ -17,6 +17,7 @@ import base64
 import json
 import httpx
 import os
+import urllib.parse
 
 from .database import get_db, init_db, SessionLocal
 from .models import Base, User, Project, Phase, WhatsAppMessage, SlackConfig, SlackActivity, SlackMessage, Session as SessionModel
@@ -72,6 +73,15 @@ SLACK_CLIENT_ID = os.getenv("SLACK_CLIENT_ID", "")
 SLACK_CLIENT_SECRET = os.getenv("SLACK_CLIENT_SECRET", "")
 SLACK_TEAM_ID = os.getenv("SLACK_TEAM_ID", "")
 SLACK_REDIRECT_URI = os.getenv("SLACK_REDIRECT_URI", "http://localhost:8000/api/slack/oauth/callback")
+
+# ---------- Slack Bot Install (oauth.v2.access) — separate from Login-with-Slack (OIDC) above ----------
+SLACK_BOT_REDIRECT_URI = os.getenv("SLACK_BOT_REDIRECT_URI", "http://localhost:8000/api/slack/install/callback")
+SLACK_BOT_SCOPES = os.getenv(
+    "SLACK_BOT_SCOPES",
+    "chat:write,channels:manage,groups:write,users:read,users:read.email,commands",
+)
+SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET", "")
+INSTALL_STATE_COOKIE = "slack_install_state"
 
 # ---------- Password hashing ----------
 argon2_hasher = argon2.PasswordHasher()
@@ -322,12 +332,12 @@ def get_slack_auth_url():
         "client_id": SLACK_CLIENT_ID,
         "redirect_uri": SLACK_REDIRECT_URI,
         "response_type": "code",
-        "scope": "openid,email,profile",
+        "scope": "openid email profile",
         "state": os.urandom(24).hex(),
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
     }
-    query = "&".join(f"{k}={v}" for k, v in params.items())
+    query = urllib.parse.urlencode(params)
     redirect = RedirectResponse(url=f"https://slack.com/openid/connect/authorize?{query}", status_code=302)
     set_pkce_cookie(redirect, code_verifier)
     return redirect
@@ -355,7 +365,11 @@ async def slack_oauth_callback(
 
     token_data = await slack_oidc_exchange(code, SLACK_REDIRECT_URI, pkce_verifier)
     if not token_data.get("ok"):
-        return RedirectResponse(url=f"{FRONTEND_URL}?error=slack_token_exchange_failed", status_code=302)
+        print(f"[SLACK OIDC] token exchange failed: {token_data}")
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}?error=slack_token_exchange_failed&reason={token_data.get('error', 'unknown')}",
+            status_code=302,
+        )
 
     access_token = token_data.get("access_token", "")
     user_info = await slack_get_userinfo(access_token)
@@ -1375,6 +1389,101 @@ def save_slack_config(data: SlackConfigCreate, user: User = Depends(get_current_
         db.commit()
         db.refresh(config)
         return SlackConfigResponse.model_validate(config)
+
+
+@app.get("/api/slack/install")
+def slack_install(user: User = Depends(require_admin)):
+    """Starts the Slack App Install flow (oauth.v2.access) to obtain a bot token.
+    This is separate from Login-with-Slack (OIDC) used for user sign-in."""
+    if not SLACK_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Slack app not configured")
+    state = os.urandom(24).hex()
+    params = {
+        "client_id": SLACK_CLIENT_ID,
+        "scope": SLACK_BOT_SCOPES,
+        "redirect_uri": SLACK_BOT_REDIRECT_URI,
+        "state": state,
+    }
+    query = urllib.parse.urlencode(params)
+    redirect = RedirectResponse(url=f"https://slack.com/oauth/v2/authorize?{query}", status_code=302)
+    redirect.set_cookie(
+        key=INSTALL_STATE_COOKIE,
+        value=state,
+        httponly=True,
+        secure=os.getenv("ENV") != "development",
+        samesite="lax",
+        max_age=300,
+        path="/api/slack/install/callback",
+    )
+    return redirect
+
+
+@app.get("/api/slack/install/callback")
+async def slack_install_callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    request: Request = None,
+    db: Session = Depends(get_db),
+):
+    if error:
+        return RedirectResponse(url=f"{FRONTEND_URL}?slack_install_error={error}", status_code=302)
+    if not code:
+        return RedirectResponse(url=FRONTEND_URL, status_code=302)
+
+    expected_state = request.cookies.get(INSTALL_STATE_COOKIE)
+    if not expected_state or expected_state != state:
+        return RedirectResponse(url=f"{FRONTEND_URL}?slack_install_error=state_mismatch", status_code=302)
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            "https://slack.com/api/oauth.v2.access",
+            data={
+                "client_id": SLACK_CLIENT_ID,
+                "client_secret": SLACK_CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": SLACK_BOT_REDIRECT_URI,
+            },
+            timeout=10.0,
+        )
+        result = resp.json()
+
+    if not result.get("ok"):
+        print(f"[SLACK INSTALL] oauth.v2.access failed: {result}")
+        response = RedirectResponse(
+            url=f"{FRONTEND_URL}?slack_install_error={result.get('error', 'unknown')}", status_code=302
+        )
+        response.delete_cookie(key=INSTALL_STATE_COOKIE, path="/api/slack/install/callback")
+        return response
+
+    bot_token = result.get("access_token", "")
+    team_id = result.get("team", {}).get("id", "")
+
+    config = get_slack_config(db)
+    encrypted_token = encrypt_token(bot_token)
+    if config:
+        config.bot_token = encrypted_token
+        config.slack_team_id = team_id
+        config.encrypted = True
+        # Signing secret is app-level (from Basic Information), not returned by oauth.v2.access.
+        # Only set it if it hasn't been configured yet and we have one from env.
+        if not config.signing_secret and SLACK_SIGNING_SECRET:
+            config.signing_secret = encrypt_token(SLACK_SIGNING_SECRET)
+        db.commit()
+    else:
+        signing_secret = encrypt_token(SLACK_SIGNING_SECRET) if SLACK_SIGNING_SECRET else ""
+        config = SlackConfig(
+            bot_token=encrypted_token,
+            signing_secret=signing_secret,
+            slack_team_id=team_id,
+            encrypted=True,
+        )
+        db.add(config)
+        db.commit()
+
+    response = RedirectResponse(url=f"{FRONTEND_URL}?slack_install=success", status_code=302)
+    response.delete_cookie(key=INSTALL_STATE_COOKIE, path="/api/slack/install/callback")
+    return response
 
 
 @app.post("/api/slack/status")

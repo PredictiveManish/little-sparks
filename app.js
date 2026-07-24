@@ -69,6 +69,24 @@ function slackLogin() {
     window.location.href = `${API_BASE}/auth/slack-auth-url`;
 }
 
+function connectSlackWorkspace() {
+    window.location.href = `${API_BASE}/slack/install`;
+}
+
+function handleSlackInstallReturn() {
+    const params = new URLSearchParams(window.location.search);
+    const installed = params.get('slack_install');
+    const installError = params.get('slack_install_error');
+    if (installed === 'success') {
+        showToast('Slack workspace connected! Bot token saved.');
+        window.history.replaceState({}, '', window.location.pathname);
+        loadSlackSettings();
+    } else if (installError) {
+        showToast('Slack install failed: ' + installError);
+        window.history.replaceState({}, '', window.location.pathname);
+    }
+}
+
 async function handleSlackCallback() {
     const params = new URLSearchParams(window.location.search);
     const error = params.get('error');
@@ -1261,6 +1279,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Otherwise check auth and load app
     checkAuth();
+    handleSlackInstallReturn();
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeDesignerModal();
