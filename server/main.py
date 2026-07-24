@@ -254,12 +254,12 @@ def set_pkce_cookie(response: Response, verifier: str):
         secure=os.getenv("ENV") != "development",
         samesite="lax",
         max_age=300,
-        path="/api/auth/slack/oauth/callback",
+        path="/api/slack/oauth/callback",
     )
 
 
 def clear_pkce_cookie(response: Response):
-    response.delete_cookie(key=PKCE_COOKIE_NAME, path="/api/auth/slack/oauth/callback")
+    response.delete_cookie(key=PKCE_COOKIE_NAME, path="/api/slack/oauth/callback")
 
 
 async def slack_oidc_exchange(code: str, redirect_uri: str, code_verifier: str):
@@ -324,13 +324,14 @@ def get_slack_auth_url(response: Response):
     params = {
         "client_id": SLACK_CLIENT_ID,
         "redirect_uri": SLACK_REDIRECT_URI,
+        "response_type": "code",
         "scope": "openid,email,profile",
         "state": os.urandom(24).hex(),
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
     }
     query = "&".join(f"{k}={v}" for k, v in params.items())
-    return {"auth_url": f"https://slack.com/oauth/v2/authorize?{query}"}
+    return {"auth_url": f"https://slack.com/openid/connect/authorize?{query}"}
 
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
