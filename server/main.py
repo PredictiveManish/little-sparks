@@ -17,19 +17,17 @@ import base64
 import json
 import httpx
 import os
-import asyncio
 
 from .database import get_db, init_db, SessionLocal
 from .models import Base, User, Project, Phase, WhatsAppMessage, SlackConfig, SlackActivity, SlackMessage, Session as SessionModel
 from .schemas import (
     LoginRequest, TokenResponse, UserResponse, UserCreate,
     ProjectCreate, ProjectUpdate, ProjectResponse,
-    PhaseResponse, PhaseCreate,
-    DashboardStats, RecentProject, UpcomingDeadline,
+    PhaseResponse, DashboardStats, RecentProject, UpcomingDeadline,
     WhatsAppMessageCreate, WhatsAppMessageResponse,
     SlackConfigCreate, SlackConfigResponse,
     SlackActivityResponse, SlackChannelCreateResponse, SlackStatusResponse,
-    SlackLoginRequest, SessionResponse, PendingUserResponse, ApproveUserRequest,
+    SlackLoginRequest, PendingUserResponse, ApproveUserRequest,
     SlackMessageResponse,
 )
 
@@ -37,7 +35,7 @@ from .schemas import (
 init_db()
 
 # ---------- App ----------
-app = FastAPI(title="Smartivity Little Sparks API")
+app = FastAPI(title="Smartivity Designer Manager API")
 
 app.add_middleware(
     CORSMiddleware,
