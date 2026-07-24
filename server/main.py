@@ -19,9 +19,9 @@ import httpx
 import os
 import asyncio
 
-from database import get_db, init_db, SessionLocal
-from models import Base, User, Project, Phase, WhatsAppMessage, SlackConfig, SlackActivity, SlackMessage, Session as SessionModel
-from schemas import (
+from .database import get_db, init_db, SessionLocal
+from .models import Base, User, Project, Phase, WhatsAppMessage, SlackConfig, SlackActivity, SlackMessage, Session as SessionModel
+from .schemas import (
     LoginRequest, TokenResponse, UserResponse, UserCreate,
     ProjectCreate, ProjectUpdate, ProjectResponse,
     PhaseResponse, PhaseCreate,
