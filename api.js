@@ -5,7 +5,7 @@ const API_BASE = (function() {
     if (envApiUrl) return envApiUrl;
     if (window.location.hostname === 'localhost') return 'http://localhost:8000/api';
     // For deployed frontend, use the backend URL from env or default
-    return 'https://little-sparks-backend.onrender.com/api';
+    return 'https://designer-manager.onrender.com/api';
 })();
 
 async function apiFetch(endpoint, options = {}) {
