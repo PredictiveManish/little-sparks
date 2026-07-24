@@ -1,0 +1,160 @@
+:root {
+    --sidebar-width: 240px;
+}
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #F9FAFB;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: #D1D5DB;
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #9CA3AF;
+}
+
+/* Stage card transitions */
+.stage-card {
+    transition: all 0.2s ease;
+}
+.stage-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+/* Workflow connector line */
+.workflow-node::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    width: calc(100% - 32px);
+    height: 2px;
+    background: #E5E7EB;
+    transform: translateY(-50%);
+    z-index: 0;
+}
+.workflow-node:last-child::after {
+    display: none;
+}
+.workflow-node.completed::after {
+    background: #10B981;
+}
+.workflow-node.current::after {
+    background: linear-gradient(to right, #F47920 50%, #E5E7EB 50%);
+}
+
+/* Pulse for current stage */
+@keyframes subtlePulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(244, 121, 32, 0.35);
+    }
+    50% {
+        box-shadow: 0 0 0 10px rgba(244, 121, 32, 0);
+    }
+}
+.current-stage-pulse {
+    animation: subtlePulse 2.5s infinite;
+}
+
+/* Read-only field styling */
+.readonly-field {
+    background-color: #F9FAFB;
+    border: 1px dashed #D1D5DB;
+    cursor: not-allowed;
+    user-select: none;
+    position: relative;
+}
+.readonly-field::after {
+    content: '🔒 Read Only';
+    position: absolute;
+    top: -10px;
+    right: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #9CA3AF;
+    background: #F9FAFB;
+    padding: 0 6px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* Mobile sidebar overlay */
+.sidebar-overlay {
+    display: none;
+}
+@media (max-width: 768px) {
+    .sidebar-overlay.active {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 40;
+    }
+    .sidebar {
+        transform: translateX(-100%);
+        position: fixed;
+        z-index: 50;
+        height: 100vh;
+        transition: transform 0.25s ease;
+    }
+    .sidebar.open {
+        transform: translateX(0);
+    }
+}
+
+/* ============================================ */
+/* WHATSAPP CHAT STYLES */
+/* ============================================ */
+
+/* Chat container pattern background */
+#chatMessages {
+    background-color: #EFEAE2;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4cfc4' fill-opacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Quick reply buttons */
+.quick-reply-btn {
+    border: 1px solid #25D366;
+    color: #075E54;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.quick-reply-btn:hover {
+    background-color: #E6F7EC;
+}
+
+/* Chat input */
+#chatInput {
+    background-color: #2A3942;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-size: 14px;
+    outline: none;
+}
+
+#chatInput::placeholder {
+    color: #8696a0;
+}
+
+#chatInput:focus {
+    box-shadow: 0 0 0 1px #25D366;
+}
