@@ -165,10 +165,10 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optiona
     return user
 
 
-def require_admin(request: Request = Depends(get_current_user)):
-    if not request or request.role != "ADMIN":
+def require_admin(user: User = Depends(get_current_user)):
+    if not user or user.role != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin access required")
-    return request
+    return user
 
 
 def require_role(required: List[str]):

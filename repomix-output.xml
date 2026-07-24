@@ -1,0 +1,3975 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.env.example
+.gitignore
+.python-version
+api.js
+app.js
+index.html
+ngr.py
+Procfile
+server/database.py
+server/main.py
+server/models.py
+server/requirements.txt
+server/schemas.py
+styles.css
+utils.js
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".env.example">
+# Smartivity Little Sparks - Environment Variables
+# Copy this file to .env and fill in the values
+
+# JWT signing key - generate with: python -c "import secrets; print(secrets.token_urlsafe(48))"
+SECRET_KEY=your-secret-key-here
+
+# Fernet encryption key for Slack tokens - generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+ENCRYPTION_KEY=your-fernet-encryption-key-here
+
+# Slack App configuration
+SLACK_CLIENT_ID=your-slack-client-id
+SLACK_CLIENT_SECRET=your-slack-client-secret
+SLACK_TEAM_ID=your-slack-workspace-team-id
+SLACK_REDIRECT_URI=https://your-backend-url.onrender.com/api/slack/oauth/callback
+
+# Server
+DATABASE_URL=sqlite:///./smartivity.db
+
+# CORS - comma-separated list of allowed frontend origins
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8000,https://your-frontend-url.netlify.app
+
+# Frontend URL (for Slack callback redirects)
+FRONTEND_URL=http://localhost:3000
+</file>
+
+<file path=".gitignore">
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# SQLite
+*.db
+*.db-journal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+</file>
+
+<file path=".python-version">
+3.12.0
+</file>
+
+<file path="api.js">
+const API_BASE = (function() {
+    // Auto-detect: if running on localhost, use localhost:8000
+    // Otherwise use the deployed backend URL (set via env or default)
+    const envApiUrl = window.env?.API_URL;
+    if (envApiUrl) return envApiUrl;
+    if (window.location.hostname === 'localhost') return 'http://localhost:8000/api';
+    // For deployed frontend, use the backend URL from env or default
+    return 'https://little-sparks-backend.onrender.com/api';
+})();
+
+async function apiFetch(endpoint, options = {}) {
+    const defaultOptions = {
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+    };
+    const config = { ...defaultOptions, ...options, headers: { ...defaultOptions.headers, ...(options.headers || {}) } };
+    if (options.body) {
+        config.body = JSON.stringify(options.body);
+    }
+    const response = await fetch(`${API_BASE}${endpoint}`, config);
+    if (response.status === 401) {
+        window.location.href = '/';
+        return null;
+    }
+    if (response.status === 403) {
+        showToast('Access denied. You need elevated permissions.');
+        return null;
+    }
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+        throw new Error(error.detail || 'Request failed');
+    }
+    if (response.status === 204) return null;
+    return response.json();
+}
+
+const api = {
+    // Auth
+    slackLogin: (code, redirectUri) => apiFetch('/auth/slack-login', { method: 'POST', body: { code, redirect_uri: redirectUri } }),
+    emailLogin: (email, password) => apiFetch('/auth/login', { method: 'POST', body: { email, password } }),
+    logout: () => apiFetch('/auth/logout', { method: 'GET' }),
+    getMe: () => apiFetch('/auth/me'),
+    getSlackAuthUrl: () => apiFetch('/auth/slack-auth-url'),
+    getPendingUsers: () => apiFetch('/admin/pending-users'),
+    approveUser: (userId, role) => apiFetch('/admin/users/approve', { method: 'POST', body: { user_id: userId, role } }),
+
+    // Dashboard
+    getDashboardStats: () => apiFetch('/dashboard/stats'),
+    getRecentProjects: () => apiFetch('/dashboard/recent-projects'),
+    getUpcomingDeadlines: () => apiFetch('/dashboard/upcoming-deadlines'),
+
+    // Projects
+    getProjects: () => apiFetch('/projects'),
+    getProject: (id) => apiFetch(`/projects/${id}`),
+    createProject: (data) => apiFetch('/projects', { method: 'POST', body: data }),
+    updateProject: (id, data) => apiFetch(`/projects/${id}`, { method: 'PUT', body: data }),
+    completeStage: (id, stageIndex) => apiFetch(`/projects/${id}/stages/${stageIndex}/complete`, { method: 'POST' }),
+    unmarkStage: (id, stageIndex) => apiFetch(`/projects/${id}/stages/${stageIndex}/unmark`, { method: 'POST' }),
+
+    // Designers
+    getDesigners: () => apiFetch('/designers'),
+    createDesigner: (data) => apiFetch('/designers', { method: 'POST', body: data }),
+    deleteDesigner: (id) => apiFetch(`/designers/${id}`, { method: 'DELETE' }),
+
+    // WhatsApp
+    getWhatsAppMessages: (projectId) => apiFetch(`/projects/${projectId}/whatsapp-messages`),
+    createWhatsAppMessage: (projectId, data) => apiFetch(`/projects/${projectId}/whatsapp-messages`, { method: 'POST', body: data }),
+    respondToMessage: (projectId) => apiFetch(`/projects/${projectId}/whatsapp-messages/respond`, { method: 'POST' }),
+    sendWelcomeMessage: (projectId) => apiFetch(`/projects/${projectId}/whatsapp-messages/welcome`, { method: 'POST' }),
+    notifyProjectCreated: (projectId) => apiFetch(`/projects/${projectId}/whatsapp-messages/notify-project-created`, { method: 'POST' }),
+
+    // Slack
+    getSlackConfig: () => apiFetch('/slack/config'),
+    saveSlackConfig: (data) => apiFetch('/slack/config', { method: 'POST', body: data }),
+    createSlackChannel: (projectId) => apiFetch(`/projects/${projectId}/slack-channel`, { method: 'POST' }),
+    getSlackStatus: (projectId) => apiFetch(`/slack/status`, { method: 'POST', body: { project_id: projectId } }),
+    getSlackActivity: (projectId) => apiFetch(`/projects/${projectId}/slack-activity`),
+    logSlackMessage: (data) => apiFetch('/slack/messages/log', { method: 'POST', body: data }),
+    getSlackMessages: (projectId) => apiFetch(`/projects/${projectId}/slack-messages`),
+};
+</file>
+
+<file path="app.js">
+// ============================================
+// STATE
+// ============================================
+let currentView = 'dashboard';
+let selectedProjectId = 1;
+let designerModalStageIndex = null;
+let tempDesignerSelections = [];
+let DESIGNERS = [];
+let CURRENT_USER = null;
+let USER_ROLE = null;
+
+// ============================================
+// AUTH
+// ============================================
+
+async function checkAuth() {
+    try {
+        const user = await api.getMe();
+        if (user) {
+            CURRENT_USER = user;
+            USER_ROLE = user.role;
+            updateSidebarUser(user);
+            if (user.role === 'PENDING') {
+                showPage('pendingPage');
+                document.getElementById('pendingRole').textContent = user.requested_role || 'Designer';
+            } else if (user.role === 'ADMIN') {
+                showPage('adminPage');
+                loadPendingUsers();
+            } else {
+                showPage('mainApp');
+                navigateTo('dashboard');
+            }
+        } else {
+            showPage('loginPage');
+        }
+    } catch (err) {
+        showPage('loginPage');
+    }
+}
+
+function showPage(pageId) {
+    ['loginPage', 'pendingPage', 'adminPage', 'mainApp'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (id === pageId) {
+                el.classList.remove('hidden');
+            } else {
+                el.classList.add('hidden');
+            }
+        }
+    });
+}
+
+function updateSidebarUser(user) {
+    const nameEl = document.getElementById('sidebarUserName');
+    const roleEl = document.getElementById('sidebarUserRole');
+    if (nameEl) nameEl.textContent = user.name;
+    if (roleEl) {
+        const roleLabels = {
+            'ADMIN': 'Administrator',
+            'MANAGER': 'Manager',
+            'DESIGNER': 'Designer',
+        };
+        roleEl.textContent = roleLabels[user.role] || user.role;
+    }
+}
+
+async function slackLogin() {
+    const btn = document.getElementById('slackLoginBtn');
+    btn.disabled = true;
+    btn.textContent = 'Connecting to Slack...';
+    try {
+        const authData = await api.getSlackAuthUrl();
+        if (authData && authData.auth_url) {
+            window.location.href = authData.auth_url;
+        }
+    } catch (err) {
+        showToast('Failed to initiate Slack login: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Continue with Slack';
+    }
+}
+
+async function handleSlackCallback() {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get('error');
+    const slackToken = params.get('slack_token');
+    const slackPending = params.get('slack_pending');
+
+    if (error) {
+        showToast('Slack login failed: ' + error);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        showPage('loginPage');
+        return true;
+    }
+
+    if (slackToken) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        localStorage.setItem('slack_jwt_token', slackToken);
+        try {
+            const user = await api.getMe();
+            if (user) {
+                CURRENT_USER = user;
+                USER_ROLE = user.role;
+                updateSidebarUser(user);
+                if (user.role === 'PENDING') {
+                    showPage('pendingPage');
+                    document.getElementById('pendingRole').textContent = user.requested_role || 'Designer';
+                } else if (user.role === 'ADMIN') {
+                    showPage('adminPage');
+                    loadPendingUsers();
+                } else {
+                    showPage('mainApp');
+                    navigateTo('dashboard');
+                }
+                return true;
+            }
+        } catch (err) {
+            showToast('Slack login failed: ' + err.message);
+        }
+    }
+
+    if (slackPending) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        showPage('loginPage');
+        showToast('Account pending approval. Please login with email.');
+        return true;
+    }
+
+    return false;
+}
+
+async function emailLogin(event) {
+    event.preventDefault();
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    if (!email || !password) {
+        showToast('Please enter email and password');
+        return;
+    }
+    try {
+        const result = await api.emailLogin(email, password);
+        if (result && result.user) {
+            CURRENT_USER = result.user;
+            USER_ROLE = result.user.role;
+            updateSidebarUser(result.user);
+            if (result.user.role === 'PENDING') {
+                showPage('pendingPage');
+                document.getElementById('pendingRole').textContent = result.user.requested_role || 'Designer';
+            } else if (result.user.role === 'ADMIN') {
+                showPage('adminPage');
+                loadPendingUsers();
+            } else {
+                showPage('mainApp');
+                navigateTo('dashboard');
+            }
+        }
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+async function logout() {
+    try {
+        await api.logout();
+    } catch (err) {
+        // Ignore logout errors
+    }
+    CURRENT_USER = null;
+    USER_ROLE = null;
+    showPage('loginPage');
+}
+
+// ============================================
+// ADMIN: Pending Users
+// ============================================
+
+async function loadPendingUsers() {
+    const container = document.getElementById('pendingUsersList');
+    try {
+        const users = await api.getPendingUsers();
+        if (!users || users.length === 0) {
+            container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No pending users.</p>';
+            return;
+        }
+        let html = '';
+        users.forEach(u => {
+            html += `
+                <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div>
+                        <p class="font-semibold text-gray-900">${u.name}</p>
+                        <p class="text-xs text-gray-500">${u.email}</p>
+                        <p class="text-xs text-gray-400 mt-1">Requested: ${u.requested_role || 'Designer'}</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="approveUser(${u.id}, 'DESIGNER')" class="px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-medium hover:bg-green-600 transition-colors">
+                            Approve as Designer
+                        </button>
+                        <button onclick="approveUser(${u.id}, 'MANAGER')" class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors">
+                            Approve as Manager
+                        </button>
+                        <button onclick="denyUser(${u.id})" class="px-3 py-1.5 bg-white text-gray-600 rounded-lg text-xs font-medium border border-gray-300 hover:bg-gray-100 transition-colors">
+                            Deny
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<p class="text-sm text-red-400 text-center py-4">Failed to load pending users.</p>';
+    }
+}
+
+async function approveUser(userId, role) {
+    if (!confirm(`Approve this user as ${role}?`)) return;
+    try {
+        await api.approveUser(userId, role);
+        showToast('User approved as ' + role);
+        loadPendingUsers();
+    } catch (err) {
+        showToast('Failed: ' + err.message);
+    }
+}
+
+async function denyUser(userId) {
+    if (!confirm('Deny this user? They will need to contact an admin again.')) return;
+    try {
+        // Delete the user from DB
+        const db = SessionLocal();
+        const user = db.query(User).filter(User.id == userId).first();
+        if (user) {
+            db.delete(user);
+            db.commit();
+        }
+        db.close();
+        showToast('User denied');
+        loadPendingUsers();
+    } catch (err) {
+        showToast('Failed: ' + err.message);
+    }
+}
+
+// ============================================
+// NAVIGATION
+// ============================================
+function navigateTo(view, projectId = null) {
+    currentView = view;
+    if (projectId) selectedProjectId = projectId;
+
+    document.querySelectorAll('.page-section').forEach(s => s.classList.add('hidden'));
+    const pageMap = {
+        'dashboard': 'page-dashboard',
+        'projects': 'page-projects',
+        'create-project': 'page-create-project',
+        'project-details': 'page-project-details',
+        'edit-project': 'page-edit-project',
+        'designers': 'page-designers',
+        'settings': 'page-settings',
+        'whatsapp-chat': 'page-whatsapp-chat',
+        'slack-settings': 'page-slack-settings',
+    };
+    const targetId = pageMap[view];
+    if (targetId) {
+        const target = document.getElementById(targetId);
+        if (target) target.classList.remove('hidden');
+    }
+
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active', 'bg-brand-50', 'text-brand-600', 'font-semibold');
+        link.classList.add('text-gray-600', 'font-medium');
+    });
+    const navMap = {
+    'dashboard': 'dashboard',
+    'projects': 'projects',
+    'create-project': 'projects',
+    'project-details': 'projects',
+    'edit-project': 'projects',
+    'designers': 'designers',
+    'whatsapp-chat': 'whatsapp-chat',
+    };
+    const navKey = navMap[view];
+    if (navKey) {
+        const navLink = document.querySelector(`[data-nav="${navKey}"]`);
+        if (navLink) {
+            navLink.classList.add('active', 'bg-brand-50', 'text-brand-600', 'font-semibold');
+            navLink.classList.remove('text-gray-600', 'font-medium');
+        }
+    }
+
+    if (view === 'projects') populateProjectsTable();
+    if (view === 'project-details') populateProjectDetails();
+    if (view === 'edit-project') populateEditProject();
+    if (view === 'designers') populateDesignersPage();
+    if (view === 'create-project') resetCreateProjectForm();
+    if (view === 'dashboard') loadDashboard();
+    if (view === 'whatsapp-chat') loadWhatsAppChat();
+
+    // Attach date change listeners for phase deadlines
+    const startDateInputs = document.querySelectorAll('#page-create-project form input[type="date"]');
+    startDateInputs.forEach((input, idx) => {
+        input.onchange = function () {
+            renderPhaseDeadlines();
+        };
+    });
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    closeSidebar();
+}
+
+// ============================================
+// SIDEBAR TOGGLE (Mobile)
+// ============================================
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('active');
+}
+
+function closeSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    sidebar.classList.remove('open');
+    overlay.classList.remove('active');
+}
+
+// ============================================
+// DASHBOARD
+// ============================================
+async function loadDashboard() {
+    try {
+        const stats = await api.getDashboardStats();
+        document.getElementById('statActiveProjects').textContent = stats.active_projects;
+        document.getElementById('statOnTime').textContent = stats.on_time;
+        document.getElementById('statCompleted').textContent = stats.completed;
+        document.getElementById('statDelayed').textContent = stats.delayed;
+
+        const recentProjects = await api.getRecentProjects();
+        const recentContainer = document.getElementById('recentProjectsList');
+        let html = '';
+        if (recentProjects.length === 0) {
+            html = '<p class="text-sm text-gray-400 text-center py-4">No projects yet. Create your first project!</p>';
+        } else {
+            recentProjects.forEach(p => {
+                html += `
+                    <div class="flex items-center justify-between py-3 border-b border-gray-100 last:border-0" onclick="navigateTo('project-details', ${p.id})" style="cursor:pointer">
+                        <div>
+                            <p class="font-medium text-gray-900 text-sm">${p.name}</p>
+                            <p class="text-xs text-gray-500">${p.assigned_designer || 'Unassigned'}</p>
+                        </div>
+                        <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-brand-100 text-brand-700">Stage ${p.stage_index + 1}</span>
+                    </div>
+                `;
+            });
+        }
+        recentContainer.innerHTML = html;
+
+        const deadlines = await api.getUpcomingDeadlines();
+        const deadlineContainer = document.getElementById('upcomingDeadlinesList');
+        let dHtml = '';
+        if (deadlines.length === 0) {
+            dHtml = '<p class="text-sm text-gray-400 text-center py-4">No upcoming deadlines.</p>';
+        } else {
+            deadlines.forEach(d => {
+                const colorClass = d.days_left <= 7 ? 'text-red-500' : d.days_left <= 14 ? 'text-amber-500' : 'text-blue-500';
+                const bgClass = d.days_left <= 7 ? 'bg-red-50' : d.days_left <= 14 ? 'bg-amber-50' : 'bg-blue-50';
+                const parts = d.deadline.split('-');
+                dHtml += `
+                    <div class="flex items-center gap-4 py-3 border-b border-gray-100 last:border-0" style="cursor:pointer" onclick="navigateTo('project-details', ${d.project_id})">
+                        <div class="w-12 h-12 rounded-lg ${bgClass} flex flex-col items-center justify-center flex-shrink-0">
+                            <span class="text-lg font-bold ${colorClass}">${parts[2]}</span>
+                            <span class="text-[10px] ${colorClass} font-medium">${new Date(d.deadline).toLocaleDateString('en', { month: 'short' })}</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-medium text-gray-900 text-sm truncate">${d.project_name}</p>
+                            <p class="text-xs text-gray-500">${d.assigned_designer || 'Unassigned'}</p>
+                        </div>
+                        <span class="text-xs font-semibold ${colorClass} whitespace-nowrap">${d.days_left} days left</span>
+                    </div>
+                `;
+            });
+        }
+        deadlineContainer.innerHTML = dHtml;
+    } catch (err) {
+        showToast('Failed to load dashboard: ' + err.message);
+    }
+}
+
+// ============================================
+// POPULATE PROJECTS TABLE
+// ============================================
+async function populateProjectsTable() {
+    try {
+        DESIGNERS = await api.getDesigners();
+        const projects = await api.getProjects();
+        const tbody = document.getElementById('projectsTableBody');
+        let html = '';
+        projects.forEach(p => {
+            const statusClass = getStatusColor(p.status);
+            const statusText = getStatusText(p.status);
+            const stageLabel = WORKFLOW_STAGES[p.stage_index] || 'N/A';
+            html += `
+                <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onclick="navigateTo('project-details', ${p.id})">
+                    <td class="px-5 py-4">
+                        <p class="font-semibold text-gray-900">${p.name}</p>
+                    </td>
+                    <td class="px-5 py-4 text-gray-600">${getDesignerName(p.assigned_designer_id, DESIGNERS)}</td>
+                    <td class="px-5 py-4">
+                        <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">Stage ${p.stage_index + 1} — ${stageLabel}</span>
+                    </td>
+                    <td class="px-5 py-4">
+                        <div class="flex items-center gap-2">
+                            <div class="w-20 h-1.5 bg-gray-200 rounded-full flex-shrink-0">
+                                <div class="h-full rounded-full ${p.progress >= 80 ? 'bg-green-500' : p.progress >= 40 ? 'bg-brand-500' : 'bg-amber-500'}" style="width:${p.progress}%"></div>
+                            </div>
+                            <span class="text-xs font-medium text-gray-600">${p.progress}%</span>
+                        </div>
+                    </td>
+                    <td class="px-5 py-4 text-gray-600 text-sm">${formatDate(p.deadline)}</td>
+                    <td class="px-5 py-4">
+                        <span class="text-xs font-semibold px-2.5 py-1 rounded-full ${statusClass}">${statusText}</span>
+                    </td>
+                    <td class="px-5 py-4 text-right" onclick="event.stopPropagation()">
+                        <button onclick="navigateTo('project-details', ${p.id})" class="text-brand-600 hover:text-brand-700 font-medium text-xs mr-3 transition-colors">View</button>
+                        <button onclick="navigateTo('edit-project')" class="text-gray-500 hover:text-gray-700 font-medium text-xs transition-colors">Edit</button>
+                    </td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+    } catch (err) {
+        showToast('Failed to load projects: ' + err.message);
+    }
+}
+
+// ============================================
+// POPULATE PROJECT DETAILS
+// ============================================
+async function populateProjectDetails() {
+    try {
+        const project = await api.getProject(selectedProjectId);
+        document.getElementById('detailProjectName').textContent = project.name;
+        document.getElementById('detailClientName').textContent = 'Assigned to ' + getDesignerName(project.assigned_designer_id, DESIGNERS);
+        document.getElementById('detailStageBadge').textContent =
+            `Stage ${project.stage_index + 1} — ${WORKFLOW_STAGES[project.stage_index]}`;
+        document.getElementById('detailProgress').textContent = project.progress + '%';
+        document.getElementById('detailProgressBar').style.width = project.progress + '%';
+        document.getElementById('detailStartDate').textContent = formatDate(project.start_date);
+        document.getElementById('detailDeadline').textContent = formatDate(project.deadline);
+        document.getElementById('detailStatus').textContent = getStatusText(project.status);
+
+        // Workflow tracker
+        const tracker = document.getElementById('workflowTracker');
+        let trackerHTML = '';
+        WORKFLOW_STAGES.forEach((stage, idx) => {
+            let nodeClass = 'upcoming';
+            let dotBg = 'bg-gray-200';
+            let dotBorder = 'border-gray-300';
+            let textColor = 'text-gray-400';
+            let dotContent =
+                '<svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/></svg>';
+
+            if (idx < project.stage_index) {
+                nodeClass = 'completed';
+                dotBg = 'bg-green-500';
+                dotBorder = 'border-green-500';
+                textColor = 'text-green-700';
+                dotContent =
+                    '<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>';
+            } else if (idx === project.stage_index) {
+                nodeClass = 'current';
+                dotBg = 'bg-brand-500';
+                dotBorder = 'border-brand-500';
+                textColor = 'text-brand-700 font-semibold';
+                dotContent = '<span class="text-white text-xs font-bold">' + (idx + 1) + '</span>';
+            }
+
+            trackerHTML += `
+                <div class="flex flex-col items-center relative workflow-node ${nodeClass} flex-shrink-0" style="width:${100 / 9}%; min-width:70px;">
+                    <div class="w-9 h-9 rounded-full ${dotBg} ${dotBorder} border-2 flex items-center justify-center z-10 relative ${idx === project.stage_index ? 'current-stage-pulse' : ''} shadow-sm">
+                        ${dotContent}
+                    </div>
+                    <span class="text-[10px] md:text-xs mt-2 text-center font-medium ${textColor} leading-tight">${stage}</span>
+                </div>
+            `;
+        });
+        tracker.innerHTML = trackerHTML;
+
+        // Stage cards
+        const cardsContainer = document.getElementById('stageCardsContainer');
+        let cardsHTML = '';
+        project.phases.forEach((sd, idx) => {
+            let cardBorder = 'border-l-gray-300';
+            let statusBadge = 'bg-gray-100 text-gray-500';
+            let statusText = 'Locked';
+            let bgTint = '';
+
+            if (idx < project.stage_index) {
+                cardBorder = 'border-l-green-400';
+                statusBadge = 'bg-green-100 text-green-700';
+                statusText = 'Completed';
+                bgTint = 'bg-green-50/30';
+            } else if (idx === project.stage_index) {
+                cardBorder = 'border-l-brand-500';
+                statusBadge = 'bg-brand-100 text-brand-700';
+                statusText = 'In Progress';
+                bgTint = 'bg-brand-50/30';
+            }
+
+            const assignedNames = sd.assignedDesigners
+                ? sd.assignedDesigners.map(dId => DESIGNERS.find(d => d.id === dId)).filter(Boolean).map(d => d.name).join(', ')
+                : 'None assigned';
+
+            const designerUpdate = sd.designer_update || '—';
+            const delayReason = sd.delay_reason || 'No delays reported.';
+            const completedAt = sd.completed_at ? formatDateTime(sd.completed_at) : '—';
+            const deadline = sd.deadline ? formatDate(sd.deadline) : '—';
+            const isCompleted = sd.completed_at !== null;
+            const isCurrent = idx === project.stage_index;
+            const isLocked = idx > project.stage_index;
+            const prevCompleted = idx === 0 ? true : (project.phases[idx - 1].completed_at !== null);
+            const canComplete = isCurrent && !isCompleted && prevCompleted;
+
+            cardsHTML += `
+                <div class="bg-white rounded-xl border border-gray-200 shadow-sm stage-card ${bgTint} border-l-4 ${cardBorder} p-5">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                        <div class="flex items-center gap-3">
+                            <span class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isCompleted ? 'bg-green-500 text-white' : isCurrent ? 'bg-brand-500 text-white' : 'bg-gray-200 text-gray-500'}">${idx + 1}</span>
+                            <div>
+                                <h4 class="font-semibold text-gray-900">${WORKFLOW_STAGES[idx]}</h4>
+                                <span class="text-xs font-medium px-2 py-0.5 rounded-full ${statusBadge}">${statusText}</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-2 flex-shrink-0">
+                            <button onclick="openDesignerModal(${idx})" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors ${isLocked ? 'opacity-60 cursor-not-allowed' : ''}" ${isLocked ? 'disabled' : ''}>
+                                👤 Assign Designer
+                            </button>
+                            ${isCompleted ? `
+                            <button onclick="unmarkStageComplete(${idx})" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-300 bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+                                ↩ Unmark
+                            </button>
+                            ` : ''}
+                            ${canComplete ? `
+                            <button onclick="markStageComplete(${idx})" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 transition-colors">
+                                ✓ Mark Complete
+                            </button>
+                            ` : ''}
+                            ${isCurrent && !isCompleted && !prevCompleted ? `
+                            <span class="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 bg-amber-50 text-amber-600">
+                                🔒 Complete previous stage first
+                            </span>
+                            ` : ''}
+                            ${isLocked ? `
+                            <span class="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-gray-50 text-gray-400">
+                                🔒 Locked
+                            </span>
+                            ` : ''}
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                        <div>
+                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Assigned Designers</p>
+                            <p class="font-medium text-gray-800">${assignedNames}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Stage Deadline</p>
+                            <p class="font-medium text-gray-800">${deadline}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Expected Completion</p>
+                            <p class="font-medium text-gray-800">${deadline}</p>
+                        </div>
+                        <div class="sm:col-span-2 lg:col-span-3">
+                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Manager Notes</p>
+                            <p class="text-gray-700">${project.manager_notes || 'No notes added.'}</p>
+                        </div>
+                        <div class="readonly-field rounded-lg p-3 pt-5 text-sm">
+                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Latest Designer Update</p>
+                            <p class="text-gray-500 italic">${designerUpdate}</p>
+                        </div>
+                        <div class="readonly-field rounded-lg p-3 pt-5 text-sm">
+                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Delay Reason</p>
+                            <p class="text-gray-500 italic">${delayReason}</p>
+                        </div>
+                        <div class="readonly-field rounded-lg p-3 pt-5 text-sm">
+                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Completion Timestamp</p>
+                            <p class="text-gray-500 italic">${completedAt}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        cardsContainer.innerHTML = cardsHTML;
+    } catch (err) {
+        showToast('Failed to load project details: ' + err.message);
+    }
+}
+
+// ============================================
+// POPULATE EDIT PROJECT
+// ============================================
+async function populateEditProject() {
+    try {
+        const project = await api.getProject(selectedProjectId);
+        const nameInput = document.getElementById('editProjectName');
+        if (nameInput) nameInput.value = project.name;
+        const priorityInput = document.getElementById('editProjectPriority');
+        if (priorityInput) priorityInput.value = project.priority.toLowerCase();
+        const dateInput = document.getElementById('editProjectDeadline');
+        if (dateInput) dateInput.value = project.deadline;
+        const descInput = document.getElementById('editProjectDescription');
+        if (descInput) descInput.value = project.description;
+        const notesInput = document.getElementById('editProjectManagerNotes');
+        if (notesInput) notesInput.value = project.manager_notes;
+    } catch (err) {
+        showToast('Failed to load project: ' + err.message);
+    }
+}
+
+async function saveProjectEdit() {
+    try {
+        const nameInput = document.getElementById('editProjectName');
+        const priorityInput = document.getElementById('editProjectPriority');
+        const dateInput = document.getElementById('editProjectDeadline');
+        const descInput = document.getElementById('editProjectDescription');
+        const notesInput = document.getElementById('editProjectManagerNotes');
+
+        await api.updateProject(selectedProjectId, {
+            name: nameInput ? nameInput.value : null,
+            priority: priorityInput ? priorityInput.value.toUpperCase() : null,
+            deadline: dateInput ? dateInput.value : null,
+            description: descInput ? descInput.value : null,
+            manager_notes: notesInput ? notesInput.value : null,
+        });
+
+        showToast('Project updated successfully!');
+        navigateTo('project-details');
+    } catch (err) {
+        showToast('Failed to update project: ' + err.message);
+    }
+}
+
+// ============================================
+// STAGE COMPLETION
+// ============================================
+async function markStageComplete(stageIndex) {
+    try {
+        await api.completeStage(selectedProjectId, stageIndex);
+        populateProjectDetails();
+        showToast(`"${WORKFLOW_STAGES[stageIndex]}" marked as complete!`);
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+async function unmarkStageComplete(stageIndex) {
+    try {
+        await api.unmarkStage(selectedProjectId, stageIndex);
+        populateProjectDetails();
+        showToast(`"${WORKFLOW_STAGES[stageIndex]}" unmarked from complete.`);
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+// ============================================
+// DESIGNERS
+// ============================================
+function toggleAddDesignerForm() {
+    const formSection = document.getElementById('addDesignerFormSection');
+    if (!formSection) return;
+    formSection.classList.toggle('hidden');
+    if (!formSection.classList.contains('hidden')) {
+        const nameInput = document.getElementById('newDesignerName');
+        if (nameInput) nameInput.focus();
+    }
+}
+
+async function populateDesignersPage() {
+    try {
+        DESIGNERS = await api.getDesigners();
+        const container = document.getElementById('designersGrid');
+        let html = '';
+        DESIGNERS.forEach(d => {
+            html += `
+                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex items-center gap-4 hover:shadow-md transition-shadow">
+                    <div class="w-12 h-12 rounded-full ${d.color} flex items-center justify-center text-white font-bold text-lg flex-shrink-0">${d.initials}</div>
+                    <div class="flex-1 min-w-0">
+                        <p class="font-semibold text-gray-900">${d.name}</p>
+                        <p class="text-xs text-gray-500">${d.specialty}</p>
+                    </div>
+                    <button onclick="removeDesigner(${d.id})" class="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0" title="Remove designer">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                    </button>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    } catch (err) {
+        showToast('Failed to load designers: ' + err.message);
+    }
+}
+
+async function removeDesigner(designerId) {
+    if (!confirm('Remove this designer?')) return;
+    try {
+        await api.deleteDesigner(designerId);
+        populateDesignersPage();
+        populateCreateDesignerSelect();
+        showToast('Designer removed.');
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+async function handleAddDesigner(event) {
+    event.preventDefault();
+    const nameInput = document.getElementById('newDesignerName');
+    const specialtyInput = document.getElementById('newDesignerSpecialty');
+    const name = nameInput.value.trim();
+    const specialty = specialtyInput.value.trim() || 'Designer';
+    if (!name) {
+        showToast('Please enter a designer name');
+        return;
+    }
+    try {
+        await api.createDesigner({
+            name, email: name.toLowerCase().replace(/\s/g, '.') + '@smartivity.com',
+            password: 'designer123', specialty
+        });
+        nameInput.value = '';
+        specialtyInput.value = '';
+        populateDesignersPage();
+        populateCreateDesignerSelect();
+        showToast(`Designer "${name}" added successfully!`);
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+// ============================================
+// CREATE PROJECT FORM
+// ============================================
+function renderPhaseDeadlines() {
+    const container = document.getElementById('phaseDeadlinesContainer');
+    if (!container) return;
+    const startDateInput = document.querySelector('#page-create-project form input[type="date"]');
+    const completionInput = document.querySelectorAll('#page-create-project form input[type="date"]')[1];
+    const completionDate = completionInput ? completionInput.value : '';
+    const existingInputs = document.querySelectorAll('.phase-deadline-input');
+    const existingValues = {};
+    existingInputs.forEach(input => {
+        existingValues[input.dataset.phaseIndex] = input.value;
+    });
+    let html = '';
+    WORKFLOW_STAGES.forEach((stage, index) => {
+        let minDate = '';
+        if (index === 0) {
+            minDate = startDateInput ? `min="${startDateInput.value}"` : '';
+        } else {
+            const prevPhaseIndex = index - 1;
+            const prevPhaseInput = document.querySelector(`.phase-deadline-input[data-phase-index="${prevPhaseIndex}"]`);
+            const prevValue = prevPhaseInput ? prevPhaseInput.value : '';
+            const effectivePrevDate = prevValue || completionDate;
+            if (effectivePrevDate) {
+                minDate = `min="${effectivePrevDate}"`;
+            }
+        }
+        const existingValue = existingValues[index] || '';
+        const isRequired = index === 0;
+        html += `
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <span class="w-6 h-6 rounded-full ${index === 0 ? 'bg-brand-500' : 'bg-gray-400'} text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${index + 1}</span>
+                    <span class="text-sm font-medium ${index === 0 ? 'text-gray-900' : 'text-gray-500'}">${stage}</span>
+                    ${index > 0 ? '<span class="text-xs text-gray-400">(optional — defaults to Completion Date)</span>' : ''}
+                </div>
+                <div class="flex-1">
+                    <input type="date"
+                        class="phase-deadline-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors ${index === 0 ? 'border-gray-400' : 'border-gray-200'}"
+                        data-phase-index="${index}"
+                        ${minDate}
+                        ${isRequired ? 'required' : ''}
+                        value="${existingValue}"
+                    />
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+async function handleCreateProject(event) {
+    event.preventDefault();
+    const form = event.target;
+    const designerId = parseInt(document.getElementById('createDesignerSelect').value);
+    if (!designerId) {
+        showToast('Please select a designer');
+        return;
+    }
+
+    const startDate = form.querySelectorAll('input[type="date"]')[0].value;
+    const deadline = form.querySelectorAll('input[type="date"]')[1].value;
+
+    if (!startDate || !deadline) {
+        showToast('Please fill in all required fields');
+        return;
+    }
+
+    if (new Date(deadline) < new Date(startDate)) {
+        showToast('Expected Completion date cannot be before Start Date');
+        return;
+    }
+
+    const phaseDeadlineInputs = document.querySelectorAll('.phase-deadline-input');
+    const phaseDeadlines = [];
+    phaseDeadlineInputs.forEach(input => {
+        phaseDeadlines.push(input.value);
+    });
+
+    // Fill empty phase deadlines with the Expected Completion Date
+    for (let i = 0; i < phaseDeadlines.length; i++) {
+        if (!phaseDeadlines[i]) {
+            phaseDeadlines[i] = deadline;
+        }
+    }
+
+    for (let i = 0; i < phaseDeadlines.length; i++) {
+        if (i === 0 && new Date(phaseDeadlines[i]) < new Date(startDate)) {
+            showToast(`Phase 1 deadline cannot be before the Start Date (${formatDateDisplay(startDate)})`);
+            return;
+        }
+        if (i > 0 && new Date(phaseDeadlines[i]) < new Date(phaseDeadlines[i - 1])) {
+            showToast(`Phase ${i + 1} deadline (${formatDateDisplay(phaseDeadlines[i])}) cannot be before Phase ${i} deadline (${formatDateDisplay(phaseDeadlines[i - 1])})`);
+            return;
+        }
+    }
+
+    const phases = phaseDeadlines.map((phaseDeadline, index) => ({
+        stage_index: index,
+        deadline: phaseDeadline
+    }));
+
+    try {
+        const project = await api.createProject({
+            name: form.querySelector('input[type="text"]').value,
+            description: form.querySelectorAll('textarea')[0].value,
+            assigned_designer_id: designerId,
+            start_date: startDate,
+            deadline: deadline,
+            priority: form.querySelector('select').value,
+            manager_notes: '',
+            phases: phases
+        });
+        try {
+            await api.notifyProjectCreated(project.id);
+        } catch (notifyErr) {
+            // Non-critical: WhatsApp notification failure shouldn't block project creation
+        }
+        try {
+            await populateWhatsAppProjectSelect();
+        } catch (e) { }
+        const successMsg = document.getElementById('createSuccessMessage');
+        form.classList.add('hidden');
+        successMsg.classList.remove('hidden');
+        showToast('Project created successfully! WhatsApp notification sent.');
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+function resetCreateProjectForm() {
+    const form = document.getElementById('createProjectForm');
+    const successMsg = document.getElementById('createSuccessMessage');
+    if (form) form.classList.remove('hidden');
+    if (successMsg) successMsg.classList.add('hidden');
+    if (form) form.reset();
+    populateCreateDesignerSelect();
+    renderPhaseDeadlines();
+}
+
+async function populateCreateDesignerSelect() {
+    try {
+        DESIGNERS = await api.getDesigners();
+        const select = document.getElementById('createDesignerSelect');
+        if (!select) return;
+        let html = '<option value="">Select a designer</option>';
+        DESIGNERS.forEach(d => {
+            html += `<option value="${d.id}">${d.name}</option>`;
+        });
+        select.innerHTML = html;
+    } catch (err) {
+        showToast('Failed to load designers: ' + err.message);
+    }
+}
+
+// ============================================
+// DESIGNER ASSIGNMENT MODAL
+// ============================================
+function openDesignerModal(stageIndex) {
+    designerModalStageIndex = stageIndex;
+    document.getElementById('designerModalStageLabel').textContent =
+        `Stage: ${WORKFLOW_STAGES[stageIndex]}`;
+    document.getElementById('designerSearchInput').value = '';
+    renderDesignerChecklist();
+    document.getElementById('designerModal').classList.remove('hidden');
+}
+
+function closeDesignerModal() {
+    document.getElementById('designerModal').classList.add('hidden');
+    designerModalStageIndex = null;
+    tempDesignerSelections = [];
+}
+
+function filterDesigners() {
+    renderDesignerChecklist();
+}
+
+function renderDesignerChecklist() {
+    const searchTerm = document.getElementById('designerSearchInput').value.toLowerCase();
+    const container = document.getElementById('designerChecklist');
+    let html = '';
+    const filtered = DESIGNERS.filter(d => d.name.toLowerCase().includes(searchTerm));
+    if (filtered.length === 0) {
+        html = '<p class="text-sm text-gray-400 text-center py-4">No designers found.</p>';
+    } else {
+        filtered.forEach(d => {
+            const checked = tempDesignerSelections.includes(d.id);
+            html += `
+                <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                    <input type="checkbox" value="${d.id}" ${checked ? 'checked' : ''} onchange="toggleDesignerSelection(${d.id}, this.checked)" class="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-400">
+                    <div class="w-8 h-8 rounded-full ${d.color} flex items-center justify-center text-white font-bold text-xs flex-shrink-0">${d.initials}</div>
+                    <span class="text-sm font-medium text-gray-700">${d.name}</span>
+                    <span class="text-xs text-gray-400 ml-auto">${d.specialty}</span>
+                </label>
+            `;
+        });
+    }
+    container.innerHTML = html;
+}
+
+function toggleDesignerSelection(designerId, isChecked) {
+    if (isChecked) {
+        if (!tempDesignerSelections.includes(designerId)) tempDesignerSelections.push(designerId);
+    } else {
+        tempDesignerSelections = tempDesignerSelections.filter(id => id !== designerId);
+    }
+}
+
+function saveDesignerAssignment() {
+    if (designerModalStageIndex === null) return;
+    closeDesignerModal();
+    populateProjectDetails();
+    const assignedCount = tempDesignerSelections.length;
+    showToast(`${assignedCount} designer${assignedCount !== 1 ? 's' : ''} assigned to "${WORKFLOW_STAGES[designerModalStageIndex]}"`);
+}
+
+// ============================================
+// WHATSAPP CHAT
+// ============================================
+let whatsappPollInterval = null;
+let isTyping = false;
+
+async function populateWhatsAppProjectSelect() {
+    try {
+        const projects = await api.getProjects();
+        const select = document.getElementById('whatsappProjectSelect');
+        if (!select) return;
+        let html = '<option value="">Select a project</option>';
+        projects.forEach(p => {
+            html += `<option value="${p.id}" ${p.id === selectedProjectId ? 'selected' : ''}>${p.name}</option>`;
+        });
+        select.innerHTML = html;
+    } catch (err) {
+        showToast('Failed to load projects: ' + err.message);
+    }
+}
+
+async function switchWhatsAppProject() {
+    const select = document.getElementById('whatsappProjectSelect');
+    if (!select) return;
+    selectedProjectId = parseInt(select.value);
+    await loadWhatsAppChat();
+}
+
+async function loadWhatsAppChat() {
+    await populateWhatsAppProjectSelect();
+    if (!selectedProjectId) {
+        const projects = await api.getProjects();
+        if (projects.length > 0) {
+            selectedProjectId = projects[0].id;
+            const select = document.getElementById('whatsappProjectSelect');
+            if (select) select.value = selectedProjectId;
+        } else {
+            return;
+        }
+    }
+    if (whatsappPollInterval) clearInterval(whatsappPollInterval);
+    const chatContainer = document.getElementById('chatMessages');
+    if (chatContainer) chatContainer.innerHTML = '';
+    await fetchWhatsAppMessages();
+    whatsappPollInterval = setInterval(fetchWhatsAppMessages, 10000);
+}
+
+async function fetchWhatsAppMessages() {
+    try {
+        const messages = await api.getWhatsAppMessages(selectedProjectId);
+        const chatContainer = document.getElementById('chatMessages');
+        if (!chatContainer) return;
+        const existingIds = new Set();
+        chatContainer.querySelectorAll('.msg-bubble').forEach(el => {
+            existingIds.add(el.dataset.msgId);
+        });
+        const newMessages = messages.filter(m => !existingIds.has(String(m.id)));
+        if (newMessages.length > 0) {
+            newMessages.forEach(msg => {
+                const bubble = createMessageBubble(msg.content, msg.is_sent, msg.timestamp, msg.quick_replies || []);
+                bubble.classList.add('msg-bubble');
+                bubble.dataset.msgId = msg.id;
+                chatContainer.appendChild(bubble);
+            });
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    } catch (err) {
+        // Silently fail for polling
+    }
+}
+
+function createMessageBubble(content, isSent, timestamp, quickReplies = []) {
+    const bubble = document.createElement('div');
+    bubble.className = `flex ${isSent ? 'justify-end' : 'justify-start'} mb-2`;
+    const quickRepliesHTML = quickReplies.length > 0
+        ? `<div class="flex flex-wrap gap-1.5 mt-2">${quickReplies.map(qr =>
+            `<button class="px-2.5 py-1.5 rounded-full border border-whatsapp-500 text-whatsapp-700 text-xs font-medium hover:bg-whatsapp-50 transition-colors whitespace-nowrap quick-reply-btn" onclick="handleQuickReply('${qr.replace(/'/g, "\\'")}')">${qr}</button>`
+        ).join('')}</div>`
+        : '';
+    bubble.innerHTML = `
+        <div class="max-w-[80%] md:max-w-[65%] ${isSent ? 'bg-chat_sent rounded-lg rounded-tr-sm' : 'bg-chat_received rounded-lg rounded-tl-sm'} px-3 py-2 shadow-sm">
+            <p class="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">${formatWhatsAppText(content)}</p>
+            ${quickRepliesHTML}
+            <div class="flex items-center justify-end gap-1 mt-1">
+                <span class="text-[10px] text-gray-500">${timestamp}</span>
+                ${isSent ? `
+                <svg class="w-3.5 h-3.5 text-whatsapp-500" fill="currentColor" viewBox="0 0 16 15">
+                    <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.503.08l-1.65 2.232a.365.365 0 0 1-.503.08l-.476-.372a.364.364 0 0 0-.503.08l-.478.372a.364.364 0 0 0 .08.503l1.65 2.232a.365.365 0 0 1 .08.503l-.372.478a.364.364 0 0 0 .08.503l.478.372a.364.364 0 0 0 .503-.08l1.65 2.232a.365.365 0 0 1 .503-.08l.478.372a.364.364 0 0 0 .503-.08l.372-.478a.364.364 0 0 0-.08-.503l-1.65 2.232a.365.365 0 0 1-.08-.503l.372-.478a.364.364 0 0 0-.08-.503z"/>
+                </svg>` : ''}
+            </div>
+        </div>
+    `;
+    return bubble;
+}
+
+function showTypingIndicator() {
+    const typingEl = document.getElementById('typingIndicator');
+    const chatContainer = document.getElementById('chatMessages');
+    if (!typingEl || isTyping) return;
+    isTyping = true;
+    typingEl.classList.remove('hidden');
+    if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+    const statusEl = document.getElementById('botStatus');
+    if (statusEl) statusEl.textContent = 'typing...';
+}
+
+function hideTypingIndicator() {
+    const typingEl = document.getElementById('typingIndicator');
+    if (!typingEl || !isTyping) return;
+    isTyping = false;
+    typingEl.classList.add('hidden');
+    const statusEl = document.getElementById('botStatus');
+    if (statusEl) statusEl.textContent = 'online';
+}
+
+async function sendUserMessage() {
+    const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+    if (!input || !input.value.trim()) return;
+    if (!selectedProjectId) {
+        showToast('Please select a project first');
+        return;
+    }
+    const userText = input.value.trim();
+    input.value = '';
+    sendBtn.disabled = true;
+    sendBtn.classList.add('opacity-50');
+
+    const chatContainer = document.getElementById('chatMessages');
+    if (chatContainer) {
+        const bubble = createMessageBubble(userText, true, generateTime(), []);
+        bubble.classList.add('msg-bubble');
+        bubble.dataset.msgId = 'temp_' + Date.now();
+        chatContainer.appendChild(bubble);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+    try {
+        await api.createWhatsAppMessage(selectedProjectId, { content: userText, is_sent: true, timestamp: generateTime(), quick_replies: [] });
+        showTypingIndicator();
+        setTimeout(async () => {
+            try {
+                await api.respondToMessage(selectedProjectId);
+                await fetchWhatsAppMessages();
+            } catch (err) {
+                showToast('Bot response failed: ' + err.message);
+            }
+            hideTypingIndicator();
+            sendBtn.disabled = false;
+            sendBtn.classList.remove('opacity-50');
+        }, 1000 + Math.random() * 1500);
+    } catch (err) {
+        showToast('Failed to send message: ' + err.message);
+        sendBtn.disabled = false;
+        sendBtn.classList.remove('opacity-50');
+    }
+}
+
+function sendQuickCommand(text) {
+    const input = document.getElementById('chatInput');
+    if (input) {
+        input.value = text;
+        sendUserMessage();
+    }
+}
+
+function handleQuickReply(text) {
+    sendQuickCommand(text);
+}
+
+// ============================================
+// SLACK SETTINGS
+// ============================================
+let slackConfigured = false;
+
+async function loadSlackSettings() {
+    try {
+        const config = await api.getSlackConfig();
+        if (config) {
+            slackConfigured = true;
+            document.getElementById('slackConfigStatus').classList.remove('hidden');
+            document.getElementById('slackBotToken').value = config.bot_token.substring(0, 8) + '***';
+            document.getElementById('slackSigningSecret').value = config.signing_secret.substring(0, 4) + '***';
+            await populateSlackChannels();
+        }
+    } catch (err) {
+        slackConfigured = false;
+        document.getElementById('slackConfigStatus').classList.add('hidden');
+        document.getElementById('slackBotToken').value = '';
+        document.getElementById('slackSigningSecret').value = '';
+        await populateSlackChannels();
+    }
+}
+
+async function saveSlackConfig() {
+    const botToken = document.getElementById('slackBotToken').value.trim();
+    const signingSecret = document.getElementById('slackSigningSecret').value.trim();
+    if (!botToken || !signingSecret) {
+        showToast('Please fill in both Bot Token and Signing Secret');
+        return;
+    }
+    const btn = document.getElementById('saveSlackConfigBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    try {
+        await api.saveSlackConfig({ bot_token: botToken, signing_secret: signingSecret });
+        slackConfigured = true;
+        document.getElementById('slackConfigStatus').classList.remove('hidden');
+        document.getElementById('slackBotToken').value = botToken.substring(0, 8) + '***';
+        document.getElementById('slackSigningSecret').value = signingSecret.substring(0, 4) + '***';
+        showToast('Slack configuration saved!');
+        await populateSlackChannels();
+    } catch (err) {
+        showToast('Failed to save: ' + err.message);
+    }
+    btn.disabled = false;
+    btn.textContent = '💾 Save Configuration';
+}
+
+function clearSlackConfig() {
+    document.getElementById('slackBotToken').value = '';
+    document.getElementById('slackSigningSecret').value = '';
+    document.getElementById('slackConfigStatus').classList.add('hidden');
+    slackConfigured = false;
+    showToast('Configuration cleared');
+}
+
+async function populateSlackChannels() {
+    const container = document.getElementById('slackChannelsList');
+    try {
+        const projects = await api.getProjects();
+        if (projects.length === 0) {
+            container.innerHTML = '<p class="text-sm text-gray-500">No projects found. Create a project first to get a Slack channel.</p>';
+            return;
+        }
+        let html = '';
+        projects.forEach(p => {
+            const hasChannel = p.slack_channel_id || false;
+            html += `
+                <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-semibold text-gray-900">${p.name}</p>
+                        <p class="text-xs text-gray-500 mt-0.5">
+                            ${hasChannel
+                                ? `<span class="text-green-600">✅ Connected to #${p.slack_channel_name || 'channel'}</span>`
+                                : '<span class="text-gray-400">Not connected</span>'}
+                        </p>
+                    </div>
+                    ${!hasChannel
+                        ? `<button onclick="createSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors ml-3">
+                            Create Channel
+                           </button>`
+                        : `<button onclick="disconnectSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors ml-3 border border-red-200">
+                            Disconnect
+                           </button>`
+                    }
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = '<p class="text-sm text-gray-500">Failed to load projects.</p>';
+    }
+}
+
+async function createSlackChannel(projectId, btn) {
+    if (!slackConfigured) {
+        showToast('Please configure Slack credentials first');
+        return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+    try {
+        const result = await api.createSlackChannel(projectId);
+        if (result.success) {
+            showToast('Slack channel created!');
+            await populateSlackChannels();
+        } else {
+            showToast('Failed: ' + result.message);
+        }
+    } catch (err) {
+        showToast('Failed: ' + err.message);
+    }
+    btn.disabled = false;
+    btn.textContent = 'Create Channel';
+}
+
+async function disconnectSlackChannel(projectId, btn) {
+    if (!confirm('Disconnect this project from Slack? Notifications will stop.')) return;
+    const project = await api.getProject(projectId);
+    project.slack_channel_id = '';
+    project.slack_channel_name = '';
+    await api.updateProject(projectId, {});
+    showToast('Disconnected from Slack');
+    await populateSlackChannels();
+}
+
+function copyWebhookUrl() {
+    const url = document.getElementById('webhookUrlDisplay').textContent;
+    navigator.clipboard.writeText(url).then(() => {
+        showToast('Webhook URL copied!');
+    }).catch(() => {
+        showToast('Failed to copy');
+    });
+}
+
+// ============================================
+// INITIALIZATION
+// ============================================
+document.addEventListener('DOMContentLoaded', async () => {
+    // Handle Slack OAuth callback first
+    const handled = await handleSlackCallback();
+    if (handled) return;
+
+    // Otherwise check auth and load app
+    checkAuth();
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeDesignerModal();
+    });
+    document.getElementById('designerModal').addEventListener('click', function (e) {
+        if (e.target === this) closeDesignerModal();
+    });
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) closeSidebar();
+    });
+});
+</file>
+
+<file path="ngr.py">
+from pyngrok import ngrok
+import time
+
+ngrok.set_auth_token("3Go7UF5fLKkBYh5XsAjimGWCSTh_2vkuGKYnmqAj1f3m3hDv6")
+
+while True:
+    try:
+        print("Starting tunnel...")
+        tunnel = ngrok.connect(8000)
+        print("Public URL:", tunnel.public_url)
+        
+        # Keep the tunnel alive by sleeping in the connection thread
+        ngrok.get_tunnels()  # keeps the process alive
+        time.sleep(3600)  # check every hour
+    except Exception as e:
+        print(f"Tunnel disconnected: {e}")
+        print("Reconnecting in 5 seconds...")
+        time.sleep(5)
+</file>
+
+<file path="Procfile">
+web: uvicorn server.main:app --host 0.0.0.0 --port $PORT
+</file>
+
+<file path="server/database.py">
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker, declarative_base
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+# Use Postgres on Render, SQLite locally
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./smartivity.db")
+
+if "postgres" in DATABASE_URL:
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=10,
+        max_overflow=20,
+    )
+else:
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        pool_pre_ping=True,
+    )
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def init_wal_mode():
+    """Enable WAL mode for better SQLite concurrency."""
+    if "sqlite" in DATABASE_URL:
+        with engine.connect() as conn:
+            conn.execute(text("PRAGMA journal_mode=WAL"))
+            conn.commit()
+
+
+def init_db():
+    """Initialize database tables and WAL mode."""
+    Base.metadata.create_all(bind=engine)
+    init_wal_mode()
+</file>
+
+<file path="server/requirements.txt">
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.35
+python-jose[cryptography]==3.3.0
+pydantic==2.9.2
+httpx==0.27.2
+python-dotenv==1.0.1
+cryptography==43.0.1
+itsdangerous==2.2.0
+argon2-cffi==23.1.0
+</file>
+
+<file path="server/schemas.py">
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from datetime import datetime
+
+
+# ---------- Auth ----------
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class SlackLoginRequest(BaseModel):
+    code: str
+    redirect_uri: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: "UserResponse"
+
+
+class SessionResponse(BaseModel):
+    session_token: str
+    user: "UserResponse"
+
+
+# ---------- User ----------
+
+class UserBase(BaseModel):
+    name: str
+    email: str
+    role: str = "DESIGNER"
+    specialty: str = "Designer"
+    initials: str = ""
+    color: str = "bg-blue-500"
+
+
+class UserCreate(UserBase):
+    password: str
+
+
+class UserResponse(UserBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
+class PendingUserResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+    role: str
+    requested_role: str
+    slack_user_id: str
+
+    class Config:
+        from_attributes = True
+
+
+class ApproveUserRequest(BaseModel):
+    user_id: int
+    role: str
+
+
+# ---------- Phase ----------
+
+class PhaseCreate(BaseModel):
+    stage_index: int
+    deadline: str
+
+
+class PhaseResponse(BaseModel):
+    id: int
+    project_id: int
+    stage_index: int
+    deadline: str
+    designer_update: str
+    delay_reason: str
+    completed_at: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- Project ----------
+
+class ProjectCreate(BaseModel):
+    name: str
+    description: str = ""
+    assigned_designer_id: int
+    start_date: str
+    deadline: str
+    priority: str = "MEDIUM"
+    manager_notes: str = ""
+    phases: List[PhaseCreate]
+
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    deadline: Optional[str] = None
+    manager_notes: Optional[str] = None
+
+
+class ProjectResponse(BaseModel):
+    id: int
+    name: str
+    description: str
+    assigned_designer_id: int
+    stage_index: int
+    progress: int
+    deadline: str
+    start_date: str
+    status: str
+    priority: str
+    manager_notes: str
+    phases: List[PhaseResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- Dashboard ----------
+
+class DashboardStats(BaseModel):
+    active_projects: int
+    on_time: int
+    completed: int
+    delayed: int
+
+
+class RecentProject(BaseModel):
+    id: int
+    name: str
+    assigned_designer: str
+    stage_index: int
+    status: str
+
+
+class UpcomingDeadline(BaseModel):
+    project_id: int
+    project_name: str
+    assigned_designer: str
+    deadline: str
+    days_left: int
+
+
+# ---------- WhatsApp ----------
+
+class WhatsAppMessageCreate(BaseModel):
+    content: str
+    is_sent: bool = False
+    timestamp: str
+    quick_replies: List[str] = []
+
+
+class WhatsAppMessageResponse(BaseModel):
+    id: int
+    project_id: int
+    content: str
+    is_sent: bool
+    timestamp: str
+    quick_replies: List[str]
+
+    class Config:
+        from_attributes = True
+
+
+# ---------- Stage Actions ----------
+
+class StageCompleteRequest(BaseModel):
+    stage_index: int
+
+
+# ---------- Slack ----------
+
+class SlackConfigCreate(BaseModel):
+    bot_token: str
+    signing_secret: str
+    slack_team_id: str = ""
+
+
+class SlackConfigResponse(BaseModel):
+    id: int
+    bot_token: str
+    signing_secret: str
+    slack_team_id: str
+    encrypted: bool
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SlackActivityResponse(BaseModel):
+    id: int
+    project_id: int
+    channel_id: str
+    message_ts: str
+    action_type: str
+    user_id: str
+    user_name: str
+    payload: dict
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SlackChannelCreateResponse(BaseModel):
+    channel_id: str
+    channel_name: str
+    success: bool
+    message: str = ""
+
+
+class SlackStatusResponse(BaseModel):
+    configured: bool
+    channel_id: str = ""
+    channel_name: str = ""
+
+
+class SlackMessageResponse(BaseModel):
+    id: int
+    project_id: Optional[int] = None
+    slack_user_id: str
+    slack_user_name: str
+    channel_id: str
+    text: str
+    ts: str
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+</file>
+
+<file path="styles.css">
+:root {
+    --sidebar-width: 240px;
+}
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #F9FAFB;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: #D1D5DB;
+    border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #9CA3AF;
+}
+
+/* Stage card transitions */
+.stage-card {
+    transition: all 0.2s ease;
+}
+.stage-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+/* Workflow connector line */
+.workflow-node::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    width: calc(100% - 32px);
+    height: 2px;
+    background: #E5E7EB;
+    transform: translateY(-50%);
+    z-index: 0;
+}
+.workflow-node:last-child::after {
+    display: none;
+}
+.workflow-node.completed::after {
+    background: #10B981;
+}
+.workflow-node.current::after {
+    background: linear-gradient(to right, #F47920 50%, #E5E7EB 50%);
+}
+
+/* Pulse for current stage */
+@keyframes subtlePulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(244, 121, 32, 0.35);
+    }
+    50% {
+        box-shadow: 0 0 0 10px rgba(244, 121, 32, 0);
+    }
+}
+.current-stage-pulse {
+    animation: subtlePulse 2.5s infinite;
+}
+
+/* Read-only field styling */
+.readonly-field {
+    background-color: #F9FAFB;
+    border: 1px dashed #D1D5DB;
+    cursor: not-allowed;
+    user-select: none;
+    position: relative;
+}
+.readonly-field::after {
+    content: '🔒 Read Only';
+    position: absolute;
+    top: -10px;
+    right: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #9CA3AF;
+    background: #F9FAFB;
+    padding: 0 6px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* Mobile sidebar overlay */
+.sidebar-overlay {
+    display: none;
+}
+@media (max-width: 768px) {
+    .sidebar-overlay.active {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 40;
+    }
+    .sidebar {
+        transform: translateX(-100%);
+        position: fixed;
+        z-index: 50;
+        height: 100vh;
+        transition: transform 0.25s ease;
+    }
+    .sidebar.open {
+        transform: translateX(0);
+    }
+}
+
+/* ============================================ */
+/* WHATSAPP CHAT STYLES */
+/* ============================================ */
+
+/* Chat container pattern background */
+#chatMessages {
+    background-color: #EFEAE2;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4cfc4' fill-opacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Quick reply buttons */
+.quick-reply-btn {
+    border: 1px solid #25D366;
+    color: #075E54;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.quick-reply-btn:hover {
+    background-color: #E6F7EC;
+}
+
+/* Chat input */
+#chatInput {
+    background-color: #2A3942;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-size: 14px;
+    outline: none;
+}
+
+#chatInput::placeholder {
+    color: #8696a0;
+}
+
+#chatInput:focus {
+    box-shadow: 0 0 0 1px #25D366;
+}
+</file>
+
+<file path="utils.js">
+const WORKFLOW_STAGES = [
+    'Lock Concept',
+    'Lock UX features',
+    'Lock MRP',
+    'Lock graphics theme',
+    'Lock Production feasibility',
+    'Lock Procurement',
+    'Lock IM',
+    'Lock CCP',
+    'Final Handover'
+];
+
+function formatDate(dateStr) {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function formatDateDisplay(dateStr) {
+    if (!dateStr) return '—';
+    const parts = dateStr.split('-');
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+}
+
+function formatDateTime(dateStr) {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-IN', {
+        day: 'numeric', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
+    }) + ' IST';
+}
+
+function getDesignerName(designerId, designers) {
+    const designer = designers.find(d => d.id === designerId);
+    return designer ? designer.name : 'Unassigned';
+}
+
+function getStatusColor(status) {
+    const colors = {
+        'ON_TRACK': 'bg-green-100 text-green-700',
+        'DELAYED': 'bg-red-100 text-red-700',
+        'COMPLETED': 'bg-blue-100 text-blue-700',
+        'AT_RISK': 'bg-amber-100 text-amber-700',
+    };
+    return colors[status] || 'bg-gray-100 text-gray-700';
+}
+
+function getStatusText(status) {
+    const text = {
+        'ON_TRACK': 'On Track',
+        'DELAYED': 'Delayed',
+        'COMPLETED': 'Completed',
+        'AT_RISK': 'At Risk',
+    };
+    return text[status] || status;
+}
+
+function generateTime() {
+    const now = new Date();
+    return now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
+}
+
+function formatWhatsAppText(text) {
+    return text.replace(/\*([^*]+)\*/g, '$1');
+}
+
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    const toastMsg = document.getElementById('toastMessage');
+    if (!toast || !toastMsg) return;
+    toastMsg.textContent = message;
+    toast.classList.remove('hidden');
+    toast.classList.add('translate-y-0', 'opacity-100');
+    clearTimeout(toast._timeout);
+    toast._timeout = setTimeout(() => {
+        toast.classList.add('hidden');
+    }, 2200);
+}
+</file>
+
+<file path="server/main.py">
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Cookie, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy.orm import Session
+from datetime import datetime, timedelta
+from typing import List, Optional
+from jose import JWTError, jwt
+from itsdangerous import Signer, BadSignature
+from cryptography.fernet import Fernet, InvalidToken
+import argon2
+import hashlib
+import re
+import hmac
+import hashlib as hashlib_lib
+import base64
+import json
+import httpx
+import os
+import asyncio
+
+from .database import get_db, init_db, SessionLocal
+from .models import Base, User, Project, Phase, WhatsAppMessage, SlackConfig, SlackActivity, SlackMessage, Session as SessionModel
+from .schemas import (
+    LoginRequest, TokenResponse, UserResponse, UserCreate,
+    ProjectCreate, ProjectUpdate, ProjectResponse,
+    PhaseResponse, PhaseCreate,
+    DashboardStats, RecentProject, UpcomingDeadline,
+    WhatsAppMessageCreate, WhatsAppMessageResponse,
+    SlackConfigCreate, SlackConfigResponse,
+    SlackActivityResponse, SlackChannelCreateResponse, SlackStatusResponse,
+    SlackLoginRequest, SessionResponse, PendingUserResponse, ApproveUserRequest,
+    SlackMessageResponse,
+)
+
+# ---------- Init ----------
+init_db()
+
+# ---------- App ----------
+app = FastAPI(title="Smartivity Little Sparks API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000").split(",")],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------- Serve frontend from backend (optional, for single-origin) ----------
+FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)))
+if os.path.exists(os.path.join(FRONTEND_DIR, "index.html")):
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+
+# ---------- Secrets from env ----------
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY environment variable is required. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+    )
+
+ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "")
+if not ENCRYPTION_KEY:
+    raise RuntimeError(
+        "ENCRYPTION_KEY environment variable is required. "
+        "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+    )
+else:
+    try:
+        fernet = Fernet(ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY)
+    except Exception:
+        raise RuntimeError("ENCRYPTION_KEY is not a valid Fernet key")
+
+ALGORITHM = "HS256"
+SESSION_COOKIE_NAME = "smartivity_session"
+SESSION_LIFETIME_DAYS = 90
+SLACK_CLIENT_ID = os.getenv("SLACK_CLIENT_ID", "")
+SLACK_CLIENT_SECRET = os.getenv("SLACK_CLIENT_SECRET", "")
+SLACK_TEAM_ID = os.getenv("SLACK_TEAM_ID", "")
+SLACK_REDIRECT_URI = os.getenv("SLACK_REDIRECT_URI", "http://localhost:8000/api/slack/oauth/callback")
+
+# ---------- Password hashing ----------
+argon2_hasher = argon2.PasswordHasher()
+
+
+def hash_password(password: str) -> str:
+    return argon2_hasher.hash(password)
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    try:
+        argon2_hasher.verify(hashed, password)
+        return True
+    except argon2.exceptions.VerifyMismatchError:
+        return False
+
+
+# ---------- JWT helpers (for legacy / token responses) ----------
+
+def create_jwt_token(data: dict) -> str:
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(hours=24)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+# ---------- Session helpers ----------
+
+def create_session_token() -> str:
+    return os.urandom(48).hex()
+
+
+def create_session(user_id: int, db: Session) -> SessionModel:
+    token = create_session_token()
+    expires = datetime.utcnow() + timedelta(days=SESSION_LIFETIME_DAYS)
+    session = SessionModel(
+        session_token=token,
+        user_id=user_id,
+        expires_at=expires,
+        revoked=False,
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+def get_session_from_token(token: str, db: Session) -> Optional[SessionModel]:
+    if not token:
+        return None
+    session = db.query(SessionModel).filter(
+        SessionModel.session_token == token,
+        SessionModel.revoked == False,
+    ).first()
+    if not session:
+        return None
+    if session.expires_at and session.expires_at < datetime.utcnow():
+        session.revoked = True
+        db.commit()
+        return None
+    return session
+
+
+def revoke_session(session_id: int, db: Session):
+    session = db.query(SessionModel).filter(SessionModel.id == session_id).first()
+    if session:
+        session.revoked = True
+        db.commit()
+
+
+# ---------- Auth dependency ----------
+
+VALID_ROLES = {"DESIGNER", "MANAGER", "ADMIN"}
+
+
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optional[User]:
+    session_token = request.cookies.get(SESSION_COOKIE_NAME)
+    session = get_session_from_token(session_token, db)
+    if not session:
+        return None
+    user = db.query(User).filter(User.id == session.user_id).first()
+    if not user or user.role not in VALID_ROLES:
+        return None
+    return user
+
+
+def require_admin(request: Request = Depends(get_current_user)):
+    if not request or request.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return request
+
+
+def require_role(required: List[str]):
+    def _dep(user: User = Depends(get_current_user)):
+        if not user or user.role not in required:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        return user
+    return _dep
+
+
+# ---------- Cookie helpers ----------
+
+def set_session_cookie(response: Response, session_token: str):
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_token,
+        httponly=True,
+        secure=os.getenv("ENV") != "development",
+        samesite="lax",
+        max_age=SESSION_LIFETIME_DAYS * 86400,
+        path="/",
+    )
+
+
+def clear_session_cookie(response: Response):
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        path="/",
+    )
+
+
+# ---------- Slack token encryption ----------
+
+def encrypt_token(plaintext: str) -> str:
+    return fernet.encrypt(plaintext.encode()).decode()
+
+
+def decrypt_token(encrypted: str) -> str:
+    try:
+        return fernet.decrypt(encrypted.encode()).decode()
+    except InvalidToken:
+        return None
+
+
+# ---------- Slack OIDC ----------
+
+SLACK_API_BASE = "https://slack.com/api"
+PKCE_COOKIE_NAME = "slack_pkce_verifier"
+
+
+def generate_pkce_pair():
+    code_verifier = os.urandom(32).hex()
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).decode().rstrip("=")
+    return code_verifier, code_challenge
+
+
+def set_pkce_cookie(response: Response, verifier: str):
+    response.set_cookie(
+        key=PKCE_COOKIE_NAME,
+        value=verifier,
+        httponly=True,
+        secure=os.getenv("ENV") != "development",
+        samesite="lax",
+        max_age=300,
+        path="/api/auth/slack/oauth/callback",
+    )
+
+
+def clear_pkce_cookie(response: Response):
+    response.delete_cookie(key=PKCE_COOKIE_NAME, path="/api/auth/slack/oauth/callback")
+
+
+async def slack_oidc_exchange(code: str, redirect_uri: str, code_verifier: str):
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            "https://slack.com/api/openid.connect.token",
+            params={"code": code, "redirect_uri": redirect_uri},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "client_id": SLACK_CLIENT_ID,
+                "client_secret": SLACK_CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "code_verifier": code_verifier,
+            },
+            timeout=10.0,
+        )
+        return resp.json()
+
+
+async def slack_get_userinfo(access_token: str):
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://slack.com/api/openid.connect.userInfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10.0,
+        )
+        return resp.json()
+
+
+# ---------- Auth endpoints ----------
+
+@app.post("/api/auth/login", response_model=TokenResponse)
+def login(login_data: LoginRequest, db: Session = Depends(get_db), response: Response = Response()):
+    user = db.query(User).filter(User.email == login_data.email).first()
+    if not user or not user.password_hash or not verify_password(login_data.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if user.role not in VALID_ROLES:
+        raise HTTPException(status_code=403, detail="Account pending approval")
+
+    session = create_session(user.id, db)
+    set_session_cookie(response, session.session_token)
+
+    token = create_jwt_token({"user_id": user.id, "role": user.role})
+    return TokenResponse(access_token=token, user=UserResponse(
+        id=user.id, name=user.name, email=user.email, role=user.role,
+        specialty=user.specialty, initials=user.initials, color=user.color
+    ))
+
+
+@app.post("/api/auth/slack-login")
+async def slack_login(request: SlackLoginRequest, db: Session = Depends(get_db), response: Response = Response()):
+    raise HTTPException(status_code=501, detail="Slack login via callback only. Use /api/auth/slack-auth-url to start the flow.")
+
+
+@app.get("/api/auth/slack-auth-url")
+def get_slack_auth_url(response: Response):
+    if not SLACK_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Slack OIDC not configured")
+    code_verifier, code_challenge = generate_pkce_pair()
+    set_pkce_cookie(response, code_verifier)
+    params = {
+        "client_id": SLACK_CLIENT_ID,
+        "redirect_uri": SLACK_REDIRECT_URI,
+        "scope": "openid,email,profile",
+        "state": os.urandom(24).hex(),
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+    }
+    query = "&".join(f"{k}={v}" for k, v in params.items())
+    return {"auth_url": f"https://slack.com/oauth/v2/authorize?{query}"}
+
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+
+@app.get("/api/slack/oauth/callback")
+async def slack_oauth_callback(
+    code: Optional[str] = None,
+    error: Optional[str] = None,
+    db: Session = Depends(get_db),
+    request: Request = None,
+):
+    if error:
+        return RedirectResponse(url=f"{FRONTEND_URL}?error={error}", status_code=302)
+
+    if not code:
+        return RedirectResponse(url=FRONTEND_URL, status_code=302)
+
+    pkce_verifier = request.cookies.get(PKCE_COOKIE_NAME)
+    if not pkce_verifier:
+        return RedirectResponse(url=f"{FRONTEND_URL}?error=pkce_missing", status_code=302)
+
+    token_data = await slack_oidc_exchange(code, SLACK_REDIRECT_URI, pkce_verifier)
+    if not token_data.get("ok"):
+        return RedirectResponse(url=f"{FRONTEND_URL}?error=slack_token_exchange_failed", status_code=302)
+
+    access_token = token_data.get("access_token", "")
+    user_info = await slack_get_userinfo(access_token)
+    if not user_info.get("ok"):
+        return RedirectResponse(url=f"{FRONTEND_URL}?error=slack_userinfo_failed", status_code=302)
+
+    email = user_info.get("email", "")
+    name = user_info.get("name", email.split("@")[0])
+    slack_user_id = user_info.get("https://slack.com/user_id", "")
+    slack_team_id = user_info.get("https://slack.com/team_id", "")
+
+    if SLACK_TEAM_ID and slack_team_id != SLACK_TEAM_ID:
+        return RedirectResponse(url=f"{FRONTEND_URL}?error=not_workspace_member", status_code=302)
+
+    existing_user = db.query(User).filter(
+        (User.email == email) | (User.slack_user_id == slack_user_id)
+    ).first()
+
+    if existing_user:
+        if existing_user.role not in VALID_ROLES:
+            return RedirectResponse(url=f"{FRONTEND_URL}?error=pending_approval", status_code=302)
+        session = create_session(existing_user.id, db)
+        jwt_token = create_jwt_token({"user_id": existing_user.id, "role": existing_user.role})
+        return RedirectResponse(url=f"{FRONTEND_URL}?slack_token={jwt_token}", status_code=302)
+    else:
+        pending = User(
+            name=name, email=email,
+            password_hash=None, role="PENDING",
+            slack_user_id=slack_user_id, slack_team_id=slack_team_id,
+            requested_role="DESIGNER",
+        )
+        db.add(pending)
+        db.commit()
+        db.refresh(pending)
+        return RedirectResponse(url=f"{FRONTEND_URL}?slack_pending=1", status_code=302)
+
+
+@app.get("/api/auth/logout")
+def logout(response: Response):
+    clear_session_cookie(response)
+    return {"message": "Logged out"}
+
+
+@app.get("/api/auth/me")
+def get_me(user: Optional[User] = Depends(get_current_user)):
+    if not user:
+        return None
+    return UserResponse.model_validate(user)
+
+
+# ---------- Admin: Approve users ----------
+
+@app.post("/api/admin/users/approve")
+def approve_user(data: ApproveUserRequest, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    target = db.query(User).filter(User.id == data.user_id, User.role == "PENDING").first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Pending user not found")
+    if data.role not in VALID_ROLES - {"PENDING"}:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    target.role = data.role
+    db.commit()
+    db.refresh(target)
+    return UserResponse.model_validate(target)
+
+
+@app.get("/api/admin/pending-users", response_model=List[PendingUserResponse])
+def get_pending_users(db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    pending = db.query(User).filter(User.role == "PENDING").all()
+    return [PendingUserResponse.model_validate(p) for p in pending]
+
+
+# ---------- Dashboard ----------
+
+@app.get("/api/dashboard/stats", response_model=DashboardStats)
+def dashboard_stats(user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    projects = db.query(Project).all()
+    today = datetime.now().strftime("%Y-%m-%d")
+    return DashboardStats(
+        active_projects=len(projects),
+        on_time=sum(1 for p in projects if p.status == "ON_TRACK"),
+        completed=sum(1 for p in projects if p.status == "COMPLETED"),
+        delayed=sum(1 for p in projects if p.status == "DELAYED"),
+    )
+
+
+@app.get("/api/dashboard/recent-projects", response_model=List[RecentProject])
+def recent_projects(user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    projects = db.query(Project).order_by(Project.created_at.desc()).limit(5).all()
+    result = []
+    for p in projects:
+        designer = db.query(User).filter(User.id == p.assigned_designer_id).first()
+        result.append(RecentProject(
+            id=p.id, name=p.name,
+            assigned_designer=designer.name if designer else "Unassigned",
+            stage_index=p.stage_index, status=p.status
+        ))
+    return result
+
+
+@app.get("/api/dashboard/upcoming-deadlines", response_model=List[UpcomingDeadline])
+def upcoming_deadlines(user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    today = datetime.now().strftime("%Y-%m-%d")
+    projects = db.query(Project).filter(Project.deadline >= today).order_by(Project.deadline.asc()).limit(5).all()
+    result = []
+    today_dt = datetime.now()
+    for p in projects:
+        deadline_dt = datetime.strptime(p.deadline, "%Y-%m-%d")
+        days_left = (deadline_dt - today_dt).days
+        designer = db.query(User).filter(User.id == p.assigned_designer_id).first()
+        result.append(UpcomingDeadline(
+            project_id=p.id, project_name=p.name,
+            assigned_designer=designer.name if designer else "Unassigned",
+            deadline=p.deadline, days_left=days_left
+        ))
+    return result
+
+
+# ---------- Projects ----------
+
+@app.get("/api/projects", response_model=List[ProjectResponse])
+def get_projects(user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    projects = db.query(Project).all()
+    result = []
+    for p in projects:
+        phases = db.query(Phase).filter(Phase.project_id == p.id).order_by(Phase.stage_index).all()
+        result.append(ProjectResponse(
+            id=p.id, name=p.name, description=p.description,
+            assigned_designer_id=p.assigned_designer_id, stage_index=p.stage_index,
+            progress=p.progress, deadline=p.deadline, start_date=p.start_date,
+            status=p.status, priority=p.priority, manager_notes=p.manager_notes,
+            phases=[PhaseResponse.model_validate(ph) for ph in phases]
+        ))
+    return result
+
+
+@app.get("/api/projects/{project_id}", response_model=ProjectResponse)
+def get_project(project_id: int, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    phases = db.query(Phase).filter(Phase.project_id == project_id).order_by(Phase.stage_index).all()
+    return ProjectResponse(
+        id=project.id, name=project.name, description=project.description,
+        assigned_designer_id=project.assigned_designer_id, stage_index=project.stage_index,
+        progress=project.progress, deadline=project.deadline, start_date=project.start_date,
+        status=project.status, priority=project.priority, manager_notes=project.manager_notes,
+        phases=[PhaseResponse.model_validate(ph) for ph in phases]
+    )
+
+
+@app.post("/api/projects", response_model=ProjectResponse, status_code=201)
+def create_project(data: ProjectCreate, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    if datetime.strptime(data.deadline, "%Y-%m-%d") < datetime.strptime(data.start_date, "%Y-%m-%d"):
+        raise HTTPException(status_code=400, detail="Expected Completion date cannot be before Start Date")
+
+    phase_list = sorted(data.phases, key=lambda x: x.stage_index)
+    for i, phase in enumerate(phase_list):
+        if not phase.deadline:
+            phase.deadline = data.deadline
+        if i == 0 and datetime.strptime(phase.deadline, "%Y-%m-%d") < datetime.strptime(data.start_date, "%Y-%m-%d"):
+            raise HTTPException(status_code=400, detail="Phase 1 deadline cannot be before the Start Date")
+        if i > 0 and datetime.strptime(phase.deadline, "%Y-%m-%d") < datetime.strptime(phase_list[i-1].deadline, "%Y-%m-%d"):
+            raise HTTPException(status_code=400, detail=f"Phase {phase.stage_index + 1} deadline cannot be before Phase {phase.stage_index} deadline")
+
+    project = Project(
+        name=data.name, description=data.description,
+        assigned_designer_id=data.assigned_designer_id,
+        start_date=data.start_date, deadline=data.deadline,
+        priority=data.priority, manager_notes=data.manager_notes,
+    )
+    db.add(project)
+    db.flush()
+
+    for phase_data in phase_list:
+        phase = Phase(project_id=project.id, stage_index=phase_data.stage_index, deadline=phase_data.deadline)
+        db.add(phase)
+
+    db.commit()
+    db.refresh(project)
+
+    phases = db.query(Phase).filter(Phase.project_id == project.id).order_by(Phase.stage_index).all()
+
+    from fastapi import BackgroundTasks
+    async def _notify():
+        async with SessionLocal() as bg_db:
+            try:
+                await notify_project_created(bg_db, project.id)
+            except Exception:
+                pass
+    return ProjectResponse(
+        id=project.id, name=project.name, description=project.description,
+        assigned_designer_id=project.assigned_designer_id, stage_index=project.stage_index,
+        progress=project.progress, deadline=project.deadline, start_date=project.start_date,
+        status=project.status, priority=project.priority, manager_notes=project.manager_notes,
+        phases=[PhaseResponse.model_validate(ph) for ph in phases]
+    )
+
+
+@app.put("/api/projects/{project_id}", response_model=ProjectResponse)
+def update_project(project_id: int, data: ProjectUpdate, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    changes = []
+    if data.name is not None and data.name != project.name:
+        changes.append(f"Name: {project.name} → {data.name}")
+        project.name = data.name
+    if data.description is not None and data.description != project.description:
+        changes.append(f"Description updated")
+        project.description = data.description
+    if data.priority is not None and data.priority != project.priority:
+        changes.append(f"Priority: {project.priority} → {data.priority}")
+        project.priority = data.priority
+    if data.deadline is not None and data.deadline != project.deadline:
+        changes.append(f"Deadline: {project.deadline} → {data.deadline}")
+        project.deadline = data.deadline
+    if data.manager_notes is not None and data.manager_notes != project.manager_notes:
+        changes.append(f"Manager notes updated")
+        project.manager_notes = data.manager_notes
+
+    if changes:
+        db.commit()
+        db.refresh(project)
+
+        designer = db.query(User).filter(User.id == project.assigned_designer_id).first()
+        designer_name = designer.name if designer else "Unassigned"
+        now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+        current_stage = _get_current_stage_name(project.stage_index)
+
+        changes_text = "\n".join([f"• {c}" for c in changes])
+        notify = (
+            f"📝 *Project Updated*\n\n"
+            f"*{project.name}*\n\n"
+            f"👤 Designer: {designer_name}\n"
+            f"🔄 Current Stage: {current_stage}\n"
+            f"📊 Progress: {project.progress}%\n\n"
+            f"*Changes:*\n{changes_text}\n\n"
+            f"Updated at: {now_str}"
+        )
+
+        msg = WhatsAppMessage(
+            project_id=project_id, content=notify, is_sent=False,
+            timestamp=now_str, quick_replies=["📊 View Progress", "📦 Project Info", "🔙 Main Menu"],
+        )
+        db.add(msg)
+        db.commit()
+        db.refresh(msg)
+    else:
+        db.commit()
+        db.refresh(project)
+
+    phases = db.query(Phase).filter(Phase.project_id == project_id).order_by(Phase.stage_index).all()
+
+    return ProjectResponse(
+        id=project.id, name=project.name, description=project.description,
+        assigned_designer_id=project.assigned_designer_id, stage_index=project.stage_index,
+        progress=project.progress, deadline=project.deadline, start_date=project.start_date,
+        status=project.status, priority=project.priority, manager_notes=project.manager_notes,
+        phases=[PhaseResponse.model_validate(ph) for ph in phases]
+    )
+
+
+@app.post("/api/projects/{project_id}/stages/{stage_index}/complete")
+async def complete_stage(project_id: int, stage_index: int, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    phases = db.query(Phase).filter(Phase.project_id == project_id).order_by(Phase.stage_index).all()
+    if stage_index >= len(phases):
+        raise HTTPException(status_code=400, detail="Stage not found")
+
+    if stage_index > 0:
+        prev_phase = phases[stage_index - 1]
+        if not prev_phase.completed_at:
+            raise HTTPException(status_code=400, detail="Complete the previous stage first!")
+
+    now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+    phases[stage_index].completed_at = now
+
+    total = len(phases)
+    completed = sum(1 for ph in phases if ph.completed_at)
+    project.progress = round((completed / total) * 100)
+    project.stage_index = min(stage_index + 1, total - 1)
+
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    if project.progress == 100:
+        project.status = "COMPLETED"
+    elif project.deadline < today_str:
+        project.status = "DELAYED"
+    else:
+        project.status = "ON_TRACK"
+
+    db.commit()
+
+    designer = db.query(User).filter(User.id == project.assigned_designer_id).first()
+    designer_name = designer.name if designer else "Unassigned"
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    completed_stage_name = _get_current_stage_name(stage_index)
+    next_stage_name = _get_current_stage_name(project.stage_index)
+
+    if project.progress == 100:
+        notify = (
+            f"🎉 *Project Completed!*\n\n"
+            f"*{project.name}*\n\n"
+            f"All {total} stages have been completed!\n"
+            f"👤 Designer: {designer_name}\n"
+            f"📊 Final Progress: 100%\n\n"
+            f"Great work! 🙌"
+        )
+    else:
+        notify = (
+            f"✅ *Stage Complete!*\n\n"
+            f"Stage completed: *{completed_stage_name}*\n\n"
+            f"📦 Project: {project.name}\n"
+            f"👤 Designer: {designer_name}\n"
+            f"📊 Progress: {project.progress}%\n"
+            f"🔄 Next Stage: {next_stage_name}\n\n"
+            f"Reply with 'stage update' for more details."
+        )
+
+    msg = WhatsAppMessage(
+        project_id=project_id, content=notify, is_sent=False,
+        timestamp=now_str, quick_replies=["📊 View Progress", "📦 Project Info", "🔄 Stage Update"],
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+
+    return {"message": "Stage marked complete"}
+
+
+@app.post("/api/projects/{project_id}/stages/{stage_index}/unmark")
+async def unmark_stage(project_id: int, stage_index: int, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    phases = db.query(Phase).filter(Phase.project_id == project_id).order_by(Phase.stage_index).all()
+    if stage_index >= len(phases):
+        raise HTTPException(status_code=400, detail="Stage not found")
+
+    phases[stage_index].completed_at = None
+    project.stage_index = stage_index
+
+    total = len(phases)
+    completed = sum(1 for ph in phases if ph.completed_at)
+    project.progress = round((completed / total) * 100)
+
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    if project.progress == 100:
+        project.status = "COMPLETED"
+    elif project.deadline < today_str:
+        project.status = "DELAYED"
+    else:
+        project.status = "ON_TRACK"
+
+    db.commit()
+
+    designer = db.query(User).filter(User.id == project.assigned_designer_id).first()
+    designer_name = designer.name if designer else "Unassigned"
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    unmarked_stage_name = _get_current_stage_name(stage_index)
+
+    notify = (
+        f"⏪ *Stage Unmarked*\n\n"
+        f"Stage unmarked: *{unmarked_stage_name}*\n\n"
+        f"📦 Project: {project.name}\n"
+        f"👤 Designer: {designer_name}\n"
+        f"📊 Progress: {project.progress}%\n"
+        f"🔄 Current Stage: {unmarked_stage_name}\n\n"
+        f"Please complete this stage to continue."
+    )
+
+    msg = WhatsAppMessage(
+        project_id=project_id, content=notify, is_sent=False,
+        timestamp=now_str, quick_replies=["📊 View Progress", "✅ Complete Stage", "📦 Project Info"],
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+
+    return {"message": "Stage unmarked"}
+
+
+# ---------- Designers ----------
+
+@app.get("/api/designers", response_model=List[UserResponse])
+def get_designers(user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    users = db.query(User).filter(User.role == "DESIGNER").all()
+    return [UserResponse.model_validate(u) for u in users]
+
+
+@app.post("/api/designers", response_model=UserResponse, status_code=201)
+def create_designer(data: UserCreate, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    if db.query(User).filter(User.email == data.email).first():
+        raise HTTPException(status_code=400, detail="Email already exists")
+
+    colors = ["bg-blue-500", "bg-purple-500", "bg-teal-500", "bg-pink-500", "bg-indigo-500", "bg-orange-500", "bg-green-500", "bg-red-500"]
+    initials = " ".join([n[0] for n in data.name.split() if n]).upper()[:2]
+    color = colors[len(db.query(User).filter(User.role == "DESIGNER").all()) % len(colors)]
+
+    user = User(
+        name=data.name, email=data.email, password_hash=hash_password(data.password),
+        role="DESIGNER", specialty=data.specialty, initials=initials, color=color,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return UserResponse.model_validate(user)
+
+
+@app.delete("/api/designers/{designer_id}")
+def delete_designer(designer_id: int, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == designer_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Designer not found")
+
+    db.query(Project).filter(Project.assigned_designer_id == designer_id).update({"assigned_designer_id": None})
+    db.query(Phase).delete()
+    db.query(WhatsAppMessage).delete()
+
+    db.delete(user)
+    db.commit()
+    return {"message": "Designer removed"}
+
+
+# ---------- WhatsApp Messages ----------
+
+def _get_project_details(db, project_id):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return None, None, None
+    designer = db.query(User).filter(User.id == project.assigned_designer_id).first() if project.assigned_designer_id else None
+    phases = db.query(Phase).filter(Phase.project_id == project_id).order_by(Phase.stage_index).all()
+    return project, designer, phases
+
+
+def _get_current_stage_name(stage_index):
+    stage_names = [
+        "Lock Concept", "Lock UX features", "Lock MRP", "Lock graphics theme",
+        "Lock Production feasibility", "Lock Procurement", "Lock IM", "Lock CCP", "Final Handover"
+    ]
+    return stage_names[stage_index] if stage_index < len(stage_names) else "Unknown Stage"
+
+
+def _generate_bot_response(db, project_id, user_message):
+    project, designer, phases = _get_project_details(db, project_id)
+    if not project:
+        return None, "❌ Project not found. Please check the project ID."
+
+    msg_lower = user_message.strip().lower()
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    designer_name = designer.name if designer else "Unassigned"
+
+    if any(kw in msg_lower for kw in ["project info", "project details", "tell me about", "project status", "status"]):
+        today_str = datetime.utcnow().strftime("%Y-%m-%d")
+        stages_completed = sum(1 for p in phases if p.completed_at)
+        total_stages = len(phases)
+        current_stage = _get_current_stage_name(project.stage_index)
+        days_left = (datetime.strptime(project.deadline, "%Y-%m-%d") - datetime.now()).days
+        reply = (
+            f"📦 *Project: {project.name}*\n\n"
+            f"👤 Designer: {designer_name}\n"
+            f"📊 Progress: {project.progress}%\n"
+            f"🔄 Current Stage: {current_stage}\n"
+            f"📅 Deadline: {project.deadline} ({days_left} days left)\n"
+            f"⚡ Priority: {project.priority}\n"
+            f"📌 Status: {project.status.replace('_', ' ')}\n\n"
+            f"✅ {stages_completed}/{total_stages} stages completed"
+        )
+        return reply, "What would you like to do?"
+
+    if any(kw in msg_lower for kw in ["stage update", "current stage", "what stage", "where we are"]):
+        current_stage = _get_current_stage_name(project.stage_index)
+        current_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
+        deadline = current_phase.deadline if current_phase else "N/A"
+        reply = (
+            f"🔄 *Current Stage: {current_stage}*\n\n"
+            f"📅 Deadline: {deadline}\n"
+            f"👤 Assigned: {designer_name}\n"
+            f"📊 Progress: {project.progress}%\n\n"
+            f"Reply with:\n*1* — Mark stage complete\n*2* — Report delay\n*3* — Update notes"
+        )
+        return reply, ["✅ Complete Stage", "⚠️ Report Delay", "📝 Update Notes"]
+
+    if any(kw in msg_lower for kw in ["mark complete", "stage complete", "completed", "done", "finished"]):
+        if project.stage_index >= len(phases):
+            return None, "🎉 All stages are already complete!"
+        prev_phase = phases[project.stage_index - 1] if project.stage_index > 0 else None
+        if project.stage_index > 0 and not prev_phase.completed_at:
+            prev_name = _get_current_stage_name(project.stage_index - 1)
+            return None, f"❌ Complete *{prev_name}* first before moving to the next stage."
+        now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+        phases[project.stage_index].completed_at = now
+        total = len(phases)
+        completed = sum(1 for ph in phases if ph.completed_at)
+        project.progress = round((completed / total) * 100)
+        project.stage_index = min(project.stage_index + 1, total - 1)
+        today_str = datetime.utcnow().strftime("%Y-%m-%d")
+        if project.progress == 100:
+            project.status = "COMPLETED"
+        elif project.deadline < today_str:
+            project.status = "DELAYED"
+        else:
+            project.status = "ON_TRACK"
+        db.commit()
+        new_stage = _get_current_stage_name(project.stage_index)
+        if project.progress == 100:
+            reply = (
+                f"🎉 *Congratulations!*\n\n"
+                f"Project *{project.name}* is now 100% complete!\n"
+                f"All {total} stages have been marked as done."
+            )
+        else:
+            reply = (
+                f"✅ *Stage Complete!*\n\n"
+                f"Moved to next stage: *{new_stage}*\n"
+                f"📊 Total Progress: {project.progress}%\n\n"
+                f"Reply with 'stage update' for more details."
+            )
+        return reply, ["📊 View Progress", "📦 Project Info", "🔙 Main Menu"]
+
+    if any(kw in msg_lower for kw in ["delay", "behind", "late", "cannot complete", "will miss"]):
+        reply = (
+            f"⚠️ *Delay Reported*\n\n"
+            f"Please reply with:\n"
+            f"1. Reason for delay\n"
+            f"2. Revised deadline (YYYY-MM-DD)\n\n"
+            f"Example: 'Need more time for graphics, revised date 2025-02-15'"
+        )
+        return reply, "Waiting for your response..."
+
+    if "reason" in msg_lower or "revised" in msg_lower or "more time" in msg_lower:
+        reason_match = re.search(r'(?:reason|because|since|due to)[:\s]+(.+?)(?:\n|$)', msg_lower)
+        revised_match = re.search(r'(?:revised|new|new date|date)[:\s]+(\d{4}-\d{2}-\d{2})', msg_lower)
+        reason = reason_match.group(1).strip() if reason_match else "No reason provided"
+        revised_date = revised_match.group(1) if revised_match else "TBD"
+        if phases[project.stage_index]:
+            phases[project.stage_index].delay_reason = f"{reason} (Revised: {revised_date})"
+            db.commit()
+        reply = (
+            f"⚠️ *Delay Acknowledged*\n\n"
+            f"📋 Reason: {reason}\n"
+            f"📅 Revised Deadline: {revised_date}\n\n"
+            f"The project manager has been notified."
+        )
+        return reply, ["📊 View Status", "📦 Project Info", "🔙 Main Menu"]
+
+    if any(kw in msg_lower for kw in ["update notes", "update", "add note", "progress update"]):
+        reply = (
+            f"📝 *Update Notes*\n\n"
+            f"Please type your update/progress note below.\n"
+            f"It will be logged to the current stage."
+        )
+        return reply, "Waiting for your note..."
+
+    if "update" in msg_lower or "note" in msg_lower or "progress" in msg_lower:
+        if phases[project.stage_index]:
+            phases[project.stage_index].designer_update = user_message
+            db.commit()
+        reply = (
+            f"✅ *Note Updated!*\n\n"
+            f"Your update has been logged to the current stage.\n\n"
+            f"Current stage: {_get_current_stage_name(project.stage_index)}"
+        )
+        return reply, ["📊 View Progress", "📦 Project Info", "🔙 Main Menu"]
+
+    if any(kw in msg_lower for kw in ["progress", "how far", "how much", "completion"]):
+        today_str = datetime.utcnow().strftime("%Y-%m-%d")
+        stages_completed = sum(1 for p in phases if p.completed_at)
+        total_stages = len(phases)
+        current_stage = _get_current_stage_name(project.stage_index)
+        reply = (
+            f"📊 *Progress Report*\n\n"
+            f"Project: {project.name}\n"
+            f"Total Progress: {project.progress}%\n"
+            f"Current Stage: {current_stage}\n\n"
+            f"Stage Breakdown:\n"
+        )
+        for i, phase in enumerate(phases):
+            check = "✅" if phase.completed_at else "⬜"
+            marker = " ➜" if i == project.stage_index else ""
+            reply += f"{check} {i+1}. {phase.deadline}{marker}\n"
+        reply += f"\n📅 Deadline: {project.deadline}"
+        return reply, ["📦 Project Info", "✅ Complete Stage", "🔙 Main Menu"]
+
+    if any(kw in msg_lower for kw in ["all projects", "list projects", "my projects", "show projects"]):
+        all_projects = db.query(Project).all()
+        if not all_projects:
+            return None, "No projects found."
+        reply = "📦 *Your Projects:*\n\n"
+        for p in all_projects:
+            d = db.query(User).filter(User.id == p.assigned_designer_id).first()
+            d_name = d.name if d else "Unassigned"
+            reply += f"{'✅' if p.progress == 100 else '🔄'} {p.name} — {p.progress}% ({d_name})\n"
+        return reply, "Reply with a project name for details."
+
+    if any(kw in msg_lower for kw in ["help", "menu", "options", "what can", "commands"]):
+        reply = (
+            f"🤖 *Smartivity Bot — Available Commands:*\n\n"
+            f"*📦 Project Info* — View project details\n"
+            f"*🔄 Stage Update* — Current stage info\n"
+            f"*✅ Complete Stage* — Mark current stage done\n"
+            f"*⚠️ Delay* — Report a delay\n"
+            f"*📝 Update Notes* — Log progress notes\n"
+            f"*📊 Progress* — View progress breakdown\n"
+            f"*📋 All Projects* — List all projects\n"
+            f"*❓ Help* — Show this menu\n\n"
+            f"Type any of these to get started!"
+        )
+        return reply, ["📦 Project Info", "🔄 Stage Update", "📊 Progress", "📋 All Projects"]
+
+    if any(kw in msg_lower for kw in ["hello", "hi", "hey", "good morning", "good afternoon"]):
+        return None, f"👋 Hello! How can I help you today?\n\nReply with *help* to see available commands."
+
+    current_stage = _get_current_stage_name(project.stage_index)
+    return None, (
+        f"🤖 I didn't quite understand that.\n\n"
+        f"Current stage: *{current_stage}*\n"
+        f"Reply with *help* to see available commands."
+    )
+
+
+@app.get("/api/projects/{project_id}/whatsapp-messages", response_model=List[WhatsAppMessageResponse])
+def get_whatsapp_messages(project_id: int, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    messages = db.query(WhatsAppMessage).filter(WhatsAppMessage.project_id == project_id).order_by(WhatsAppMessage.created_at).all()
+    return [WhatsAppMessageResponse.model_validate(m) for m in messages]
+
+
+@app.post("/api/projects/{project_id}/whatsapp-messages", response_model=WhatsAppMessageResponse, status_code=201)
+def create_whatsapp_message(project_id: int, data: WhatsAppMessageCreate, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    if not db.query(Project).filter(Project.id == project_id).first():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    msg = WhatsAppMessage(
+        project_id=project_id, content=data.content, is_sent=data.is_sent,
+        timestamp=data.timestamp, quick_replies=data.quick_replies,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return WhatsAppMessageResponse.model_validate(msg)
+
+
+@app.post("/api/projects/{project_id}/whatsapp-messages/respond")
+def bot_respond(project_id: int, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    project, designer, phases = _get_project_details(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    last_user_msg = (
+        db.query(WhatsAppMessage)
+        .filter(WhatsAppMessage.project_id == project_id, WhatsAppMessage.is_sent == True)
+        .order_by(WhatsAppMessage.created_at.desc())
+        .first()
+    )
+    if not last_user_msg:
+        raise HTTPException(status_code=400, detail="No user message to respond to")
+
+    bot_content, quick_replies = _generate_bot_response(db, project_id, last_user_msg.content)
+    if bot_content is None:
+        bot_content = quick_replies
+        quick_replies = []
+
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    bot_msg = WhatsAppMessage(
+        project_id=project_id, content=bot_content, is_sent=False,
+        timestamp=now_str, quick_replies=quick_replies,
+    )
+    db.add(bot_msg)
+    db.commit()
+    db.refresh(bot_msg)
+    return WhatsAppMessageResponse.model_validate(bot_msg)
+
+
+@app.post("/api/projects/{project_id}/whatsapp-messages/welcome")
+def send_welcome_message(project_id: int, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    project, designer, phases = _get_project_details(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    existing = db.query(WhatsAppMessage).filter(
+        WhatsAppMessage.project_id == project_id,
+        WhatsAppMessage.content.contains("Welcome")
+    ).first()
+    if existing:
+        return None
+
+    designer_name = designer.name if designer else "Unassigned"
+    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    current_stage = _get_current_stage_name(project.stage_index)
+
+    welcome = (
+        f"👋 Welcome to *Smartivity Bot*!\n\n"
+        f"📦 Project: *{project.name}*\n"
+        f"👤 Designer: {designer_name}\n"
+        f"📅 Deadline: {project.deadline}\n"
+        f"⚡ Priority: {project.priority}\n"
+        f"📊 Progress: {project.progress}%\n\n"
+        f"Current Stage: *{current_stage}*\n\n"
+        f"Type *help* to see all available commands!"
+    )
+
+    msg = WhatsAppMessage(
+        project_id=project_id, content=welcome, is_sent=False,
+        timestamp=now_str, quick_replies=["📦 Project Info", "🔄 Stage Update", "📊 Progress", "❓ Help"],
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return WhatsAppMessageResponse.model_validate(msg)
+
+
+# ---------- Slack Integration ----------
+
+
+def get_slack_config(db):
+    config = db.query(SlackConfig).first()
+    return config
+
+
+def verify_slack_signature(timestamp, signature, body, signing_secret):
+    if abs(datetime.utcnow().timestamp() - int(timestamp)) > 60 * 5:
+        return False
+    sig_b64 = "v0=" + hmac.new(signing_secret.encode(), f"v0:{timestamp}:{body}".encode(), hashlib_lib.sha256).hexdigest()
+    return hmac.compare_digest(sig_b64, signature)
+
+
+async def slack_api_call(db, endpoint, data=None):
+    config = get_slack_config(db)
+    if not config:
+        return None
+    bot_token = decrypt_token(config.bot_token) if config.encrypted else config.bot_token
+    if not bot_token:
+        return None
+    headers = {"Authorization": f"Bearer {bot_token}", "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(f"{SLACK_API_BASE}/{endpoint}", headers=headers, json=data or {}, timeout=10.0)
+        return response.json()
+    except Exception as e:
+        print(f"Slack API error: {e}")
+        return None
+
+
+async def send_slack_notification(db, project_id, text, blocks=None, channel_id=None):
+    config = get_slack_config(db)
+    if not config:
+        return
+    project, designer, phases = _get_project_details(db, project_id)
+    if not project:
+        return
+    target_channel = channel_id or project.slack_channel_id
+    if not target_channel:
+        return
+    data = {"channel": target_channel, "text": text, "blocks": blocks or []}
+    result = await slack_api_call(db, "chat.postMessage", data)
+    if result and result.get("ok"):
+        activity = SlackActivity(
+            project_id=project_id, channel_id=target_channel,
+            message_ts=result["ts"], action_type="notification",
+            user_id="", user_name="Smartivity Bot", payload=result
+        )
+        db.add(activity)
+        db.commit()
+
+
+async def notify_project_created(db, project_id):
+    project, designer, phases = _get_project_details(db, project_id)
+    if not project:
+        return
+    config = get_slack_config(db)
+    if not config:
+        return
+    if not project.slack_channel_id:
+        channel_name = f"project-{project.name.lower().replace(' ', '-')}"
+        result = await slack_api_call(db, "conversations.create", {"name": channel_name, "is_private": False})
+        if result and result.get("ok"):
+            project.slack_channel_id = result["channel"]["id"]
+            project.slack_channel_name = channel_name
+            db.commit()
+            db.refresh(project)
+        else:
+            return
+    channel_id = project.slack_channel_id
+    designer_name = designer.name if designer else "Unassigned"
+    stage_list = ""
+    for i, phase in enumerate(phases):
+        stage_list += f"  {i+1}. {phase.deadline}\n"
+    blocks = [
+        {"type": "header", "text": {"type": "plain_text", "text": f"📦 New Project: {project.name}"}},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"👤 *Designer:* {designer_name}\n"
+                    f"📅 *Start:* {project.start_date}\n"
+                    f"📅 *Deadline:* {project.deadline}\n"
+                    f"⚡ *Priority:* {project.priority}\n\n"
+                    f"*9-Stage Workflow:*\n{stage_list}"
+                )
+            }
+        },
+        {"type": "divider"},
+        {"type": "actions", "elements": [
+            {"type": "button", "text": {"type": "plain_text", "text": "📋 View Project"}, "action_id": "view_project", "value": str(project.id)},
+            {"type": "button", "text": {"type": "plain_text", "text": "✅ Accept"}, "action_id": "accept_project", "value": str(project.id)},
+            {"type": "button", "text": {"type": "plain_text", "text": "❓ Clarify"}, "action_id": "clarify_project", "value": str(project.id)},
+        ]}
+    ]
+    await send_slack_notification(db, project_id, f"New project assigned: {project.name}", blocks, channel_id)
+
+
+async def notify_project_updated(db, project_id):
+    project, designer, phases = _get_project_details(db, project_id)
+    if not project:
+        return
+    config = get_slack_config(db)
+    if not config:
+        return
+    if project.slack_channel_id:
+        blocks = _build_project_card(project, designer, phases)
+        await send_slack_notification(db, project_id, f"📝 Project updated: {project.name}", blocks, project.slack_channel_id)
+
+
+async def notify_stage_completed(db, project_id, stage_index):
+    project, designer, phases = _get_project_details(db, project_id)
+    if not project:
+        return
+    config = get_slack_config(db)
+    if not config:
+        return
+    if project.slack_channel_id:
+        completed_stage_name = _get_current_stage_name(stage_index)
+        next_stage_name = _get_current_stage_name(project.stage_index)
+        if project.progress == 100:
+            blocks = [
+                {"type": "header", "text": {"type": "plain_text", "text": "🎉 Project Completed!"}},
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            f"*{project.name}*\n\n"
+                            f"All {len(phases)} stages have been completed!\n"
+                            f"👤 Designer: {designer.name if designer else 'Unassigned'}\n"
+                            f"📊 Final Progress: 100%\n\n"
+                            f"Great work! 🙌"
+                        )
+                    }
+                }
+            ]
+            await send_slack_notification(db, project_id, f"🎉 Project completed: {project.name}", blocks, project.slack_channel_id)
+        else:
+            blocks = [
+                {"type": "header", "text": {"type": "plain_text", "text": f"✅ Stage Complete: {completed_stage_name}"}},
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            f"📦 *Project:* {project.name}\n"
+                            f"👤 *Designer:* {designer.name if designer else 'Unassigned'}\n"
+                            f"📊 *Progress:* {project.progress}%\n"
+                            f"🔄 *Next Stage:* {next_stage_name}\n"
+                        )
+                    }
+                },
+                {"type": "divider"},
+                {"type": "actions", "elements": [
+                    {"type": "button", "text": {"type": "plain_text", "text": "📊 Progress"}, "action_id": "view_progress", "value": str(project.id)},
+                    {"type": "button", "text": {"type": "plain_text", "text": "📦 Project Info"}, "action_id": "view_project", "value": str(project.id)},
+                    {"type": "button", "text": {"type": "plain_text", "text": "🔄 Stage Update"}, "action_id": "stage_update", "value": str(project.id)},
+                ]}
+            ]
+            await send_slack_notification(db, project_id, f"✅ Stage completed: {completed_stage_name}", blocks, project.slack_channel_id)
+
+
+async def notify_stage_unmarked(db, project_id, stage_index):
+    project, designer, phases = _get_project_details(db, project_id)
+    if not project:
+        return
+    config = get_slack_config(db)
+    if not config:
+        return
+    if project.slack_channel_id:
+        unmarked_stage_name = _get_current_stage_name(stage_index)
+        blocks = [
+            {"type": "header", "text": {"type": "plain_text", "text": f"⏪ Stage Unmarked: {unmarked_stage_name}"}},
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"📦 *Project:* {project.name}\n"
+                        f"👤 *Designer:* {designer.name if designer else 'Unassigned'}\n"
+                        f"📊 *Progress:* {project.progress}%\n"
+                        f"🔄 *Current Stage:* {unmarked_stage_name}\n\n"
+                        f"Please complete this stage to continue."
+                    )
+                }
+            },
+            {"type": "divider"},
+            {"type": "actions", "elements": [
+                {"type": "button", "text": {"type": "plain_text", "text": "📊 Progress"}, "action_id": "view_progress", "value": str(project.id)},
+                {"type": "button", "text": {"type": "plain_text", "text": "✅ Complete Stage"}, "action_id": "complete_stage", "value": str(stage_index)},
+                {"type": "button", "text": {"type": "plain_text", "text": "📦 Project Info"}, "action_id": "view_project", "value": str(project.id)},
+            ]}
+        ]
+        await send_slack_notification(db, project_id, f"⏪ Stage unmarked: {unmarked_stage_name}", blocks, project.slack_channel_id)
+
+
+def _build_project_block(project, designer, phases):
+    current_stage = _get_current_stage_name(project.stage_index)
+    designer_name = designer.name if designer else "Unassigned"
+    stages_completed = sum(1 for p in phases if p.completed_at)
+    total_stages = len(phases)
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    days_left = (datetime.strptime(project.deadline, "%Y-%m-%d") - datetime.now()).days
+
+    return {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": (
+                f"*{project.name}*\n"
+                f"👤 *Designer:* {designer_name}\n"
+                f"📊 *Progress:* {project.progress}%\n"
+                f"🔄 *Current Stage:* {current_stage}\n"
+                f"📅 *Deadline:* {project.deadline} ({days_left} days left)\n"
+                f"⚡ *Priority:* {project.priority}\n"
+                f"📌 *Status:* {project.status.replace('_', ' ')}\n"
+                f"✅ *Stages:* {stages_completed}/{total_stages} completed"
+            )
+        }
+    }
+
+
+def _build_project_attachment(project, designer, phases):
+    blocks = [_build_project_block(project, designer, phases)]
+    actions = [
+        {"type": "button", "text": {"type": "plain_text", "text": "✅ Complete Stage"}, "action_id": "complete_stage", "value": str(project.stage_index)},
+        {"type": "button", "text": {"type": "plain_text", "text": "⚠️ Report Delay"}, "action_id": "report_delay", "value": str(project.stage_index)},
+        {"type": "button", "text": {"type": "plain_text", "text": "📊 Progress"}, "action_id": "view_progress", "value": str(project.id)},
+    ]
+    blocks.append({"type": "actions", "elements": actions})
+    return blocks
+
+
+def _build_project_card(project, designer, phases):
+    blocks = [
+        {"type": "header", "text": {"type": "plain_text", "text": f"📦 {project.name}"}},
+        _build_project_block(project, designer, phases),
+        {"type": "divider"},
+        {"type": "actions", "elements": [
+            {"type": "button", "text": {"type": "plain_text", "text": "✅ Complete Stage"}, "action_id": "complete_stage", "value": str(project.stage_index)},
+            {"type": "button", "text": {"type": "plain_text", "text": "⚠️ Report Delay"}, "action_id": "report_delay", "value": str(project.stage_index)},
+            {"type": "button", "text": {"type": "plain_text", "text": "📊 Progress"}, "action_id": "view_progress", "value": str(project.id)},
+            {"type": "button", "text": {"type": "plain_text", "text": "📝 Update Notes"}, "action_id": "update_notes", "value": str(project.stage_index)},
+        ]}
+    ]
+    return blocks
+
+
+# ---------- Slack Config Endpoints ----------
+
+@app.get("/api/slack/config", response_model=SlackConfigResponse)
+def get_slack_config_endpoint(user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    config = get_slack_config(db)
+    if not config:
+        raise HTTPException(status_code=404, detail="Slack not configured")
+    return SlackConfigResponse.model_validate(config)
+
+
+@app.post("/api/slack/config", response_model=SlackConfigResponse, status_code=201)
+def save_slack_config(data: SlackConfigCreate, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    config = get_slack_config(db)
+    encrypted_bot = encrypt_token(data.bot_token)
+    encrypted_secret = encrypt_token(data.signing_secret)
+    if config:
+        config.bot_token = encrypted_bot
+        config.signing_secret = encrypted_secret
+        config.encrypted = True
+        config.slack_team_id = data.slack_team_id
+        db.commit()
+        db.refresh(config)
+        return SlackConfigResponse.model_validate(config)
+    else:
+        config = SlackConfig(
+            bot_token=encrypted_bot,
+            signing_secret=encrypted_secret,
+            slack_team_id=data.slack_team_id,
+            encrypted=True,
+        )
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+        return SlackConfigResponse.model_validate(config)
+
+
+@app.post("/api/slack/status")
+def get_slack_status(project_id: int, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    config = get_slack_config(db)
+    return SlackStatusResponse(
+        configured=bool(config),
+        channel_id=project.slack_channel_id,
+        channel_name=project.slack_channel_name,
+    )
+
+
+# ---------- Slack raw message logging ----------
+
+@app.post("/api/slack/messages/log")
+def log_slack_message(data: dict, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    msg = SlackMessage(
+        project_id=data.get("project_id"),
+        slack_user_id=data.get("slack_user_id", ""),
+        slack_user_name=data.get("slack_user_name", ""),
+        channel_id=data.get("channel_id", ""),
+        text=data.get("text", ""),
+        ts=data.get("ts", ""),
+        raw_json=data.get("raw", {}),
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return SlackMessageResponse.model_validate(msg)
+
+
+@app.get("/api/projects/{project_id}/slack-messages", response_model=List[SlackMessageResponse])
+def get_slack_messages(project_id: int, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    messages = db.query(SlackMessage).filter(
+        SlackMessage.project_id == project_id
+    ).order_by(SlackMessage.created_at.desc()).limit(100).all()
+    return [SlackMessageResponse.model_validate(m) for m in messages]
+
+
+# ---------- Slack Webhook Endpoint ----------
+
+@app.get("/api/slack/webhook")
+@app.post("/api/slack/webhook")
+async def slack_webhook(request: Request, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    if request.method == "GET":
+        challenge = request.query_params.get("challenge", "")
+        return {"challenge": challenge}
+
+    raw_body = await request.body()
+    content_type = request.headers.get("content-type", "")
+
+    timestamp = request.headers.get("x-slack-request-timestamp", "0")
+    signature = request.headers.get("x-slack-signature", "")
+
+    config = get_slack_config(db)
+    if config:
+        signing_secret = decrypt_token(config.signing_secret) if config.encrypted else config.signing_secret
+        if not verify_slack_signature(timestamp, signature, raw_body.decode(), signing_secret):
+            return {"message": "Invalid signature"}, 403
+
+    payload = {}
+    try:
+        if "json" in content_type:
+            payload = json.loads(raw_body.decode())
+        else:
+            form_data = await request.form()
+            payload = json.loads(form_data.get("payload", "{}"))
+    except Exception as e:
+        print(f"[SLACK] Parse error: {e}")
+        payload = {}
+
+    if payload.get("type") == "url_verification":
+        challenge = payload.get("challenge", "")
+        return {"challenge": challenge}
+
+    if not config:
+        return {"message": "Slack not configured"}
+    if "type" in payload:
+        if payload["type"] == "block_actions":
+            action = payload.get("actions", [{}])[0]
+            action_id = action.get("action_id", "")
+            value = action.get("value", "")
+            user = payload.get("user", {})
+            channel_id = payload.get("channel", {}).get("id", "")
+            slack_user_id = user.get("id", "")
+            slack_user_name = user.get("name", "")
+            message_ts = payload.get("message_ts", "")
+            activity = SlackActivity(
+                project_id=int(value) if value.isdigit() else 0,
+                channel_id=channel_id,
+                message_ts=message_ts,
+                action_type=action_id,
+                user_id=slack_user_id,
+                user_name=slack_user_name,
+                payload=payload
+            )
+            db.add(activity)
+            try:
+                project_id = int(value)
+                project = db.query(Project).filter(Project.id == project_id).first()
+                if not project:
+                    return {"response_action": "errors", "errors": [{"field": "project", "text": "Project not found"}]}
+                designer = db.query(User).filter(User.id == project.assigned_designer_id).first() if project.assigned_designer_id else None
+                phases = db.query(Phase).filter(Phase.project_id == project_id).order_by(Phase.stage_index).all()
+                if action_id == "complete_stage":
+                    stage_idx = int(value)
+                    if stage_idx >= len(phases):
+                        return {"response_action": "errors", "errors": [{"field": "stage", "text": "Stage not found"}]}
+                    if stage_idx > 0:
+                        prev_phase = phases[stage_idx - 1]
+                        if not prev_phase.completed_at:
+                            prev_name = _get_current_stage_name(stage_idx - 1)
+                            return {"response_action": "errors", "errors": [{"field": "stage", "text": f"Complete {prev_name} first!"}]}
+                    now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+                    phases[stage_idx].completed_at = now
+                    total = len(phases)
+                    completed = sum(1 for ph in phases if ph.completed_at)
+                    project.progress = round((completed / total) * 100)
+                    project.stage_index = min(stage_idx + 1, total - 1)
+                    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+                    if project.progress == 100:
+                        project.status = "COMPLETED"
+                    elif project.deadline < today_str:
+                        project.status = "DELAYED"
+                    else:
+                        project.status = "ON_TRACK"
+                    db.commit()
+                    if project.progress == 100:
+                        blocks = [
+                            {"type": "header", "text": {"type": "plain_text", "text": "🎉 Project Completed!"}},
+                            {
+                                "type": "section",
+                                "text": {"type": "mrkdwn", "text": f"*{project.name}*\n\nAll {total} stages completed!\n👤 {designer.name if designer else 'Unassigned'}\n📊 100%\n\nGreat work! 🙌"}
+                            }
+                        ]
+                        if project.slack_channel_id:
+                            await slack_api_call(db, "chat.update", {"channel": project.slack_channel_id, "ts": message_ts, "blocks": blocks})
+                    else:
+                        next_stage = _get_current_stage_name(project.stage_index)
+                        blocks = [
+                            {"type": "header", "text": {"type": "plain_text", "text": f"✅ Stage Complete"}},
+                            {
+                                "type": "section",
+                                "text": {"type": "mrkdwn", "text": f"📦 {project.name}\n📊 Progress: {project.progress}%\n🔄 Next: {next_stage}"}
+                            },
+                            {"type": "divider"},
+                            {"type": "actions", "elements": [
+                                {"type": "button", "text": {"type": "plain_text", "text": "📊 Progress"}, "action_id": "view_progress", "value": str(project.id)},
+                                {"type": "button", "text": {"type": "plain_text", "text": "📦 Project Info"}, "action_id": "view_project", "value": str(project.id)},
+                            ]}
+                        ]
+                        if project.slack_channel_id:
+                            await slack_api_call(db, "chat.update", {"channel": project.slack_channel_id, "ts": message_ts, "blocks": blocks})
+                elif action_id == "report_delay":
+                    blocks = [
+                        {"type": "header", "text": {"type": "plain_text", "text": "⚠️ Report Delay"}},
+                        {
+                            "type": "input",
+                            "block_id": "delay_input",
+                            "element": {"type": "plain_text_input", "action_id": "delay_reason"},
+                            "label": {"type": "plain_text", "text": "Reason for delay"},
+                        },
+                        {
+                            "type": "input",
+                            "block_id": "revised_input",
+                            "element": {"type": "plain_text_input", "action_id": "revised_date", "placeholder": {"type": "plain_text", "text": "YYYY-MM-DD"}},
+                            "label": {"type": "plain_text", "text": "Revised deadline"},
+                        }
+                    ]
+                    if project.slack_channel_id:
+                        await slack_api_call(db, "views.open", {
+                            "trigger_id": payload.get("trigger_id"),
+                            "view": {
+                                "type": "modal",
+                                "callback_id": f"delay_form_{project_id}",
+                                "title": {"type": "plain_text", "text": "⚠️ Report Delay"},
+                                "submit": {"type": "plain_text", "text": "Submit"},
+                                "close": {"type": "plain_text", "text": "Cancel"},
+                                "blocks": blocks
+                            }
+                        })
+                elif action_id == "update_notes":
+                    blocks = [
+                        {"type": "header", "text": {"type": "plain_text", "text": "📝 Update Notes"}},
+                        {
+                            "type": "input",
+                            "block_id": "notes_input",
+                            "element": {"type": "multi_plain_text_input", "action_id": "notes_text"},
+                            "label": {"type": "plain_text", "text": "Your update/progress note"},
+                        }
+                    ]
+                    if project.slack_channel_id:
+                        await slack_api_call(db, "views.open", {
+                            "trigger_id": payload.get("trigger_id"),
+                            "view": {
+                                "type": "modal",
+                                "callback_id": f"notes_form_{project_id}",
+                                "title": {"type": "plain_text", "text": "📝 Update Notes"},
+                                "submit": {"type": "plain_text", "text": "Submit"},
+                                "close": {"type": "plain_text", "text": "Cancel"},
+                                "blocks": blocks
+                            }
+                        })
+                elif action_id == "view_project":
+                    blocks = _build_project_card(project, designer, phases)
+                    if project.slack_channel_id:
+                        await slack_api_call(db, "chat.update", {"channel": project.slack_channel_id, "ts": message_ts, "blocks": blocks})
+                elif action_id == "view_progress":
+                    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+                    stages_completed = sum(1 for p in phases if p.completed_at)
+                    total_stages = len(phases)
+                    current_stage = _get_current_stage_name(project.stage_index)
+                    reply_text = (
+                        f"📊 *Progress Report*\n\n"
+                        f"Project: {project.name}\n"
+                        f"Total Progress: {project.progress}%\n"
+                        f"Current Stage: {current_stage}\n\n"
+                        f"Stage Breakdown:\n"
+                    )
+                    for i, phase in enumerate(phases):
+                        check = "✅" if phase.completed_at else "⬜"
+                        marker = " ➜" if i == project.stage_index else ""
+                        reply_text += f"{check} {i+1}. {phase.deadline}{marker}\n"
+                    reply_text += f"\n📅 Deadline: {project.deadline}"
+                    if project.slack_channel_id:
+                        await slack_api_call(db, "chat.postMessage", {"channel": project.slack_channel_id, "text": reply_text})
+                elif action_id == "stage_update":
+                    current_stage = _get_current_stage_name(project.stage_index)
+                    current_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
+                    deadline = current_phase.deadline if current_phase else "N/A"
+                    reply_text = (
+                        f"🔄 *Current Stage: {current_stage}*\n\n"
+                        f"📅 Deadline: {deadline}\n"
+                        f"👤 Assigned: {designer.name if designer else 'Unassigned'}\n"
+                        f"📊 Progress: {project.progress}%"
+                    )
+                    if project.slack_channel_id:
+                        await slack_api_call(db, "chat.postMessage", {"channel": project.slack_channel_id, "text": reply_text})
+                elif action_id == "accept_project":
+                    reply_text = f"✅ Project *{project.name}* accepted by {slack_user_name}!"
+                    if project.slack_channel_id:
+                        await slack_api_call(db, "chat.postMessage", {"channel": project.slack_channel_id, "text": reply_text})
+                elif action_id == "clarify_project":
+                    blocks = [
+                        {"type": "header", "text": {"type": "plain_text", "text": "❓ Project Clarification"}},
+                        {
+                            "type": "input",
+                            "block_id": "clarify_input",
+                            "element": {"type": "plain_text_input", "action_id": "clarify_text", "multi_line": True},
+                            "label": {"type": "plain_text", "text": "What would you like to clarify?"},
+                        }
+                    ]
+                    if project.slack_channel_id:
+                        await slack_api_call(db, "views.open", {
+                            "trigger_id": payload.get("trigger_id"),
+                            "view": {
+                                "type": "modal",
+                                "callback_id": f"clarify_form_{project_id}",
+                                "title": {"type": "plain_text", "text": "❓ Clarification"},
+                                "submit": {"type": "plain_text", "text": "Submit"},
+                                "close": {"type": "plain_text", "text": "Cancel"},
+                                "blocks": blocks
+                            }
+                        })
+            except Exception as e:
+                print(f"Slack action error: {e}")
+                db.rollback()
+            db.commit()
+            return {"response_action": "updated"}
+        elif payload["type"] == "view_submission":
+            callback_id = payload.get("view", {}).get("callback_id", "")
+            state = payload.get("view", {}).get("state", {}).get("values", {})
+            if "delay_form_" in callback_id:
+                project_id = int(callback_id.split("_")[-1])
+                project = db.query(Project).filter(Project.id == project_id).first()
+                if project:
+                    reason = state.get("delay_input", {}).get("delay_reason", {}).get("value", "N/A")
+                    revised = state.get("revised_input", {}).get("revised_date", {}).get("value", "TBD")
+                    if phases[project.stage_index]:
+                        phases[project.stage_index].delay_reason = f"{reason} (Revised: {revised})"
+                        db.commit()
+                    blocks = [
+                        {"type": "header", "text": {"type": "plain_text", "text": "⚠️ Delay Reported"}},
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f"📋 Reason: {reason}\n📅 Revised: {revised}\n📦 Project: {project.name}"
+                            }
+                        }
+                    ]
+                    if project.slack_channel_id:
+                        await slack_api_call(db, "chat.update", {"channel": project.slack_channel_id, "ts": payload.get("view", {}).get("latest", {}).get("ts"), "blocks": blocks})
+            elif "notes_form_" in callback_id:
+                project_id = int(callback_id.split("_")[-1])
+                project = db.query(Project).filter(Project.id == project_id).first()
+                if project:
+                    notes = state.get("notes_input", {}).get("notes_text", {}).get("value", "")
+                    if phases[project.stage_index]:
+                        phases[project.stage_index].designer_update = notes
+                        db.commit()
+                    blocks = [
+                        {"type": "header", "text": {"type": "plain_text", "text": "✅ Notes Updated"}},
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f"📝 Your note has been logged.\n📦 Project: {project.name}\n🔄 Current Stage: {_get_current_stage_name(project.stage_index)}"
+                            }
+                        }
+                    ]
+                    if project.slack_channel_id:
+                        await slack_api_call(db, "chat.update", {"channel": project.slack_channel_id, "ts": payload.get("view", {}).get("latest", {}).get("ts"), "blocks": blocks})
+            elif "clarify_form_" in callback_id:
+                project_id = int(callback_id.split("_")[-1])
+                project = db.query(Project).filter(Project.id == project_id).first()
+                if project:
+                    clarification = state.get("clarify_input", {}).get("clarify_text", {}).get("value", "")
+                    blocks = [
+                        {"type": "header", "text": {"type": "plain_text", "text": "❓ Clarification Received"}},
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f"📦 Project: {project.name}\n💬 {clarification}\n\nThe project manager will respond."
+                            }
+                        }
+                    ]
+                    if project.slack_channel_id:
+                        await slack_api_call(db, "chat.update", {"channel": project.slack_channel_id, "ts": payload.get("view", {}).get("latest", {}).get("ts"), "blocks": blocks})
+            return {}
+    return {"message": "OK"}
+
+
+# ---------- Slack Channel Creation ----------
+
+@app.post("/api/projects/{project_id}/slack-channel", response_model=SlackChannelCreateResponse)
+async def create_slack_channel(project_id: int, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return SlackChannelCreateResponse(channel_id="", channel_name="", success=False, message="Project not found")
+    config = get_slack_config(db)
+    if not config:
+        return SlackChannelCreateResponse(channel_id="", channel_name="", success=False, message="Slack not configured")
+    channel_name = f"project-{project.name.lower().replace(' ', '-')}"
+    result = await slack_api_call(db, "conversations.create", {"name": channel_name, "is_private": False})
+    if result and result.get("ok"):
+        channel_id = result["channel"]["id"]
+        project.slack_channel_id = channel_id
+        project.slack_channel_name = channel_name
+        db.commit()
+        return SlackChannelCreateResponse(channel_id=channel_id, channel_name=channel_name, success=True)
+    else:
+        error_msg = result.get("error", "Unknown error") if result else "Slack API error"
+        return SlackChannelCreateResponse(channel_id="", channel_name="", success=False, message=error_msg)
+
+
+# ---------- Slack Activity Feed ----------
+
+@app.get("/api/projects/{project_id}/slack-activity", response_model=List[SlackActivityResponse])
+def get_slack_activity(project_id: int, user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)):
+    activities = db.query(SlackActivity).filter(SlackActivity.project_id == project_id).order_by(SlackActivity.created_at.desc()).limit(50).all()
+    return [SlackActivityResponse.model_validate(a) for a in activities]
+
+
+# ---------- Startup ----------
+
+@app.on_event("startup")
+def startup():
+    pass
+
+
+# ---------- Startup ----------
+
+@app.on_event("startup")
+def startup():
+    pass
+</file>
+
+<file path="server/models.py">
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, func
+from sqlalchemy.orm import relationship
+from .database import Base
+import datetime
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    email = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=True, default=None)
+    role = Column(String, nullable=False, default="PENDING")
+    specialty = Column(String, default="Designer")
+    initials = Column(String, default="")
+    color = Column(String, default="bg-blue-500")
+    slack_user_id = Column(String, default="", nullable=True)
+    slack_team_id = Column(String, default="", nullable=True)
+    requested_role = Column(String, default="", nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    projects = relationship("Project", back_populates="designer")
+
+
+class Project(Base):
+    __tablename__ = "projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, default="")
+    assigned_designer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    stage_index = Column(Integer, default=0)
+    progress = Column(Integer, default=0)
+    deadline = Column(String, nullable=False)
+    start_date = Column(String, nullable=False)
+    status = Column(String, default="ON_TRACK")
+    priority = Column(String, default="MEDIUM")
+    manager_notes = Column(Text, default="")
+    slack_channel_id = Column(String, default="")
+    slack_channel_name = Column(String, default="")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    designer = relationship("User", back_populates="projects")
+    phases = relationship("Phase", back_populates="project", cascade="all, delete-orphan")
+    whatsapp_messages = relationship("WhatsAppMessage", back_populates="project", cascade="all, delete-orphan")
+    slack_activities = relationship("SlackActivity", back_populates="project", cascade="all, delete-orphan")
+    slack_messages = relationship("SlackMessage", back_populates="project", cascade="all, delete-orphan")
+
+
+class Phase(Base):
+    __tablename__ = "phases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    stage_index = Column(Integer, nullable=False)
+    deadline = Column(String, nullable=False)
+    designer_update = Column(Text, default="")
+    delay_reason = Column(Text, default="")
+    completed_at = Column(String, default=None, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    project = relationship("Project", back_populates="phases")
+
+
+class WhatsAppMessage(Base):
+    __tablename__ = "whatsapp_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    is_sent = Column(Boolean, default=False)
+    timestamp = Column(String, nullable=False)
+    quick_replies = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    project = relationship("Project", back_populates="whatsapp_messages")
+
+
+class SlackConfig(Base):
+    __tablename__ = "slack_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bot_token = Column(String, nullable=False)
+    signing_secret = Column(String, nullable=False)
+    slack_team_id = Column(String, default="")
+    encrypted = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+
+class SlackActivity(Base):
+    __tablename__ = "slack_activity"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    channel_id = Column(String, default="")
+    message_ts = Column(String, default="")
+    action_type = Column(String, default="")
+    user_id = Column(String, default="")
+    user_name = Column(String, default="")
+    payload = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    project = relationship("Project", back_populates="slack_activities")
+
+
+class SlackMessage(Base):
+    __tablename__ = "slack_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    slack_user_id = Column(String, default="")
+    slack_user_name = Column(String, default="")
+    channel_id = Column(String, default="")
+    text = Column(Text, default="")
+    ts = Column(String, default="")
+    raw_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    project = relationship("Project", back_populates="slack_messages")
+
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_token = Column(String, unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+    revoked = Column(Boolean, default=False)
+
+    user = relationship("User")
+</file>
+
+</files>
