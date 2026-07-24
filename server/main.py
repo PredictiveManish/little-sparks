@@ -277,6 +277,7 @@ async def slack_oidc_exchange(code: str, redirect_uri: str, code_verifier: str):
         resp = await client.post(
             "https://slack.com/api/openid.connect.token",
             data={
+                "grant_type": "authorization_code",
                 "client_id": SLACK_CLIENT_ID,
                 "client_secret": SLACK_CLIENT_SECRET,
                 "code": code,
