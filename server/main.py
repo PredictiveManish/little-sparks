@@ -47,11 +47,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- Serve frontend from backend (optional, for single-origin) ----------
-FRONTEND_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)))
-if os.path.exists(os.path.join(FRONTEND_DIR, "index.html")):
-    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
-
 # ---------- Secrets from env ----------
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 if not SECRET_KEY:
