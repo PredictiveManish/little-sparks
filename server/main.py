@@ -34,6 +34,32 @@ from .schemas import (
 # ---------- Init ----------
 init_db()
 
+# ---------- Seed admin user on startup (only if not exists) ----------
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "manish.tiwari.09@zohomail.in")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "Manish@smartivity123")
+ADMIN_NAME = os.getenv("ADMIN_NAME", "Manish Tiwari")
+
+db = SessionLocal()
+try:
+    existing = db.query(User).filter(User.email == ADMIN_EMAIL).first()
+    if not existing:
+        user = User(
+            name=ADMIN_NAME,
+            email=ADMIN_EMAIL,
+            password_hash=argon2_hasher.hash(ADMIN_PASSWORD),
+            role="ADMIN",
+            specialty="Product Manager",
+            initials="MT",
+            color="bg-purple-500",
+        )
+        db.add(user)
+        db.commit()
+        print(f"Admin user created: {ADMIN_EMAIL}")
+    else:
+        print(f"Admin user already exists: {ADMIN_EMAIL}")
+finally:
+    db.close()
+
 # ---------- App ----------
 app = FastAPI(title="Smartivity Designer Manager API")
 
