@@ -40,7 +40,6 @@ const api = {
     emailLogin: (email, password) => apiFetch('/auth/login', { method: 'POST', body: { email, password } }),
     logout: () => apiFetch('/auth/logout', { method: 'GET' }),
     getMe: () => apiFetch('/auth/me'),
-    getSlackAuthUrl: () => apiFetch('/auth/slack-auth-url'),
     getPendingUsers: () => apiFetch('/admin/pending-users'),
     approveUser: (userId, role) => apiFetch('/admin/users/approve', { method: 'POST', body: { user_id: userId, role } }),
 

@@ -316,11 +316,10 @@ async def slack_login(request: SlackLoginRequest, db: Session = Depends(get_db),
 
 
 @app.get("/api/auth/slack-auth-url")
-def get_slack_auth_url(response: Response):
+def get_slack_auth_url():
     if not SLACK_CLIENT_ID:
         raise HTTPException(status_code=500, detail="Slack OIDC not configured")
     code_verifier, code_challenge = generate_pkce_pair()
-    set_pkce_cookie(response, code_verifier)
     params = {
         "client_id": SLACK_CLIENT_ID,
         "redirect_uri": SLACK_REDIRECT_URI,
@@ -331,7 +330,9 @@ def get_slack_auth_url(response: Response):
         "code_challenge_method": "S256",
     }
     query = "&".join(f"{k}={v}" for k, v in params.items())
-    return {"auth_url": f"https://slack.com/openid/connect/authorize?{query}"}
+    redirect = RedirectResponse(url=f"https://slack.com/openid/connect/authorize?{query}", status_code=302)
+    set_pkce_cookie(redirect, code_verifier)
+    return redirect
 
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")

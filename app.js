@@ -65,20 +65,8 @@ function updateSidebarUser(user) {
     }
 }
 
-async function slackLogin() {
-    const btn = document.getElementById('slackLoginBtn');
-    btn.disabled = true;
-    btn.textContent = 'Connecting to Slack...';
-    try {
-        const authData = await api.getSlackAuthUrl();
-        if (authData && authData.auth_url) {
-            window.location.href = authData.auth_url;
-        }
-    } catch (err) {
-        showToast('Failed to initiate Slack login: ' + err.message);
-        btn.disabled = false;
-        btn.textContent = 'Continue with Slack';
-    }
+function slackLogin() {
+    window.location.href = `${API_BASE}/auth/slack-auth-url`;
 }
 
 async function handleSlackCallback() {
