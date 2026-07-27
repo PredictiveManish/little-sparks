@@ -365,8 +365,8 @@ def get_slack_auth_url():
         "response_type": "code",
         "scope": "openid email profile",
         "state": os.urandom(24).hex(),
-        # "code_challenge": code_challenge,
-        # "code_challenge_method": "S256",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
     }
     query = urllib.parse.urlencode(params)
     redirect = RedirectResponse(url=f"https://slack.com/openid/connect/authorize?{query}", status_code=302)
