@@ -375,7 +375,7 @@ def get_slack_auth_url():
     return redirect
 
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 
 
 @app.get("/api/slack/oauth/callback")
