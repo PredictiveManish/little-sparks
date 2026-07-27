@@ -45,7 +45,7 @@ async function checkAuth() {
     }
 }
 
-function showPage(pageId) {
+function showPage(pageId, { updateUrl = true } = {}) {
     ['loginPage', 'pendingPage', 'adminPage', 'mainApp'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -56,7 +56,33 @@ function showPage(pageId) {
             }
         }
     });
+
+    if (updateUrl) {
+        const path = PAGE_TO_PATH[pageId] || '/';
+        if (window.location.pathname !== path) {
+            // Use the initial load as a replace (no extra back-button entry),
+            // subsequent page switches push a new entry so back/forward works.
+            const method = history.state && history.state.__routed ? 'pushState' : 'replaceState';
+            history[method]({ __routed: true, pageId }, '', path);
+        }
+    }
 }
+
+// ============================================
+// ROUTER
+// ============================================
+
+const PAGE_TO_PATH = {
+    loginPage: '/login',
+    pendingPage: '/pending',
+    adminPage: '/admin',
+    mainApp: '/home',
+};
+
+// Re-run auth check on back/forward so the URL and visible page stay in sync
+window.addEventListener('popstate', () => {
+    checkAuth();
+});
 
 function updateSidebarUser(user) {
     const nameEl = document.getElementById('sidebarUserName');

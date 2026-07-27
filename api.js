@@ -1,11 +1,12 @@
 const API_BASE = (function() {
     // Auto-detect: if running on localhost, use localhost:8000
-    // Otherwise use the deployed backend URL (set via env or default)
+    // Otherwise use a relative path so requests stay same-origin and go
+    // through the Vercel rewrite proxy to the Render backend (avoids
+    // cross-site cookie issues entirely).
     const envApiUrl = window.env?.API_URL;
     if (envApiUrl) return envApiUrl;
     if (window.location.hostname === 'localhost') return 'http://localhost:8000/api';
-    // For deployed frontend, use the backend URL from env or default
-    return 'https://designer-manager.onrender.com/api';
+    return '/api';
 })();
 
 async function apiFetch(endpoint, options = {}) {
@@ -33,7 +34,7 @@ async function apiFetch(endpoint, options = {}) {
     console.log(`[API] Response: ${logEndpoint} | Status: ${response.status}`);
     if (response.status === 401) {
         console.warn(`[API] Unauthorized: ${logEndpoint} | Redirecting to login`);
-        window.location.href = '/';
+        window.location.href = '/login';
         return null;
     }
     if (response.status === 403) {
