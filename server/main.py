@@ -291,23 +291,23 @@ def set_state_cookie(response: Response, state: str):
 def clear_state_cookie(response: Response):
     response.delete_cookie(key=STATE_COOKIE_NAME, path="/api/slack/oauth/callback")
 
-
-async def slack_oidc_exchange(code: str, redirect_uri: str, code_verifier: str):
+async def slack_oidc_exchange(code: str, redirect_uri: str, code_verifier: str = None):
+    data = {
+        "grant_type": "authorization_code",
+        "client_id": SLACK_CLIENT_ID,
+        "client_secret": SLACK_CLIENT_SECRET,
+        "code": code,
+        "redirect_uri": redirect_uri,
+    }
+    if code_verifier:
+        data["code_verifier"] = code_verifier
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://slack.com/api/openid.connect.token",
-            data={
-                "grant_type": "authorization_code",
-                "client_id": SLACK_CLIENT_ID,
-                "client_secret": SLACK_CLIENT_SECRET,
-                "code": code,
-                "redirect_uri": redirect_uri,
-                "code_verifier": code_verifier,
-            },
+            data=data,
             timeout=10.0,
         )
         return resp.json()
-
 
 async def slack_get_userinfo(access_token: str):
     async with httpx.AsyncClient() as client:
@@ -355,8 +355,8 @@ def get_slack_auth_url():
         "response_type": "code",
         "scope": "openid email profile",
         "state": os.urandom(24).hex(),
-        "code_challenge": code_challenge,
-        "code_challenge_method": "S256",
+        # "code_challenge": code_challenge,
+        # "code_challenge_method": "S256",
     }
     query = urllib.parse.urlencode(params)
     redirect = RedirectResponse(url=f"https://slack.com/openid/connect/authorize?{query}", status_code=302)
@@ -389,11 +389,11 @@ async def slack_oauth_callback(
         return redirect
 
     pkce_verifier = request.cookies.get(PKCE_COOKIE_NAME)
-    if not pkce_verifier:
-        redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=pkce_missing", status_code=302)
-        clear_pkce_cookie(redirect)
-        clear_state_cookie(redirect)
-        return redirect
+    # if not pkce_verifier:
+    #     redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=pkce_missing", status_code=302)
+    #     clear_pkce_cookie(redirect)
+    #     clear_state_cookie(redirect)
+    #     return redirect
 
     expected_state = request.cookies.get(STATE_COOKIE_NAME)
     if not expected_state or not state or expected_state != state:
