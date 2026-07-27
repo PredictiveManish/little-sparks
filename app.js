@@ -80,7 +80,15 @@ const PAGE_TO_PATH = {
 };
 
 // Re-run auth check on back/forward so the URL and visible page stay in sync
-window.addEventListener('popstate', () => {
+window.addEventListener('popstate', (event) => {
+    // If we already have auth state, restore sub-page from history state or hash
+    if (CURRENT_USER && CURRENT_USER.role !== 'PENDING') {
+        const view = event.state?.view || window.location.hash.replace('#', '') || 'dashboard';
+        if (view && view !== currentView) {
+            navigateTo(view);
+        }
+        return;
+    }
     checkAuth();
 });
 
@@ -330,13 +338,14 @@ function navigateTo(view, projectId = null) {
         link.classList.add('text-gray-600', 'font-medium');
     });
     const navMap = {
-    'dashboard': 'dashboard',
-    'projects': 'projects',
-    'create-project': 'projects',
-    'project-details': 'projects',
-    'edit-project': 'projects',
-    'designers': 'designers',
-    'whatsapp-chat': 'whatsapp-chat',
+        'dashboard': 'dashboard',
+        'projects': 'projects',
+        'create-project': 'projects',
+        'project-details': 'projects',
+        'edit-project': 'projects',
+        'designers': 'designers',
+        'whatsapp-chat': 'whatsapp-chat',
+        'slack-settings': 'slack-settings',
     };
     const navKey = navMap[view];
     if (navKey) {
@@ -362,6 +371,12 @@ function navigateTo(view, projectId = null) {
             renderPhaseDeadlines();
         };
     });
+
+    // Update URL hash so browser history tracks sub-page navigation
+    const currentHash = window.location.hash.replace('#', '');
+    if (currentHash !== view) {
+        history.pushState({ view }, '', `#${view}`);
+    }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
     closeSidebar();
@@ -1354,6 +1369,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Otherwise check auth and load app
     checkAuth();
     handleSlackInstallReturn();
+
+    // Restore sub-page from URL hash on initial load
+    const hash = window.location.hash.replace('#', '');
+    if (hash && CURRENT_USER && CURRENT_USER.role !== 'PENDING' && CURRENT_USER.role !== 'ADMIN') {
+        setTimeout(() => navigateTo(hash), 100);
+    }
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeDesignerModal();
