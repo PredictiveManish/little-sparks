@@ -9,6 +9,12 @@ const API_BASE = (function() {
 })();
 
 async function apiFetch(endpoint, options = {}) {
+    const method = options.method || 'GET';
+    const logEndpoint = `${method} ${endpoint}`;
+    console.log(`[API] Request: ${logEndpoint}`);
+    if (options.body) {
+        console.log(`[API] Payload:`, JSON.stringify(options.body, null, 2));
+    }
     const defaultOptions = {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -17,21 +23,37 @@ async function apiFetch(endpoint, options = {}) {
     if (options.body) {
         config.body = JSON.stringify(options.body);
     }
-    const response = await fetch(`${API_BASE}${endpoint}`, config);
+    let response;
+    try {
+        response = await fetch(`${API_BASE}${endpoint}`, config);
+    } catch (fetchError) {
+        console.error(`[API] Network error: ${logEndpoint} | Error: ${fetchError.message}`);
+        throw new Error(`Network error: ${fetchError.message}`);
+    }
+    console.log(`[API] Response: ${logEndpoint} | Status: ${response.status}`);
     if (response.status === 401) {
+        console.warn(`[API] Unauthorized: ${logEndpoint} | Redirecting to login`);
         window.location.href = '/';
         return null;
     }
     if (response.status === 403) {
+        const errorData = await response.json().catch(() => ({ detail: 'Access denied' }));
+        console.warn(`[API] Forbidden: ${logEndpoint} | Detail: ${errorData.detail}`);
         showToast('Access denied. You need elevated permissions.');
         return null;
     }
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: 'Request failed' }));
+        console.error(`[API] Error: ${logEndpoint} | Status: ${response.status} | Detail: ${error.detail}`);
         throw new Error(error.detail || 'Request failed');
     }
-    if (response.status === 204) return null;
-    return response.json();
+    if (response.status === 204) {
+        console.log(`[API] No content: ${logEndpoint}`);
+        return null;
+    }
+    const data = await response.json();
+    console.log(`[API] Data received: ${logEndpoint} | Keys: ${Object.keys(data || {}).join(', ')}`);
+    return data;
 }
 
 const api = {

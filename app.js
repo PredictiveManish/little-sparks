@@ -14,26 +14,33 @@ let USER_ROLE = null;
 // ============================================
 
 async function checkAuth() {
+    console.log('[APP] checkAuth: Starting authentication check');
     try {
         const user = await api.getMe();
+        console.log('[APP] checkAuth: User data received', user);
         if (user) {
             CURRENT_USER = user;
             USER_ROLE = user.role;
             updateSidebarUser(user);
             if (user.role === 'PENDING') {
+                console.log('[APP] checkAuth: User role is PENDING, showing pending page');
                 showPage('pendingPage');
                 document.getElementById('pendingRole').textContent = user.requested_role || 'Designer';
             } else if (user.role === 'ADMIN') {
+                console.log('[APP] checkAuth: User role is ADMIN, showing admin page');
                 showPage('adminPage');
                 loadPendingUsers();
             } else {
+                console.log('[APP] checkAuth: User authenticated, showing main app');
                 showPage('mainApp');
                 navigateTo('dashboard');
             }
         } else {
+            console.log('[APP] checkAuth: No user data, showing login page');
             showPage('loginPage');
         }
     } catch (err) {
+        console.error('[APP] checkAuth: Error during auth check:', err.message);
         showPage('loginPage');
     }
 }
@@ -88,12 +95,15 @@ function handleSlackInstallReturn() {
 }
 
 async function handleSlackCallback() {
+    console.log('[APP] handleSlackCallback: Checking URL params for Slack OAuth result');
     const params = new URLSearchParams(window.location.search);
     const error = params.get('error');
     const slackLogin = params.get('slack_login');
     const slackPending = params.get('slack_pending');
+    console.log('[APP] handleSlackCallback: error=%s, slack_login=%s, slack_pending=%s', error, slackLogin, slackPending);
 
     if (error) {
+        console.error('[APP] handleSlackCallback: Slack login failed with error:', error);
         showToast('Slack login failed: ' + error);
         window.history.replaceState({}, document.title, window.location.pathname);
         showPage('loginPage');
@@ -101,9 +111,11 @@ async function handleSlackCallback() {
     }
 
     if (slackLogin === 'success') {
+        console.log('[APP] handleSlackCallback: Slack login success, fetching user data');
         window.history.replaceState({}, document.title, window.location.pathname);
         try {
             const user = await api.getMe();
+            console.log('[APP] handleSlackCallback: User data after Slack login', user);
             if (user) {
                 CURRENT_USER = user;
                 USER_ROLE = user.role;
@@ -121,17 +133,20 @@ async function handleSlackCallback() {
                 return true;
             }
         } catch (err) {
+            console.error('[APP] handleSlackCallback: Failed to fetch user after Slack login:', err.message);
             showToast('Slack login failed: ' + err.message);
         }
     }
 
     if (slackPending) {
+        console.log('[APP] handleSlackCallback: Slack account pending approval');
         window.history.replaceState({}, document.title, window.location.pathname);
         showPage('loginPage');
         showToast('Account pending approval. Please login with email.');
         return true;
     }
 
+    console.log('[APP] handleSlackCallback: No Slack callback params found');
     return false;
 }
 
@@ -143,8 +158,10 @@ async function emailLogin(event) {
         showToast('Please enter email and password');
         return;
     }
+    console.log('[APP] emailLogin: Attempting login for email:', email);
     try {
         const result = await api.emailLogin(email, password);
+        console.log('[APP] emailLogin: Login response received', result);
         if (result && result.user) {
             CURRENT_USER = result.user;
             USER_ROLE = result.user.role;
@@ -161,19 +178,23 @@ async function emailLogin(event) {
             }
         }
     } catch (err) {
+        console.error('[APP] emailLogin: Login failed:', err.message);
         showToast(err.message);
     }
 }
 
 async function logout() {
+    console.log('[APP] logout: Starting logout process');
     try {
         await api.logout();
+        console.log('[APP] logout: API logout successful');
     } catch (err) {
-        // Ignore logout errors
+        console.warn('[APP] logout: API logout failed (ignored):', err.message);
     }
     CURRENT_USER = null;
     USER_ROLE = null;
     showPage('loginPage');
+    console.log('[APP] logout: Logged out, showing login page');
 }
 
 // ============================================
@@ -182,8 +203,10 @@ async function logout() {
 
 async function loadPendingUsers() {
     const container = document.getElementById('pendingUsersList');
+    console.log('[APP] loadPendingUsers: Loading pending users');
     try {
         const users = await api.getPendingUsers();
+        console.log('[APP] loadPendingUsers: Received', users?.length || 0, 'pending users');
         if (!users || users.length === 0) {
             container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No pending users.</p>';
             return;
@@ -213,23 +236,27 @@ async function loadPendingUsers() {
         });
         container.innerHTML = html;
     } catch (err) {
+        console.error('[APP] loadPendingUsers: Failed to load pending users:', err.message);
         container.innerHTML = '<p class="text-sm text-red-400 text-center py-4">Failed to load pending users.</p>';
     }
 }
 
 async function approveUser(userId, role) {
     if (!confirm(`Approve this user as ${role}?`)) return;
+    console.log('[APP] approveUser: Approving user', userId, 'as', role);
     try {
         await api.approveUser(userId, role);
         showToast('User approved as ' + role);
         loadPendingUsers();
     } catch (err) {
+        console.error('[APP] approveUser: Failed to approve user:', err.message);
         showToast('Failed: ' + err.message);
     }
 }
 
 async function denyUser(userId) {
     if (!confirm('Deny this user? They will need to contact an admin again.')) return;
+    console.log('[APP] denyUser: Denying user', userId);
     try {
         // Delete the user from DB
         const db = SessionLocal();
@@ -242,6 +269,7 @@ async function denyUser(userId) {
         showToast('User denied');
         loadPendingUsers();
     } catch (err) {
+        console.error('[APP] denyUser: Failed to deny user:', err.message);
         showToast('Failed: ' + err.message);
     }
 }
@@ -334,14 +362,17 @@ function closeSidebar() {
 // DASHBOARD
 // ============================================
 async function loadDashboard() {
+    console.log('[APP] loadDashboard: Loading dashboard data');
     try {
         const stats = await api.getDashboardStats();
+        console.log('[APP] loadDashboard: Stats received', stats);
         document.getElementById('statActiveProjects').textContent = stats.active_projects;
         document.getElementById('statOnTime').textContent = stats.on_time;
         document.getElementById('statCompleted').textContent = stats.completed;
         document.getElementById('statDelayed').textContent = stats.delayed;
 
         const recentProjects = await api.getRecentProjects();
+        console.log('[APP] loadDashboard: Recent projects received', recentProjects?.length || 0);
         const recentContainer = document.getElementById('recentProjectsList');
         let html = '';
         if (recentProjects.length === 0) {
@@ -362,6 +393,7 @@ async function loadDashboard() {
         recentContainer.innerHTML = html;
 
         const deadlines = await api.getUpcomingDeadlines();
+        console.log('[APP] loadDashboard: Upcoming deadlines received', deadlines?.length || 0);
         const deadlineContainer = document.getElementById('upcomingDeadlinesList');
         let dHtml = '';
         if (deadlines.length === 0) {
@@ -388,6 +420,7 @@ async function loadDashboard() {
         }
         deadlineContainer.innerHTML = dHtml;
     } catch (err) {
+        console.error('[APP] loadDashboard: Failed to load dashboard:', err.message);
         showToast('Failed to load dashboard: ' + err.message);
     }
 }
@@ -396,9 +429,12 @@ async function loadDashboard() {
 // POPULATE PROJECTS TABLE
 // ============================================
 async function populateProjectsTable() {
+    console.log('[APP] populateProjectsTable: Loading projects table');
     try {
         DESIGNERS = await api.getDesigners();
+        console.log('[APP] populateProjectsTable: Designers loaded', DESIGNERS?.length || 0);
         const projects = await api.getProjects();
+        console.log('[APP] populateProjectsTable: Projects loaded', projects?.length || 0);
         const tbody = document.getElementById('projectsTableBody');
         let html = '';
         projects.forEach(p => {
@@ -435,6 +471,7 @@ async function populateProjectsTable() {
         });
         tbody.innerHTML = html;
     } catch (err) {
+        console.error('[APP] populateProjectsTable: Failed to load projects:', err.message);
         showToast('Failed to load projects: ' + err.message);
     }
 }
@@ -443,8 +480,10 @@ async function populateProjectsTable() {
 // POPULATE PROJECT DETAILS
 // ============================================
 async function populateProjectDetails() {
+    console.log('[APP] populateProjectDetails: Loading project details for project', selectedProjectId);
     try {
         const project = await api.getProject(selectedProjectId);
+        console.log('[APP] populateProjectDetails: Project data received', project);
         document.getElementById('detailProjectName').textContent = project.name;
         document.getElementById('detailClientName').textContent = 'Assigned to ' + getDesignerName(project.assigned_designer_id, DESIGNERS);
         document.getElementById('detailStageBadge').textContent =
@@ -598,6 +637,7 @@ async function populateProjectDetails() {
         });
         cardsContainer.innerHTML = cardsHTML;
     } catch (err) {
+        console.error('[APP] populateProjectDetails: Failed to load project details:', err.message);
         showToast('Failed to load project details: ' + err.message);
     }
 }
@@ -606,8 +646,10 @@ async function populateProjectDetails() {
 // POPULATE EDIT PROJECT
 // ============================================
 async function populateEditProject() {
+    console.log('[APP] populateEditProject: Loading edit form for project', selectedProjectId);
     try {
         const project = await api.getProject(selectedProjectId);
+        console.log('[APP] populateEditProject: Project data received', project);
         const nameInput = document.getElementById('editProjectName');
         if (nameInput) nameInput.value = project.name;
         const priorityInput = document.getElementById('editProjectPriority');
@@ -619,11 +661,13 @@ async function populateEditProject() {
         const notesInput = document.getElementById('editProjectManagerNotes');
         if (notesInput) notesInput.value = project.manager_notes;
     } catch (err) {
+        console.error('[APP] populateEditProject: Failed to load project:', err.message);
         showToast('Failed to load project: ' + err.message);
     }
 }
 
 async function saveProjectEdit() {
+    console.log('[APP] saveProjectEdit: Saving project', selectedProjectId);
     try {
         const nameInput = document.getElementById('editProjectName');
         const priorityInput = document.getElementById('editProjectPriority');
@@ -642,6 +686,7 @@ async function saveProjectEdit() {
         showToast('Project updated successfully!');
         navigateTo('project-details');
     } catch (err) {
+        console.error('[APP] saveProjectEdit: Failed to update project:', err.message);
         showToast('Failed to update project: ' + err.message);
     }
 }
@@ -650,21 +695,25 @@ async function saveProjectEdit() {
 // STAGE COMPLETION
 // ============================================
 async function markStageComplete(stageIndex) {
+    console.log('[APP] markStageComplete: Marking stage', stageIndex, 'complete for project', selectedProjectId);
     try {
         await api.completeStage(selectedProjectId, stageIndex);
         populateProjectDetails();
         showToast(`"${WORKFLOW_STAGES[stageIndex]}" marked as complete!`);
     } catch (err) {
+        console.error('[APP] markStageComplete: Failed to mark stage complete:', err.message);
         showToast(err.message);
     }
 }
 
 async function unmarkStageComplete(stageIndex) {
+    console.log('[APP] unmarkStageComplete: Unmarking stage', stageIndex, 'for project', selectedProjectId);
     try {
         await api.unmarkStage(selectedProjectId, stageIndex);
         populateProjectDetails();
         showToast(`"${WORKFLOW_STAGES[stageIndex]}" unmarked from complete.`);
     } catch (err) {
+        console.error('[APP] unmarkStageComplete: Failed to unmark stage:', err.message);
         showToast(err.message);
     }
 }

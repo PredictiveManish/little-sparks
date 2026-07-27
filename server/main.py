@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional
-from jose import JWTError, jwt
+from jose import jwt
 from itsdangerous import Signer, BadSignature
 from cryptography.fernet import Fernet, InvalidToken
 import argon2
@@ -18,11 +18,33 @@ import json
 import httpx
 import os
 import urllib.parse
+import logging
+from logging.handlers import RotatingFileHandler
+import sys
+import traceback
+
+# ---------- Structured logging setup ----------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        RotatingFileHandler(
+            "smartivity.log",
+            maxBytes=10 * 1024 * 1024,  # 10 MB
+            backupCount=5,
+            encoding="utf-8",
+        ),
+    ],
+)
+logger = logging.getLogger("smartivity")
+logger.info("Logging initialized")
 
 from .database import get_db, init_db, SessionLocal
 from .models import Base, User, Project, Phase, WhatsAppMessage, SlackConfig, SlackActivity, SlackMessage, Session as SessionModel
 from .schemas import (
-    LoginRequest, TokenResponse, UserResponse, UserCreate,
+    LoginRequest, UserResponse, UserCreate,
     ProjectCreate, ProjectUpdate, ProjectResponse,
     PhaseResponse, DashboardStats, RecentProject, UpcomingDeadline,
     WhatsAppMessageCreate, WhatsAppMessageResponse,
@@ -128,6 +150,7 @@ def verify_password(password: str, hashed: str) -> bool:
         argon2_hasher.verify(hashed, password)
         return True
     except argon2.exceptions.VerifyMismatchError:
+        logger.warning("Password verification failed for hashed password starting with: %s...", hashed[:20])
         return False
 
 
@@ -158,21 +181,25 @@ def create_session(user_id: int, db: Session) -> SessionModel:
     db.add(session)
     db.commit()
     db.refresh(session)
+    logger.info("Session created: user_id=%s, session_token=%s, expires_at=%s", user_id, token, expires)
     return session
 
 
 def get_session_from_token(token: str, db: Session) -> Optional[SessionModel]:
     if not token:
+        logger.debug("Session token missing from request")
         return None
     session = db.query(SessionModel).filter(
         SessionModel.session_token == token,
         SessionModel.revoked == False,
     ).first()
     if not session:
+        logger.warning("Session not found for token: %s...", token[:20])
         return None
     if session.expires_at and session.expires_at < datetime.utcnow():
         session.revoked = True
         db.commit()
+        logger.warning("Session expired: user_id=%s, session_id=%s, expired_at=%s", session.user_id, session.id, session.expires_at)
         return None
     return session
 
@@ -182,6 +209,7 @@ def revoke_session(session_id: int, db: Session):
     if session:
         session.revoked = True
         db.commit()
+        logger.info("Session revoked: session_id=%s, user_id=%s", session_id, session.user_id)
 
 
 # ---------- Auth dependency ----------
@@ -191,12 +219,28 @@ VALID_ROLES = {"DESIGNER", "MANAGER", "ADMIN"}
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optional[User]:
     session_token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not session_token:
+        logger.debug("Auth: no session cookie | path=%s | IP=%s",
+                     request.url.path if request else "unknown",
+                     request.client.host if request and request.client else "unknown")
     session = get_session_from_token(session_token, db)
     if not session:
+        logger.debug("Auth: session invalid/expired for path=%s | IP=%s",
+                     request.url.path if request else "unknown",
+                     request.client.host if request and request.client else "unknown")
         return None
     user = db.query(User).filter(User.id == session.user_id).first()
-    if not user or user.role.upper() not in {r.upper() for r in VALID_ROLES}:
+    if not user:
+        logger.warning("Auth: user not found for session_id=%s | path=%s | IP=%s",
+                       session.id, request.url.path if request else "unknown",
+                       request.client.host if request and request.client else "unknown")
         return None
+    if user.role.upper() not in {r.upper() for r in VALID_ROLES}:
+        logger.warning("Auth: user role not valid: user_id=%s | role=%s | path=%s",
+                       user.id, user.role, request.url.path if request else "unknown")
+        return None
+    logger.debug("Auth: user authenticated | user_id=%s | role=%s | path=%s",
+                 user.id, user.role, request.url.path if request else "unknown")
     return user
 
 
@@ -248,6 +292,7 @@ def decrypt_token(encrypted: str) -> str:
     try:
         return fernet.decrypt(encrypted.encode()).decode()
     except InvalidToken:
+        logger.error("Token decryption failed: InvalidToken exception for token starting with: %s...", encrypted[:20] if encrypted else "None")
         return None
 
 
@@ -255,6 +300,8 @@ def decrypt_token(encrypted: str) -> str:
 
 SLACK_API_BASE = "https://slack.com/api"
 PKCE_COOKIE_NAME = "slack_pkce_verifier"
+SLACK_OIDC_DISCOVERY_URL = "https://slack.com/.well-known/openid-configuration"
+SLACK_JWKS_URL = "https://slack.com/openid/connect/keys"
 
 
 def generate_pkce_pair():
@@ -282,6 +329,23 @@ def clear_pkce_cookie(response: Response):
     response.delete_cookie(key=PKCE_COOKIE_NAME, path="/api/slack/oauth/callback")
 
 
+def set_nonce_cookie(response: Response, nonce: str):
+    is_dev = os.getenv("ENV") == "development"
+    response.set_cookie(
+        key="slack_nonce",
+        value=nonce,
+        httponly=True,
+        secure=not is_dev,
+        samesite="lax" if is_dev else "none",
+        max_age=300,
+        path="/api/slack/oauth/callback",
+    )
+
+
+def clear_nonce_cookie(response: Response):
+    response.delete_cookie(key="slack_nonce", path="/api/slack/oauth/callback")
+
+
 def set_state_cookie(response: Response, state: str):
     is_dev = os.getenv("ENV") == "development"
     response.set_cookie(
@@ -297,6 +361,109 @@ def set_state_cookie(response: Response, state: str):
 
 def clear_state_cookie(response: Response):
     response.delete_cookie(key=STATE_COOKIE_NAME, path="/api/slack/oauth/callback")
+
+
+_slack_jwks_cache = {}
+_slack_jwks_timestamp = 0
+
+
+async def get_slack_jwks():
+    global _slack_jwks_cache, _slack_jwks_timestamp
+    now = datetime.utcnow().timestamp()
+    if _slack_jwks_cache and (now - _slack_jwks_timestamp) < 3600:
+        logger.debug("[SLACK OIDC] Using cached JWKS (age=%.1fs)", now - _slack_jwks_timestamp)
+        return _slack_jwks_cache
+    logger.info("[SLACK OIDC] Fetching JWKS from %s", SLACK_JWKS_URL)
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(SLACK_JWKS_URL, timeout=10.0)
+            resp.raise_for_status()
+            jwks = resp.json()
+            key_count = len(jwks.get("keys", []))
+            _slack_jwks_cache = jwks
+            _slack_jwks_timestamp = now
+            logger.info("[SLACK OIDC] JWKS fetched successfully | keys_count=%s", key_count)
+            return jwks
+    except httpx.HTTPStatusError as e:
+        logger.error("[SLACK OIDC] Failed to fetch JWKS | status=%s | response=%s | error=%s",
+                     e.response.status_code, e.response.text[:300], e)
+        return _slack_jwks_cache
+    except Exception as e:
+        logger.error("[SLACK OIDC] Failed to fetch JWKS | error=%s", e)
+        return _slack_jwks_cache
+
+
+def _get_jwk_key(jwks, kid):
+    for key in jwks.get("keys", []):
+        if key.get("kid") == kid:
+            return key
+    return None
+
+
+def _jwk_to_rsa_key(jwk):
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.backends import default_backend
+    import base64
+
+    n = int.from_bytes(base64.urlsafe_b64decode(jwk["n"] + "=="), "big")
+    e = int.from_bytes(base64.urlsafe_b64decode(jwk["e"] + "=="), "big")
+    public_numbers = rsa.RSAPublicNumbers(e, n)
+    return public_numbers.public_key(default_backend())
+
+
+def verify_slack_id_token(id_token: str, expected_audience: str, expected_nonce: str = None):
+    try:
+        from jose import jwt as jose_jwt
+        header = jose_jwt.get_unverified_header(id_token)
+        kid = header.get("kid")
+        alg = header.get("alg", "unknown")
+        logger.info("[SLACK OIDC] Verifying id_token | kid=%s | alg=%s | audience=%s", kid, alg, expected_audience)
+        jwks = _get_slack_jwks_sync()
+        if not jwks:
+            logger.error("[SLACK OIDC] id_token verification failed: JWKS not available")
+            return None
+        jwk = _get_jwk_key(jwks, kid)
+        if not jwk:
+            logger.error("[SLACK OIDC] id_token verification failed: no matching JWK for kid=%s | available_kids=%s",
+                         kid, [k.get("kid") for k in jwks.get("keys", [])])
+            return None
+        public_key = _jwk_to_rsa_key(jwk)
+        payload = jose_jwt.decode(
+            id_token,
+            key=public_key,
+            algorithms=["RS256"],
+            audience=expected_audience,
+            issuer="https://slack.com",
+            options={"verify_exp": True, "verify_nbf": False, "verify_aud": True, "verify_iss": True},
+        )
+        if expected_nonce and payload.get("nonce") != expected_nonce:
+            logger.error("[SLACK OIDC] Nonce mismatch: expected=%s, got=%s", expected_nonce, payload.get("nonce"))
+            return None
+        logger.info("[SLACK OIDC] id_token verified successfully | user=%s | team=%s",
+                    payload.get("email", payload.get("sub", "unknown")),
+                    payload.get("https://slack.com/team_id", "unknown"))
+        return payload
+    except jose_jwt.ExpiredSignatureError:
+        logger.error("[SLACK OIDC] id_token verification failed: token expired")
+        return None
+    except jose_jwt.JWTInvalidIssuer:
+        logger.error("[SLACK OIDC] id_token verification failed: invalid issuer")
+        return None
+    except jose_jwt.JWTDecodeError as e:
+        logger.error("[SLACK OIDC] id_token verification failed: decode error | error=%s", e)
+        return None
+    except Exception as e:
+        logger.error("[SLACK OIDC] id_token verification failed: unexpected error | error=%s", e)
+        return None
+
+
+def _get_slack_jwks_sync():
+    global _slack_jwks_cache, _slack_jwks_timestamp
+    now = datetime.utcnow().timestamp()
+    if _slack_jwks_cache and (now - _slack_jwks_timestamp) < 3600:
+        return _slack_jwks_cache
+    return _slack_jwks_cache
 
 async def slack_oidc_exchange(code: str, redirect_uri: str, code_verifier: str = None):
     data = {
@@ -331,11 +498,20 @@ async def slack_get_userinfo(access_token: str):
 @app.post("/api/auth/login")
 def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == login_data.email).first()
-    if not user or not user.password_hash or not verify_password(login_data.password, user.password_hash):
+    if not user:
+        logger.warning("Login attempt with unknown email: %s | IP=%s", login_data.email, login_data.ip if hasattr(login_data, 'ip') else "unknown")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.password_hash:
+        logger.warning("Login attempt for user without password_hash: email=%s | user_id=%s | role=%s", login_data.email, user.id, user.role)
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not verify_password(login_data.password, user.password_hash):
+        logger.warning("Login failed: invalid password | email=%s | user_id=%s | IP=%s", login_data.email, user.id, login_data.ip if hasattr(login_data, 'ip') else "unknown")
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if user.role.upper() not in VALID_ROLES:
+        logger.info("Login blocked: account pending approval | email=%s | user_id=%s | role=%s", login_data.email, user.id, user.role)
         raise HTTPException(status_code=403, detail="Account pending approval")
 
+    logger.info("Login successful: email=%s | user_id=%s | role=%s | IP=%s", login_data.email, user.id, user.role, login_data.ip if hasattr(login_data, 'ip') else "unknown")
     session = create_session(user.id, db)
 
     token = create_jwt_token({"user_id": user.id, "role": user.role})
@@ -355,23 +531,27 @@ async def slack_login(request: SlackLoginRequest, db: Session = Depends(get_db),
 
 
 @app.get("/api/auth/slack-auth-url")
-def get_slack_auth_url():
+def get_slack_auth_url(request: Request = None):
     if not SLACK_CLIENT_ID:
+        logger.error("Slack OIDC not configured: SLACK_CLIENT_ID is empty")
         raise HTTPException(status_code=500, detail="Slack OIDC not configured")
-    code_verifier, code_challenge = generate_pkce_pair()
+    nonce = os.urandom(16).hex()
+    state = os.urandom(24).hex()
     params = {
         "client_id": SLACK_CLIENT_ID,
         "redirect_uri": SLACK_REDIRECT_URI,
         "response_type": "code",
         "scope": "openid email profile",
-        "state": os.urandom(24).hex(),
-        "code_challenge": code_challenge,
-        "code_challenge_method": "S256",
+        "state": state,
+        "nonce": nonce,
     }
     query = urllib.parse.urlencode(params)
+    logger.info("Slack auth URL generated | IP=%s | nonce=%s... | state=%s... | redirect_uri=%s",
+                request.client.host if request and request.client else "unknown",
+                nonce[:8], state[:8], SLACK_REDIRECT_URI)
     redirect = RedirectResponse(url=f"https://slack.com/openid/connect/authorize?{query}", status_code=302)
-    set_pkce_cookie(redirect, code_verifier)
-    set_state_cookie(redirect, params["state"])
+    set_nonce_cookie(redirect, nonce)
+    set_state_cookie(redirect, state)
     return redirect
 
 
@@ -387,18 +567,22 @@ async def slack_oauth_callback(
     request: Request = None,
 ):
     if error:
+        logger.warning("[SLACK OIDC] Callback returned error: %s", error)
         redirect = RedirectResponse(url=f"{FRONTEND_URL}?error={error}", status_code=302)
         clear_pkce_cookie(redirect)
         clear_state_cookie(redirect)
         return redirect
 
     if not code:
+        logger.warning("[SLACK OIDC] Callback received without authorization code")
         redirect = RedirectResponse(url=FRONTEND_URL, status_code=302)
         clear_pkce_cookie(redirect)
         clear_state_cookie(redirect)
         return redirect
 
     pkce_verifier = request.cookies.get(PKCE_COOKIE_NAME)
+    if not pkce_verifier:
+        logger.warning("[SLACK OIDC] PKCE verifier cookie missing (user may have navigated directly to callback). code=%s", code[:10] if code else "None")
     # if not pkce_verifier:
     #     redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=pkce_missing", status_code=302)
     #     clear_pkce_cookie(redirect)
@@ -407,14 +591,22 @@ async def slack_oauth_callback(
 
     expected_state = request.cookies.get(STATE_COOKIE_NAME)
     if not expected_state or not state or expected_state != state:
+        logger.error("[SLACK OIDC] State mismatch - expected=%s, received=%s | IP=%s | User-Agent=%s",
+                     expected_state, state,
+                     request.client.host if request.client else "unknown",
+                     request.headers.get("user-agent", "unknown") if request else "unknown")
         redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=state_mismatch", status_code=302)
         clear_pkce_cookie(redirect)
         clear_state_cookie(redirect)
         return redirect
 
+    logger.info("[SLACK OIDC] Starting token exchange | code=%s... | PKCE=%s", code[:10] if code else "None", "present" if pkce_verifier else "missing")
     token_data = await slack_oidc_exchange(code, SLACK_REDIRECT_URI, pkce_verifier)
     if not token_data.get("ok"):
-        print(f"[SLACK OIDC] token exchange failed: {token_data}")
+        logger.error("[SLACK OIDC] Token exchange FAILED | status=%s | error=%s | raw_response=%s",
+                     "N/A (non-JSON)" if not isinstance(token_data, dict) else "error",
+                     token_data.get("error", "unknown"),
+                     json.dumps(token_data)[:500])
         redirect = RedirectResponse(
             url=f"{FRONTEND_URL}?error=slack_token_exchange_failed&reason={token_data.get('error', 'unknown')}",
             status_code=302,
@@ -424,8 +616,12 @@ async def slack_oauth_callback(
         return redirect
 
     access_token = token_data.get("access_token", "")
+    logger.info("[SLACK OIDC] Token exchange successful | access_token=%s... | token_data_ok=%s", access_token[:10] if access_token else "None", True)
+
+    logger.info("[SLACK OIDC] Fetching user info with access_token=%s...", access_token[:10] if access_token else "None")
     user_info = await slack_get_userinfo(access_token)
     if not user_info.get("ok"):
+        logger.error("[SLACK OIDC] User info fetch FAILED | response=%s", json.dumps(user_info)[:500])
         redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=slack_userinfo_failed", status_code=302)
         clear_pkce_cookie(redirect)
         clear_state_cookie(redirect)
@@ -435,8 +631,10 @@ async def slack_oauth_callback(
     name = user_info.get("name", email.split("@")[0])
     slack_user_id = user_info.get("https://slack.com/user_id", "")
     slack_team_id = user_info.get("https://slack.com/team_id", "")
+    logger.info("[SLACK OIDC] User info retrieved | email=%s | slack_user_id=%s | slack_team_id=%s", email, slack_user_id, slack_team_id)
 
     if SLACK_TEAM_ID and slack_team_id != SLACK_TEAM_ID:
+        logger.warning("[SLACK OIDC] Team ID mismatch | expected=%s | got=%s | email=%s", SLACK_TEAM_ID, slack_team_id, email)
         redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=not_workspace_member", status_code=302)
         clear_pkce_cookie(redirect)
         clear_state_cookie(redirect)
@@ -448,10 +646,12 @@ async def slack_oauth_callback(
 
     if existing_user:
         if existing_user.role.upper() not in {r.upper() for r in VALID_ROLES}:
+            logger.info("[SLACK OIDC] Existing user pending approval | email=%s | user_id=%s | role=%s", email, existing_user.id, existing_user.role)
             redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=pending_approval", status_code=302)
             clear_pkce_cookie(redirect)
             clear_state_cookie(redirect)
             return redirect
+        logger.info("[SLACK OIDC] Existing user logged in | user_id=%s | email=%s | role=%s", existing_user.id, email, existing_user.role)
         session = create_session(existing_user.id, db)
         redirect = RedirectResponse(url=f"{FRONTEND_URL}?slack_login=success", status_code=302)
         set_session_cookie(redirect, session.session_token)
@@ -475,7 +675,10 @@ async def slack_oauth_callback(
 
 
 @app.get("/api/auth/logout")
-def logout(response: Response):
+def logout(request: Request = None, response: Response = None):
+    logger.info("Logout requested | IP=%s | User-Agent=%s",
+                request.client.host if request and request.client else "unknown",
+                request.headers.get("user-agent", "unknown") if request else "unknown")
     clear_session_cookie(response)
     return {"message": "Logged out"}
 
@@ -1178,25 +1381,45 @@ def get_slack_config(db):
 
 def verify_slack_signature(timestamp, signature, body, signing_secret):
     if abs(datetime.utcnow().timestamp() - int(timestamp)) > 60 * 5:
+        logger.warning("[SLACK WEBHOOK] Request timestamp expired | timestamp=%s | current=%s | diff=%ss",
+                       timestamp, int(datetime.utcnow().timestamp()),
+                       abs(datetime.utcnow().timestamp() - int(timestamp)))
         return False
     sig_b64 = "v0=" + hmac.new(signing_secret.encode(), f"v0:{timestamp}:{body}".encode(), hashlib_lib.sha256).hexdigest()
-    return hmac.compare_digest(sig_b64, signature)
+    match = hmac.compare_digest(sig_b64, signature)
+    if not match:
+        logger.error("[SLACK WEBHOOK] Signature verification failed | timestamp=%s | signature=%s... | expected=%s...",
+                     timestamp, signature[:20] if signature else "None", sig_b64[:20])
+    return match
 
 
 async def slack_api_call(db, endpoint, data=None):
     config = get_slack_config(db)
     if not config:
+        logger.warning("[SLACK API] No Slack config found | endpoint=%s", endpoint)
         return None
     bot_token = decrypt_token(config.bot_token) if config.encrypted else config.bot_token
     if not bot_token:
+        logger.error("[SLACK API] Failed to decrypt bot token | config_id=%s | encrypted=%s | endpoint=%s",
+                     config.id, config.encrypted, endpoint)
         return None
     headers = {"Authorization": f"Bearer {bot_token}", "Content-Type": "application/json"}
     try:
         async with httpx.AsyncClient() as client:
+            logger.debug("[SLACK API] Calling %s | data_keys=%s", endpoint, list(data.keys()) if data else "None")
             response = await client.post(f"{SLACK_API_BASE}/{endpoint}", headers=headers, json=data or {}, timeout=10.0)
-        return response.json()
+            logger.debug("[SLACK API] %s response | status=%s | ok=%s", endpoint, response.status_code, response.json().get("ok") if response.status_code == 200 else "N/A")
+            result = response.json()
+            if not result.get("ok"):
+                logger.warning("[SLACK API] %s returned error | status=%s | error=%s | response=%s",
+                               endpoint, response.status_code, result.get("error"), json.dumps(result)[:500])
+            return result
+    except httpx.HTTPStatusError as e:
+        logger.error("[SLACK API] %s HTTP error | status=%s | response=%s | error=%s",
+                     endpoint, e.response.status_code, e.response.text[:300], e)
+        return None
     except Exception as e:
-        print(f"Slack API error: {e}")
+        logger.error("[SLACK API] %s unexpected error | error=%s", endpoint, e)
         return None
 
 
@@ -1463,6 +1686,7 @@ def slack_install(user: User = Depends(require_admin)):
     """Starts the Slack App Install flow (oauth.v2.access) to obtain a bot token.
     This is separate from Login-with-Slack (OIDC) used for user sign-in."""
     if not SLACK_CLIENT_ID:
+        logger.error("[SLACK INSTALL] Slack app not configured: SLACK_CLIENT_ID is empty")
         raise HTTPException(status_code=500, detail="Slack app not configured")
     state = os.urandom(24).hex()
     params = {
@@ -1472,6 +1696,8 @@ def slack_install(user: User = Depends(require_admin)):
         "state": state,
     }
     query = urllib.parse.urlencode(params)
+    logger.info("[SLACK INSTALL] Install flow started | user_id=%s | user=%s | state=%s... | redirect_uri=%s | scopes=%s",
+                user.id, user.name, state[:8], SLACK_BOT_REDIRECT_URI, SLACK_BOT_SCOPES)
     redirect = RedirectResponse(url=f"https://slack.com/oauth/v2/authorize?{query}", status_code=302)
     is_dev = os.getenv("ENV") == "development"
     redirect.set_cookie(
@@ -1495,14 +1721,23 @@ async def slack_install_callback(
     db: Session = Depends(get_db),
 ):
     if error:
+        logger.warning("[SLACK INSTALL] Install callback returned error: %s | IP=%s", error,
+                       request.client.host if request and request.client else "unknown")
         return RedirectResponse(url=f"{FRONTEND_URL}?slack_install_error={error}", status_code=302)
     if not code:
+        logger.warning("[SLACK INSTALL] Install callback received without authorization code | IP=%s",
+                       request.client.host if request and request.client else "unknown")
         return RedirectResponse(url=FRONTEND_URL, status_code=302)
 
     expected_state = request.cookies.get(INSTALL_STATE_COOKIE)
     if not expected_state or expected_state != state:
+        logger.error("[SLACK INSTALL] State mismatch | expected=%s | received=%s | IP=%s",
+                     expected_state, state,
+                     request.client.host if request and request.client else "unknown")
         return RedirectResponse(url=f"{FRONTEND_URL}?slack_install_error=state_mismatch", status_code=302)
 
+    logger.info("[SLACK INSTALL] Calling oauth.v2.access | code=%s... | redirect_uri=%s",
+                code[:10] if code else "None", SLACK_BOT_REDIRECT_URI)
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://slack.com/api/oauth.v2.access",
@@ -1517,7 +1752,8 @@ async def slack_install_callback(
         result = resp.json()
 
     if not result.get("ok"):
-        print(f"[SLACK INSTALL] oauth.v2.access failed: {result}")
+        logger.error("[SLACK INSTALL] oauth.v2.access failed | error=%s | response=%s",
+                     result.get("error", "unknown"), json.dumps(result)[:500])
         response = RedirectResponse(
             url=f"{FRONTEND_URL}?slack_install_error={result.get('error', 'unknown')}", status_code=302
         )
@@ -1526,10 +1762,12 @@ async def slack_install_callback(
 
     bot_token = result.get("access_token", "")
     team_id = result.get("team", {}).get("id", "")
+    logger.info("[SLACK INSTALL] oauth.v2.access success | team_id=%s | access_token=%s...", team_id, bot_token[:10] if bot_token else "None")
 
     config = get_slack_config(db)
     encrypted_token = encrypt_token(bot_token)
     if config:
+        logger.info("[SLACK INSTALL] Updating existing Slack config | config_id=%s | team_id=%s", config.id, team_id)
         config.bot_token = encrypted_token
         config.slack_team_id = team_id
         config.encrypted = True
@@ -1538,7 +1776,9 @@ async def slack_install_callback(
         if not config.signing_secret and SLACK_SIGNING_SECRET:
             config.signing_secret = encrypt_token(SLACK_SIGNING_SECRET)
         db.commit()
+        logger.info("[SLACK INSTALL] Slack config updated successfully | config_id=%s", config.id)
     else:
+        logger.info("[SLACK INSTALL] Creating new Slack config | team_id=%s", team_id)
         signing_secret = encrypt_token(SLACK_SIGNING_SECRET) if SLACK_SIGNING_SECRET else ""
         config = SlackConfig(
             bot_token=encrypted_token,
@@ -1548,6 +1788,8 @@ async def slack_install_callback(
         )
         db.add(config)
         db.commit()
+        db.refresh(config)
+        logger.info("[SLACK INSTALL] Slack config created successfully | config_id=%s | team_id=%s", config.id, team_id)
 
     response = RedirectResponse(url=f"{FRONTEND_URL}?slack_install=success", status_code=302)
     response.delete_cookie(key=INSTALL_STATE_COOKIE, path="/api/slack/install/callback")
@@ -1605,10 +1847,14 @@ async def slack_webhook(request: Request,
     db: Session = Depends(get_db)):
     if request.method == "GET":
         challenge = request.query_params.get("challenge", "")
+        logger.info("[SLACK WEBHOOK] URL verification GET received | challenge=%s", challenge)
         return {"challenge": challenge}
 
     raw_body = await request.body()
     content_type = request.headers.get("content-type", "")
+    ip = request.client.host if request.client else "unknown"
+    logger.info("[SLACK WEBHOOK] Request received | IP=%s | content_type=%s | timestamp=%s",
+                ip, content_type, request.headers.get("x-slack-request-timestamp", "0"))
 
     timestamp = request.headers.get("x-slack-request-timestamp", "0")
     signature = request.headers.get("x-slack-signature", "")
@@ -1616,8 +1862,14 @@ async def slack_webhook(request: Request,
     config = get_slack_config(db)
     if config:
         signing_secret = decrypt_token(config.signing_secret) if config.encrypted else config.signing_secret
+        if not signing_secret:
+            logger.warning("[SLACK WEBHOOK] No signing_secret available for verification | config_id=%s", config.id)
         if not verify_slack_signature(timestamp, signature, raw_body.decode(), signing_secret):
+            logger.warning("[SLACK WEBHOOK] Signature verification failed | IP=%s | timestamp=%s | signature=%s...",
+                           ip, timestamp, signature[:20] if signature else "None")
             return {"message": "Invalid signature"}, 403
+    else:
+        logger.debug("[SLACK WEBHOOK] No Slack config found, skipping signature verification | IP=%s", ip)
 
     payload = {}
     try:
@@ -1626,15 +1878,18 @@ async def slack_webhook(request: Request,
         else:
             form_data = await request.form()
             payload = json.loads(form_data.get("payload", "{}"))
+        logger.debug("[SLACK WEBHOOK] Payload parsed | type=%s", payload.get("type", "unknown"))
     except Exception as e:
-        print(f"[SLACK] Parse error: {e}")
+        logger.error("[SLACK WEBHOOK] Failed to parse payload | error=%s | content_type=%s", e, content_type)
         payload = {}
 
     if payload.get("type") == "url_verification":
         challenge = payload.get("challenge", "")
+        logger.info("[SLACK WEBHOOK] URL verification challenge: %s", challenge)
         return {"challenge": challenge}
 
     if not config:
+        logger.warning("[SLACK WEBHOOK] Slack not configured, ignoring webhook | type=%s", payload.get("type"))
         return {"message": "Slack not configured"}
     if "type" in payload:
         if payload["type"] == "block_actions":
@@ -1646,8 +1901,11 @@ async def slack_webhook(request: Request,
             slack_user_id = user.get("id", "")
             slack_user_name = user.get("name", "")
             message_ts = payload.get("message_ts", "")
+            project_id_val = int(value) if value.isdigit() else 0
+            logger.info("[SLACK WEBHOOK] block_actions received | action_id=%s | project_id=%s | slack_user=%s | channel=%s",
+                        action_id, project_id_val, slack_user_name, channel_id)
             activity = SlackActivity(
-                project_id=int(value) if value.isdigit() else 0,
+                project_id=project_id_val,
                 channel_id=channel_id,
                 message_ts=message_ts,
                 action_type=action_id,
@@ -1660,17 +1918,21 @@ async def slack_webhook(request: Request,
                 project_id = int(value)
                 project = db.query(Project).filter(Project.id == project_id).first()
                 if not project:
+                    logger.warning("[SLACK WEBHOOK] Project not found for action | action_id=%s | value=%s", action_id, value)
                     return {"response_action": "errors", "errors": [{"field": "project", "text": "Project not found"}]}
                 designer = db.query(User).filter(User.id == project.assigned_designer_id).first() if project.assigned_designer_id else None
                 phases = db.query(Phase).filter(Phase.project_id == project_id).order_by(Phase.stage_index).all()
                 if action_id == "complete_stage":
+                    logger.info("[SLACK WEBHOOK] complete_stage action | project_id=%s | stage_idx=%s", project_id, stage_idx)
                     stage_idx = int(value)
                     if stage_idx >= len(phases):
+                        logger.warning("[SLACK WEBHOOK] Stage not found | stage_idx=%s | total_phases=%s", stage_idx, len(phases))
                         return {"response_action": "errors", "errors": [{"field": "stage", "text": "Stage not found"}]}
                     if stage_idx > 0:
                         prev_phase = phases[stage_idx - 1]
                         if not prev_phase.completed_at:
                             prev_name = _get_current_stage_name(stage_idx - 1)
+                            logger.info("[SLACK WEBHOOK] Previous stage not completed | prev_stage=%s", prev_name)
                             return {"response_action": "errors", "errors": [{"field": "stage", "text": f"Complete {prev_name} first!"}]}
                     now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
                     phases[stage_idx].completed_at = now
@@ -1686,6 +1948,8 @@ async def slack_webhook(request: Request,
                     else:
                         project.status = "ON_TRACK"
                     db.commit()
+                    logger.info("[SLACK WEBHOOK] Stage completed | project=%s | stage_idx=%s | progress=%s%% | status=%s",
+                                project.name, stage_idx, project.progress, project.status)
                     if project.progress == 100:
                         blocks = [
                             {"type": "header", "text": {"type": "plain_text", "text": "🎉 Project Completed!"}},
@@ -1824,19 +2088,23 @@ async def slack_webhook(request: Request,
                             }
                         })
             except Exception as e:
-                print(f"Slack action error: {e}")
+                logger.error("[SLACK WEBHOOK] Action processing failed | action_id=%s | project_id=%s | error=%s | traceback=%s",
+                             action_id, project_id, e, traceback.format_exc())
                 db.rollback()
             db.commit()
             return {"response_action": "updated"}
         elif payload["type"] == "view_submission":
             callback_id = payload.get("view", {}).get("callback_id", "")
             state = payload.get("view", {}).get("state", {}).get("values", {})
+            logger.info("[SLACK WEBHOOK] view_submission received | callback_id=%s", callback_id)
             if "delay_form_" in callback_id:
                 project_id = int(callback_id.split("_")[-1])
+                logger.info("[SLACK WEBHOOK] Delay form submitted | project_id=%s", project_id)
                 project = db.query(Project).filter(Project.id == project_id).first()
                 if project:
                     reason = state.get("delay_input", {}).get("delay_reason", {}).get("value", "N/A")
                     revised = state.get("revised_input", {}).get("revised_date", {}).get("value", "TBD")
+                    logger.info("[SLACK WEBHOOK] Delay reported | project=%s | reason=%s | revised=%s", project.name, reason, revised)
                     if phases[project.stage_index]:
                         phases[project.stage_index].delay_reason = f"{reason} (Revised: {revised})"
                         db.commit()
@@ -1854,9 +2122,11 @@ async def slack_webhook(request: Request,
                         await slack_api_call(db, "chat.update", {"channel": project.slack_channel_id, "ts": payload.get("view", {}).get("latest", {}).get("ts"), "blocks": blocks})
             elif "notes_form_" in callback_id:
                 project_id = int(callback_id.split("_")[-1])
+                logger.info("[SLACK WEBHOOK] Notes form submitted | project_id=%s", project_id)
                 project = db.query(Project).filter(Project.id == project_id).first()
                 if project:
                     notes = state.get("notes_input", {}).get("notes_text", {}).get("value", "")
+                    logger.info("[SLACK WEBHOOK] Designer notes updated | project=%s | notes=%s", project.name, notes[:100])
                     if phases[project.stage_index]:
                         phases[project.stage_index].designer_update = notes
                         db.commit()
@@ -1874,9 +2144,11 @@ async def slack_webhook(request: Request,
                         await slack_api_call(db, "chat.update", {"channel": project.slack_channel_id, "ts": payload.get("view", {}).get("latest", {}).get("ts"), "blocks": blocks})
             elif "clarify_form_" in callback_id:
                 project_id = int(callback_id.split("_")[-1])
+                logger.info("[SLACK WEBHOOK] Clarification form submitted | project_id=%s", project_id)
                 project = db.query(Project).filter(Project.id == project_id).first()
                 if project:
                     clarification = state.get("clarify_input", {}).get("clarify_text", {}).get("value", "")
+                    logger.info("[SLACK WEBHOOK] Clarification received | project=%s | clarification=%s", project.name, clarification[:200])
                     blocks = [
                         {"type": "header", "text": {"type": "plain_text", "text": "❓ Clarification Received"}},
                         {
@@ -1898,22 +2170,30 @@ async def slack_webhook(request: Request,
 @app.post("/api/projects/{project_id}/slack-channel", response_model=SlackChannelCreateResponse)
 async def create_slack_channel(project_id: int, user: User = Depends(get_current_user),
     db: Session = Depends(get_db)):
+    logger.info("[SLACK CHANNEL] Channel creation requested | project_id=%s | user_id=%s", project_id, user.id)
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
+        logger.warning("[SLACK CHANNEL] Project not found | project_id=%s", project_id)
         return SlackChannelCreateResponse(channel_id="", channel_name="", success=False, message="Project not found")
     config = get_slack_config(db)
     if not config:
+        logger.warning("[SLACK CHANNEL] Slack not configured | project_id=%s", project_id)
         return SlackChannelCreateResponse(channel_id="", channel_name="", success=False, message="Slack not configured")
     channel_name = f"project-{project.name.lower().replace(' ', '-')}"
+    logger.info("[SLACK CHANNEL] Creating Slack channel | project=%s | channel_name=%s", project.name, channel_name)
     result = await slack_api_call(db, "conversations.create", {"name": channel_name, "is_private": False})
     if result and result.get("ok"):
         channel_id = result["channel"]["id"]
         project.slack_channel_id = channel_id
         project.slack_channel_name = channel_name
         db.commit()
+        logger.info("[SLACK CHANNEL] Channel created successfully | project=%s | channel_id=%s | channel_name=%s",
+                    project.name, channel_id, channel_name)
         return SlackChannelCreateResponse(channel_id=channel_id, channel_name=channel_name, success=True)
     else:
         error_msg = result.get("error", "Unknown error") if result else "Slack API error"
+        logger.error("[SLACK CHANNEL] Failed to create channel | project=%s | error=%s | response=%s",
+                     project.name, error_msg, json.dumps(result)[:500] if result else "None")
         return SlackChannelCreateResponse(channel_id="", channel_name="", success=False, message=error_msg)
 
 
