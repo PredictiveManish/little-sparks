@@ -555,7 +555,7 @@ def get_slack_auth_url(request: Request = None):
     return redirect
 
 
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://little-sparks-six.vercel.app").rstrip("/")
 
 
 @app.get("/api/slack/oauth/callback")
@@ -567,15 +567,19 @@ async def slack_oauth_callback(
     request: Request = None,
 ):
     if error:
-        logger.warning("[SLACK OIDC] Callback returned error: %s", error)
-        redirect = RedirectResponse(url=f"{FRONTEND_URL}?error={error}", status_code=302)
+        redirect_host = request.headers.get("host", "") if request else ""
+        frontend_origin = f"https://{redirect_host}" if redirect_host else FRONTEND_URL
+        logger.warning("[SLACK OIDC] Callback returned error: %s | redirecting to %s", error, frontend_origin)
+        redirect = RedirectResponse(url=f"{frontend_origin}?error={error}", status_code=302)
         clear_pkce_cookie(redirect)
         clear_state_cookie(redirect)
         return redirect
 
     if not code:
-        logger.warning("[SLACK OIDC] Callback received without authorization code")
-        redirect = RedirectResponse(url=FRONTEND_URL, status_code=302)
+        redirect_host = request.headers.get("host", "") if request else ""
+        frontend_origin = f"https://{redirect_host}" if redirect_host else FRONTEND_URL
+        logger.warning("[SLACK OIDC] Callback received without authorization code | redirecting to %s", frontend_origin)
+        redirect = RedirectResponse(url=frontend_origin, status_code=302)
         clear_pkce_cookie(redirect)
         clear_state_cookie(redirect)
         return redirect
@@ -591,11 +595,14 @@ async def slack_oauth_callback(
 
     expected_state = request.cookies.get(STATE_COOKIE_NAME)
     if not expected_state or not state or expected_state != state:
-        logger.error("[SLACK OIDC] State mismatch - expected=%s, received=%s | IP=%s | User-Agent=%s",
+        redirect_host = request.headers.get("host", "") if request else ""
+        frontend_origin = f"https://{redirect_host}" if redirect_host else FRONTEND_URL
+        logger.error("[SLACK OIDC] State mismatch - expected=%s, received=%s | IP=%s | User-Agent=%s | redirecting to %s",
                      expected_state, state,
                      request.client.host if request.client else "unknown",
-                     request.headers.get("user-agent", "unknown") if request else "unknown")
-        redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=state_mismatch", status_code=302)
+                     request.headers.get("user-agent", "unknown") if request else "unknown",
+                     frontend_origin)
+        redirect = RedirectResponse(url=f"{frontend_origin}?error=state_mismatch", status_code=302)
         clear_pkce_cookie(redirect)
         clear_state_cookie(redirect)
         return redirect
@@ -603,12 +610,15 @@ async def slack_oauth_callback(
     logger.info("[SLACK OIDC] Starting token exchange | code=%s... | PKCE=%s", code[:10] if code else "None", "present" if pkce_verifier else "missing")
     token_data = await slack_oidc_exchange(code, SLACK_REDIRECT_URI, pkce_verifier)
     if not token_data.get("ok"):
-        logger.error("[SLACK OIDC] Token exchange FAILED | status=%s | error=%s | raw_response=%s",
+        redirect_host = request.headers.get("host", "") if request else ""
+        frontend_origin = f"https://{redirect_host}" if redirect_host else FRONTEND_URL
+        logger.error("[SLACK OIDC] Token exchange FAILED | status=%s | error=%s | raw_response=%s | redirecting to %s",
                      "N/A (non-JSON)" if not isinstance(token_data, dict) else "error",
                      token_data.get("error", "unknown"),
-                     json.dumps(token_data)[:500])
+                     json.dumps(token_data)[:500],
+                     frontend_origin)
         redirect = RedirectResponse(
-            url=f"{FRONTEND_URL}?error=slack_token_exchange_failed&reason={token_data.get('error', 'unknown')}",
+            url=f"{frontend_origin}?error=slack_token_exchange_failed&reason={token_data.get('error', 'unknown')}",
             status_code=302,
         )
         clear_pkce_cookie(redirect)
@@ -621,8 +631,10 @@ async def slack_oauth_callback(
     logger.info("[SLACK OIDC] Fetching user info with access_token=%s...", access_token[:10] if access_token else "None")
     user_info = await slack_get_userinfo(access_token)
     if not user_info.get("ok"):
-        logger.error("[SLACK OIDC] User info fetch FAILED | response=%s", json.dumps(user_info)[:500])
-        redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=slack_userinfo_failed", status_code=302)
+        redirect_host = request.headers.get("host", "") if request else ""
+        frontend_origin = f"https://{redirect_host}" if redirect_host else FRONTEND_URL
+        logger.error("[SLACK OIDC] User info fetch FAILED | response=%s | redirecting to %s", json.dumps(user_info)[:500], frontend_origin)
+        redirect = RedirectResponse(url=f"{frontend_origin}?error=slack_userinfo_failed", status_code=302)
         clear_pkce_cookie(redirect)
         clear_state_cookie(redirect)
         return redirect
@@ -634,8 +646,10 @@ async def slack_oauth_callback(
     logger.info("[SLACK OIDC] User info retrieved | email=%s | slack_user_id=%s | slack_team_id=%s", email, slack_user_id, slack_team_id)
 
     if SLACK_TEAM_ID and slack_team_id != SLACK_TEAM_ID:
-        logger.warning("[SLACK OIDC] Team ID mismatch | expected=%s | got=%s | email=%s", SLACK_TEAM_ID, slack_team_id, email)
-        redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=not_workspace_member", status_code=302)
+        redirect_host = request.headers.get("host", "") if request else ""
+        frontend_origin = f"https://{redirect_host}" if redirect_host else FRONTEND_URL
+        logger.warning("[SLACK OIDC] Team ID mismatch | expected=%s | got=%s | email=%s | redirecting to %s", SLACK_TEAM_ID, slack_team_id, email, frontend_origin)
+        redirect = RedirectResponse(url=f"{frontend_origin}?error=not_workspace_member", status_code=302)
         clear_pkce_cookie(redirect)
         clear_state_cookie(redirect)
         return redirect
@@ -646,19 +660,25 @@ async def slack_oauth_callback(
 
     if existing_user:
         if existing_user.role.upper() not in {r.upper() for r in VALID_ROLES}:
-            logger.info("[SLACK OIDC] Existing user pending approval | email=%s | user_id=%s | role=%s", email, existing_user.id, existing_user.role)
-            redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=pending_approval", status_code=302)
+            redirect_host = request.headers.get("host", "") if request else ""
+            frontend_origin = f"https://{redirect_host}" if redirect_host else FRONTEND_URL
+            logger.info("[SLACK OIDC] Existing user pending approval | email=%s | user_id=%s | role=%s | redirecting to %s", email, existing_user.id, existing_user.role, frontend_origin)
+            redirect = RedirectResponse(url=f"{frontend_origin}?error=pending_approval", status_code=302)
             clear_pkce_cookie(redirect)
             clear_state_cookie(redirect)
             return redirect
         logger.info("[SLACK OIDC] Existing user logged in | user_id=%s | email=%s | role=%s", existing_user.id, email, existing_user.role)
         session = create_session(existing_user.id, db)
-        redirect = RedirectResponse(url=f"{FRONTEND_URL}?slack_login=success", status_code=302)
+        redirect_host = request.headers.get("host", "") if request else ""
+        frontend_origin = f"https://{redirect_host}" if redirect_host else FRONTEND_URL
+        redirect = RedirectResponse(url=f"{frontend_origin}?slack_login=success", status_code=302)
         set_session_cookie(redirect, session.session_token)
         clear_pkce_cookie(redirect)
         clear_state_cookie(redirect)
         return redirect
     else:
+        redirect_host = request.headers.get("host", "") if request else ""
+        frontend_origin = f"https://{redirect_host}" if redirect_host else FRONTEND_URL
         pending = User(
             name=name, email=email,
             password_hash=None, role="PENDING",
@@ -668,7 +688,8 @@ async def slack_oauth_callback(
         db.add(pending)
         db.commit()
         db.refresh(pending)
-        redirect = RedirectResponse(url=f"{FRONTEND_URL}?slack_pending=1", status_code=302)
+        logger.info("[SLACK OIDC] New user created and pending approval | email=%s | slack_user_id=%s | redirecting to %s", email, slack_user_id, frontend_origin)
+        redirect = RedirectResponse(url=f"{frontend_origin}?slack_pending=1", status_code=302)
         clear_pkce_cookie(redirect)
         clear_state_cookie(redirect)
         return redirect
