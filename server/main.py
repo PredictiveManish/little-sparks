@@ -328,7 +328,7 @@ async def slack_get_userinfo(access_token: str):
 
 # ---------- Auth endpoints ----------
 
-@app.post("/api/auth/login", response_model=TokenResponse)
+@app.post("/api/auth/login")
 def login(login_data: LoginRequest, db: Session = Depends(get_db), response: Response = Response()):
     user = db.query(User).filter(User.email == login_data.email).first()
     if not user or not user.password_hash or not verify_password(login_data.password, user.password_hash):
@@ -340,10 +340,12 @@ def login(login_data: LoginRequest, db: Session = Depends(get_db), response: Res
     set_session_cookie(response, session.session_token)
 
     token = create_jwt_token({"user_id": user.id, "role": user.role})
-    return TokenResponse(access_token=token, user=UserResponse(
-        id=user.id, name=user.name, email=user.email, role=user.role,
-        specialty=user.specialty, initials=user.initials, color=user.color
-    ))
+    return JSONResponse(
+        content={"access_token": token, "user": {
+            "id": user.id, "name": user.name, "email": user.email, "role": user.role,
+            "specialty": user.specialty, "initials": user.initials, "color": user.color
+        }}
+    )
 
 
 @app.post("/api/auth/slack-login")
