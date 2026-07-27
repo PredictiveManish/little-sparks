@@ -2213,8 +2213,11 @@ def startup():
     pass
 
 
-# ---------- Startup ----------
+# ---------- Serve Frontend ----------
 
-@app.on_event("startup")
-def startup():
-    pass
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    """Serve index.html for all non-API routes (SPA fallback)."""
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
+    return FileResponse("index.html")
