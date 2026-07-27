@@ -329,7 +329,7 @@ async def slack_get_userinfo(access_token: str):
 # ---------- Auth endpoints ----------
 
 @app.post("/api/auth/login")
-def login(login_data: LoginRequest, db: Session = Depends(get_db), response: Response = Response()):
+def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == login_data.email).first()
     if not user or not user.password_hash or not verify_password(login_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -337,15 +337,16 @@ def login(login_data: LoginRequest, db: Session = Depends(get_db), response: Res
         raise HTTPException(status_code=403, detail="Account pending approval")
 
     session = create_session(user.id, db)
-    set_session_cookie(response, session.session_token)
 
     token = create_jwt_token({"user_id": user.id, "role": user.role})
-    return JSONResponse(
+    json_response = JSONResponse(
         content={"access_token": token, "user": {
             "id": user.id, "name": user.name, "email": user.email, "role": user.role,
             "specialty": user.specialty, "initials": user.initials, "color": user.color
         }}
     )
+    set_session_cookie(json_response, session.session_token)
+    return json_response
 
 
 @app.post("/api/auth/slack-login")
