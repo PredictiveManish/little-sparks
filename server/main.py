@@ -40,7 +40,7 @@ app = FastAPI(title="Smartivity Designer Manager API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,https://designer-manager.netlify.app").split(",")],
+    allow_origins=[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,https://designer-manager.netlify.app,https://designer-manager.vercel.app").split(",")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -82,6 +82,7 @@ SLACK_BOT_SCOPES = os.getenv(
 )
 SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET", "")
 INSTALL_STATE_COOKIE = "slack_install_state"
+STATE_COOKIE_NAME = "slack_oauth_state"
 
 # ---------- Password hashing ----------
 argon2_hasher = argon2.PasswordHasher()
@@ -211,12 +212,13 @@ def require_role(required: List[str]):
 # ---------- Cookie helpers ----------
 
 def set_session_cookie(response: Response, session_token: str):
+    is_dev = os.getenv("ENV") == "development"
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session_token,
         httponly=True,
-        secure=os.getenv("ENV") != "development",
-        samesite="lax",
+        secure=not is_dev,
+        samesite="lax" if is_dev else "none",
         max_age=SESSION_LIFETIME_DAYS * 86400,
         path="/",
     )
@@ -257,12 +259,13 @@ def generate_pkce_pair():
 
 
 def set_pkce_cookie(response: Response, verifier: str):
+    is_dev = os.getenv("ENV") == "development"
     response.set_cookie(
         key=PKCE_COOKIE_NAME,
         value=verifier,
         httponly=True,
-        secure=os.getenv("ENV") != "development",
-        samesite="lax",
+        secure=not is_dev,
+        samesite="lax" if is_dev else "none",
         max_age=300,
         path="/api/slack/oauth/callback",
     )
@@ -270,6 +273,23 @@ def set_pkce_cookie(response: Response, verifier: str):
 
 def clear_pkce_cookie(response: Response):
     response.delete_cookie(key=PKCE_COOKIE_NAME, path="/api/slack/oauth/callback")
+
+
+def set_state_cookie(response: Response, state: str):
+    is_dev = os.getenv("ENV") == "development"
+    response.set_cookie(
+        key=STATE_COOKIE_NAME,
+        value=state,
+        httponly=True,
+        secure=not is_dev,
+        samesite="lax" if is_dev else "none",
+        max_age=300,
+        path="/api/slack/oauth/callback",
+    )
+
+
+def clear_state_cookie(response: Response):
+    response.delete_cookie(key=STATE_COOKIE_NAME, path="/api/slack/oauth/callback")
 
 
 async def slack_oidc_exchange(code: str, redirect_uri: str, code_verifier: str):
@@ -341,6 +361,7 @@ def get_slack_auth_url():
     query = urllib.parse.urlencode(params)
     redirect = RedirectResponse(url=f"https://slack.com/openid/connect/authorize?{query}", status_code=302)
     set_pkce_cookie(redirect, code_verifier)
+    set_state_cookie(redirect, params["state"])
     return redirect
 
 
@@ -351,31 +372,54 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 async def slack_oauth_callback(
     code: Optional[str] = None,
     error: Optional[str] = None,
+    state: Optional[str] = None,
     db: Session = Depends(get_db),
     request: Request = None,
 ):
     if error:
-        return RedirectResponse(url=f"{FRONTEND_URL}?error={error}", status_code=302)
+        redirect = RedirectResponse(url=f"{FRONTEND_URL}?error={error}", status_code=302)
+        clear_pkce_cookie(redirect)
+        clear_state_cookie(redirect)
+        return redirect
 
     if not code:
-        return RedirectResponse(url=FRONTEND_URL, status_code=302)
+        redirect = RedirectResponse(url=FRONTEND_URL, status_code=302)
+        clear_pkce_cookie(redirect)
+        clear_state_cookie(redirect)
+        return redirect
 
     pkce_verifier = request.cookies.get(PKCE_COOKIE_NAME)
     if not pkce_verifier:
-        return RedirectResponse(url=f"{FRONTEND_URL}?error=pkce_missing", status_code=302)
+        redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=pkce_missing", status_code=302)
+        clear_pkce_cookie(redirect)
+        clear_state_cookie(redirect)
+        return redirect
+
+    expected_state = request.cookies.get(STATE_COOKIE_NAME)
+    if not expected_state or not state or expected_state != state:
+        redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=state_mismatch", status_code=302)
+        clear_pkce_cookie(redirect)
+        clear_state_cookie(redirect)
+        return redirect
 
     token_data = await slack_oidc_exchange(code, SLACK_REDIRECT_URI, pkce_verifier)
     if not token_data.get("ok"):
         print(f"[SLACK OIDC] token exchange failed: {token_data}")
-        return RedirectResponse(
+        redirect = RedirectResponse(
             url=f"{FRONTEND_URL}?error=slack_token_exchange_failed&reason={token_data.get('error', 'unknown')}",
             status_code=302,
         )
+        clear_pkce_cookie(redirect)
+        clear_state_cookie(redirect)
+        return redirect
 
     access_token = token_data.get("access_token", "")
     user_info = await slack_get_userinfo(access_token)
     if not user_info.get("ok"):
-        return RedirectResponse(url=f"{FRONTEND_URL}?error=slack_userinfo_failed", status_code=302)
+        redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=slack_userinfo_failed", status_code=302)
+        clear_pkce_cookie(redirect)
+        clear_state_cookie(redirect)
+        return redirect
 
     email = user_info.get("email", "")
     name = user_info.get("name", email.split("@")[0])
@@ -383,7 +427,10 @@ async def slack_oauth_callback(
     slack_team_id = user_info.get("https://slack.com/team_id", "")
 
     if SLACK_TEAM_ID and slack_team_id != SLACK_TEAM_ID:
-        return RedirectResponse(url=f"{FRONTEND_URL}?error=not_workspace_member", status_code=302)
+        redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=not_workspace_member", status_code=302)
+        clear_pkce_cookie(redirect)
+        clear_state_cookie(redirect)
+        return redirect
 
     existing_user = db.query(User).filter(
         (User.email == email) | (User.slack_user_id == slack_user_id)
@@ -391,10 +438,16 @@ async def slack_oauth_callback(
 
     if existing_user:
         if existing_user.role not in VALID_ROLES:
-            return RedirectResponse(url=f"{FRONTEND_URL}?error=pending_approval", status_code=302)
+            redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=pending_approval", status_code=302)
+            clear_pkce_cookie(redirect)
+            clear_state_cookie(redirect)
+            return redirect
         session = create_session(existing_user.id, db)
-        jwt_token = create_jwt_token({"user_id": existing_user.id, "role": existing_user.role})
-        return RedirectResponse(url=f"{FRONTEND_URL}?slack_token={jwt_token}", status_code=302)
+        redirect = RedirectResponse(url=f"{FRONTEND_URL}?slack_login=success", status_code=302)
+        set_session_cookie(redirect, session.session_token)
+        clear_pkce_cookie(redirect)
+        clear_state_cookie(redirect)
+        return redirect
     else:
         pending = User(
             name=name, email=email,
@@ -405,7 +458,10 @@ async def slack_oauth_callback(
         db.add(pending)
         db.commit()
         db.refresh(pending)
-        return RedirectResponse(url=f"{FRONTEND_URL}?slack_pending=1", status_code=302)
+        redirect = RedirectResponse(url=f"{FRONTEND_URL}?slack_pending=1", status_code=302)
+        clear_pkce_cookie(redirect)
+        clear_state_cookie(redirect)
+        return redirect
 
 
 @app.get("/api/auth/logout")
@@ -1407,12 +1463,13 @@ def slack_install(user: User = Depends(require_admin)):
     }
     query = urllib.parse.urlencode(params)
     redirect = RedirectResponse(url=f"https://slack.com/oauth/v2/authorize?{query}", status_code=302)
+    is_dev = os.getenv("ENV") == "development"
     redirect.set_cookie(
         key=INSTALL_STATE_COOKIE,
         value=state,
         httponly=True,
-        secure=os.getenv("ENV") != "development",
-        samesite="lax",
+        secure=not is_dev,
+        samesite="lax" if is_dev else "none",
         max_age=300,
         path="/api/slack/install/callback",
     )
@@ -1534,7 +1591,7 @@ def get_slack_messages(project_id: int, user: User = Depends(get_current_user),
 
 @app.get("/api/slack/webhook")
 @app.post("/api/slack/webhook")
-async def slack_webhook(request: Request, user: User = Depends(get_current_user),
+async def slack_webhook(request: Request,
     db: Session = Depends(get_db)):
     if request.method == "GET":
         challenge = request.query_params.get("challenge", "")

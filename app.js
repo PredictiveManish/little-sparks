@@ -90,7 +90,7 @@ function handleSlackInstallReturn() {
 async function handleSlackCallback() {
     const params = new URLSearchParams(window.location.search);
     const error = params.get('error');
-    const slackToken = params.get('slack_token');
+    const slackLogin = params.get('slack_login');
     const slackPending = params.get('slack_pending');
 
     if (error) {
@@ -100,9 +100,8 @@ async function handleSlackCallback() {
         return true;
     }
 
-    if (slackToken) {
+    if (slackLogin === 'success') {
         window.history.replaceState({}, document.title, window.location.pathname);
-        localStorage.setItem('slack_jwt_token', slackToken);
         try {
             const user = await api.getMe();
             if (user) {
