@@ -109,7 +109,12 @@ try:
         db.commit()
         print(f"Admin user created: {ADMIN_EMAIL}")
     else:
-        print(f"Admin user already exists: {ADMIN_EMAIL}")
+        if existing.role.upper() != "ADMIN":
+            existing.role = "ADMIN"
+            db.commit()
+            print(f"Admin role corrected: {ADMIN_EMAIL}")
+        else:
+            print(f"Admin user already exists: {ADMIN_EMAIL}")
 finally:
     db.close()
 
@@ -190,7 +195,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optiona
     if not session:
         return None
     user = db.query(User).filter(User.id == session.user_id).first()
-    if not user or user.role not in VALID_ROLES:
+    if not user or user.role.upper() not in {r.upper() for r in VALID_ROLES}:
         return None
     return user
 
@@ -198,14 +203,14 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Optiona
 def require_admin(user: User = Depends(get_current_user)):
     if not user:
         raise HTTPException(status_code=401, detail="Not logged in")
-    if user.role != "ADMIN":
+    if user.role.upper() != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
 
 
 def require_role(required: List[str]):
     def _dep(user: User = Depends(get_current_user)):
-        if not user or user.role not in required:
+        if not user or user.role.upper() not in {r.upper() for r in required}:
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return user
     return _dep
@@ -328,7 +333,7 @@ def login(login_data: LoginRequest, db: Session = Depends(get_db), response: Res
     user = db.query(User).filter(User.email == login_data.email).first()
     if not user or not user.password_hash or not verify_password(login_data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    if user.role not in VALID_ROLES:
+    if user.role.upper() not in VALID_ROLES:
         raise HTTPException(status_code=403, detail="Account pending approval")
 
     session = create_session(user.id, db)
@@ -439,7 +444,7 @@ async def slack_oauth_callback(
     ).first()
 
     if existing_user:
-        if existing_user.role not in VALID_ROLES:
+        if existing_user.role.upper() not in {r.upper() for r in VALID_ROLES}:
             redirect = RedirectResponse(url=f"{FRONTEND_URL}?error=pending_approval", status_code=302)
             clear_pkce_cookie(redirect)
             clear_state_cookie(redirect)
