@@ -2973,6 +2973,12 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     "[SLACK WEBHOOK] Delay form submitted | project_id=%s", project_id
                 )
                 project = db.query(Project).filter(Project.id == project_id).first()
+                phases = (
+                    db.query(Phase)
+                    .filter(Phase.project_id == project_id)
+                    .order_by(Phase.stage_index)
+                    .all()
+                )
                 if project:
                     reason = (
                         state.get("delay_input", {})
@@ -3026,6 +3032,12 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     "[SLACK WEBHOOK] Notes form submitted | project_id=%s", project_id
                 )
                 project = db.query(Project).filter(Project.id == project_id).first()
+                phases = (
+                    db.query(Phase)
+                    .filter(Phase.project_id == project_id)
+                    .order_by(Phase.stage_index)
+                    .all()
+                )
                 if project:
                     notes = (
                         state.get("notes_input", {})
@@ -3083,6 +3095,20 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         project.name,
                         clarification[:200],
                     )
+                    slack_user_id = payload.get("user", {}).get("id", "")
+                    slack_user_name = payload.get("user", {}).get("name", "")
+                    channel_id = payload.get("channel", {}).get("id", "")
+                    activity = SlackActivity(
+                        project_id=project_id,
+                        channel_id=channel_id,
+                        message_ts="",
+                        action_type="clarification",
+                        user_id=slack_user_id,
+                        user_name=slack_user_name,
+                        payload={"clarification": clarification},
+                    )
+                    db.add(activity)
+                    db.commit()
                     blocks = [
                         {
                             "type": "header",
