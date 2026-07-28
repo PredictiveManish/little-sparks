@@ -1249,8 +1249,8 @@ async function loadSlackSettings() {
 async function saveSlackConfig() {
     const botToken = document.getElementById('slackBotToken').value.trim();
     const signingSecret = document.getElementById('slackSigningSecret').value.trim();
-    if (!botToken || !signingSecret) {
-        showToast('Please fill in both Bot Token and Signing Secret');
+    if (!botToken && !signingSecret) {
+        showToast('Please fill in at least Bot Token or Signing Secret');
         return;
     }
     const btn = document.getElementById('saveSlackConfigBtn');
