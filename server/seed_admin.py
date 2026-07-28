@@ -27,13 +27,15 @@ ADMIN_NAME = "Manish Tiwari"
 def seed_admin():
     # Create tables if they don't exist
     init_db()
-    
+
     # Check if admin already exists
     db = SessionLocal()
     try:
         existing = db.query(User).filter(User.email == ADMIN_EMAIL).first()
         if existing:
-            print(f"User with email {ADMIN_EMAIL} already exists (id={existing.id}, role={existing.role})")
+            print(
+                f"User with email {ADMIN_EMAIL} already exists (id={existing.id}, role={existing.role})"
+            )
             existing.role = "ADMIN"
             existing.password_hash = argon2.PasswordHasher().hash(ADMIN_PASSWORD)
             existing.name = ADMIN_NAME

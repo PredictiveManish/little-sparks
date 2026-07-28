@@ -5,6 +5,7 @@ from datetime import datetime
 
 # ---------- Auth ----------
 
+
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -27,6 +28,7 @@ class SessionResponse(BaseModel):
 
 
 # ---------- User ----------
+
 
 class UserBase(BaseModel):
     name: str
@@ -67,6 +69,7 @@ class ApproveUserRequest(BaseModel):
 
 # ---------- Phase ----------
 
+
 class PhaseCreate(BaseModel):
     stage_index: int
     deadline: str
@@ -86,6 +89,7 @@ class PhaseResponse(BaseModel):
 
 
 # ---------- Project ----------
+
 
 class ProjectCreate(BaseModel):
     name: str
@@ -126,6 +130,7 @@ class ProjectResponse(BaseModel):
 
 # ---------- Dashboard ----------
 
+
 class DashboardStats(BaseModel):
     active_projects: int
     on_time: int
@@ -151,6 +156,7 @@ class UpcomingDeadline(BaseModel):
 
 # ---------- WhatsApp ----------
 
+
 class WhatsAppMessageCreate(BaseModel):
     content: str
     is_sent: bool = False
@@ -172,15 +178,17 @@ class WhatsAppMessageResponse(BaseModel):
 
 # ---------- Stage Actions ----------
 
+
 class StageCompleteRequest(BaseModel):
     stage_index: int
 
 
 # ---------- Slack ----------
 
+
 class SlackConfigCreate(BaseModel):
-    bot_token: str
-    signing_secret: str
+    bot_token: Optional[str] = None
+    signing_secret: Optional[str] = None
     slack_team_id: str = ""
 
 

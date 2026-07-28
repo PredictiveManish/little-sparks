@@ -1,4 +1,14 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, JSON, func
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Text,
+    JSON,
+    func,
+)
 from sqlalchemy.orm import relationship
 from .database import Base
 import datetime
@@ -19,7 +29,9 @@ class User(Base):
     slack_team_id = Column(String, default="", nullable=True)
     requested_role = Column(String, default="", nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
 
     projects = relationship("Project", back_populates="designer")
 
@@ -41,13 +53,23 @@ class Project(Base):
     slack_channel_id = Column(String, default="")
     slack_channel_name = Column(String, default="")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
 
     designer = relationship("User", back_populates="projects")
-    phases = relationship("Phase", back_populates="project", cascade="all, delete-orphan")
-    whatsapp_messages = relationship("WhatsAppMessage", back_populates="project", cascade="all, delete-orphan")
-    slack_activities = relationship("SlackActivity", back_populates="project", cascade="all, delete-orphan")
-    slack_messages = relationship("SlackMessage", back_populates="project", cascade="all, delete-orphan")
+    phases = relationship(
+        "Phase", back_populates="project", cascade="all, delete-orphan"
+    )
+    whatsapp_messages = relationship(
+        "WhatsAppMessage", back_populates="project", cascade="all, delete-orphan"
+    )
+    slack_activities = relationship(
+        "SlackActivity", back_populates="project", cascade="all, delete-orphan"
+    )
+    slack_messages = relationship(
+        "SlackMessage", back_populates="project", cascade="all, delete-orphan"
+    )
 
 
 class Phase(Base):
@@ -61,7 +83,9 @@ class Phase(Base):
     delay_reason = Column(Text, default="")
     completed_at = Column(String, default=None, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
 
     project = relationship("Project", back_populates="phases")
 
@@ -89,7 +113,9 @@ class SlackConfig(Base):
     slack_team_id = Column(String, default="")
     encrypted = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
+    )
 
 
 class SlackActivity(Base):

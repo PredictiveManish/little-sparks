@@ -22,7 +22,10 @@ if "postgres" in DATABASE_URL:
     )
     logger.info("PostgreSQL engine created successfully")
 else:
-    logger.info("Creating SQLite database engine | path=%s", DATABASE_URL.replace("sqlite:///./", ""))
+    logger.info(
+        "Creating SQLite database engine | path=%s",
+        DATABASE_URL.replace("sqlite:///./", ""),
+    )
     engine = create_engine(
         DATABASE_URL,
         connect_args={"check_same_thread": False},

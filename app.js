@@ -1268,7 +1268,7 @@ async function saveSlackConfig() {
         showToast('Failed to save: ' + err.message);
     }
     btn.disabled = false;
-    btn.textContent = '💾 Save Configuration';
+    btn.textContent = 'Save Configuration';
 }
 
 function clearSlackConfig() {
