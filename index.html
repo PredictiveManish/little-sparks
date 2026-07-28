@@ -184,7 +184,7 @@
 
     <!-- Navigation -->
     <nav class="flex-1 px-4 py-6 space-y-1.5">
-        <a href="#" onclick="navigateTo('dashboard')" data-nav="dashboard"
+        <a href="#" onclick="event.preventDefault(); navigateTo('dashboard')" data-nav="dashboard"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150 active">
             <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <rect x="3" y="3" width="7" height="9" rx="2" stroke-width="1.8"/>
@@ -194,7 +194,7 @@
             </svg>
             Dashboard
         </a>
-        <a href="#" onclick="navigateTo('projects')" data-nav="projects"
+        <a href="#" onclick="event.preventDefault(); navigateTo('projects')" data-nav="projects"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150">
             <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
@@ -203,21 +203,21 @@
             </svg>
             Projects
         </a>
-        <a href="#" onclick="navigateTo('whatsapp-chat')" data-nav="whatsapp-chat"
+        <a href="#" onclick="event.preventDefault(); navigateTo('whatsapp-chat')" data-nav="whatsapp-chat"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150">
             <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
             </svg>
             WhatsApp Chat
         </a>
-        <a href="#" onclick="navigateTo('slack-settings')" data-nav="slack-settings"
+        <a href="#" onclick="event.preventDefault(); navigateTo('slack-settings')" data-nav="slack-settings"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150">
             <svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M10.14,1.16a11,11,0,0,0-9,8.92A1.59,1.59,0,0,0,2.46,12,1.52,1.52,0,0,0,4.11,10.77a8.06,8.06,0,0,1,6.76-4.4,1,1,0,0,1,.85.16,9.43,9.43,0,0,0,4.5,5.39,1,1,0,0,1,.36,1.23A7.6,7.6,0,0,1,11.75,20a1,1,0,0,1-1-.75A1,1,0,0,1,11,18.26a5.61,5.61,0,0,0,3.44-4.86,1,1,0,0,1,.48-1.13,8.26,8.26,0,0,0,3.36-6.87A1,1,0,0,1,18.17,4.3A10,10,0,0,1,10.14,1.16Z"/>
             </svg>
             Slack Settings
         </a>
-        <a href="#" onclick="navigateTo('designers')" data-nav="designers"
+        <a href="#" onclick="event.preventDefault(); navigateTo('designers')" data-nav="designers"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150">
             <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <circle cx="10" cy="8" r="4" stroke-width="1.8"/>
@@ -340,7 +340,7 @@
                 <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                     <div class="flex items-center justify-between mb-5">
                         <h2 class="text-lg font-semibold text-gray-900">Recent Projects</h2>
-                        <a href="#" onclick="navigateTo('projects')" class="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">View All →</a>
+                        <a href="#" onclick="event.preventDefault(); navigateTo('projects')" class="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">View All →</a>
                     </div>
                     <div class="space-y-3" id="recentProjectsList">
                     </div>
@@ -350,7 +350,7 @@
                 <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                     <div class="flex items-center justify-between mb-5">
                         <h2 class="text-lg font-semibold text-gray-900">Upcoming Deadlines</h2>
-                        <a href="#" onclick="navigateTo('projects')" class="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">View All →</a>
+                        <a href="#" onclick="event.preventDefault(); navigateTo('projects')" class="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">View All →</a>
                     </div>
                     <div class="space-y-3" id="upcomingDeadlinesList">
                     </div>
