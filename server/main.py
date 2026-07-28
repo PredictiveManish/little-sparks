@@ -1107,7 +1107,7 @@ def get_project(
 
 
 @app.post("/api/projects", response_model=ProjectResponse, status_code=201)
-def create_project(
+async def create_project(
     data: ProjectCreate,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1197,7 +1197,7 @@ def create_project(
 
 
 @app.put("/api/projects/{project_id}", response_model=ProjectResponse)
-def update_project(
+async def update_project(
     project_id: int,
     data: ProjectUpdate,
     user: User = Depends(get_current_user),
