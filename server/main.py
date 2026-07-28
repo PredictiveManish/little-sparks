@@ -1177,7 +1177,7 @@ def create_project(
     async def _notify():
         async with SessionLocal() as bg_db:
             try:
-                await notify_project_created(bg_db, project.id)
+                await notify_project_created(bg_db, project.id, user.slack_user_id)
             except Exception:
                 pass
 
@@ -2009,6 +2009,17 @@ async def slack_api_call(db, endpoint, data=None):
         return None
 
 
+async def invite_users_to_channel(db, channel_id, slack_user_ids):
+    """Invite Slack users to a channel. Skips empty IDs silently."""
+    valid = [uid for uid in slack_user_ids if uid]
+    if not valid:
+        return
+    await slack_api_call(db, "conversations.invite", {
+        "channel": channel_id,
+        "users": ",".join(valid)
+    })
+
+
 async def send_slack_notification(db, project_id, text, blocks=None, channel_id=None):
     config = get_slack_config(db)
     if not config:
@@ -2035,7 +2046,7 @@ async def send_slack_notification(db, project_id, text, blocks=None, channel_id=
         db.commit()
 
 
-async def notify_project_created(db, project_id):
+async def notify_project_created(db, project_id, manager_slack_user_id=""):
     project, designer, phases = _get_project_details(db, project_id)
     if not project:
         return
@@ -2052,6 +2063,8 @@ async def notify_project_created(db, project_id):
             project.slack_channel_name = channel_name
             db.commit()
             db.refresh(project)
+            designer_slack_id = designer.slack_user_id if designer else ""
+            await invite_users_to_channel(db, result["channel"]["id"], [manager_slack_user_id, designer_slack_id])
         else:
             return
     channel_id = project.slack_channel_id
@@ -3320,6 +3333,9 @@ async def create_slack_channel(
         project.slack_channel_id = channel_id
         project.slack_channel_name = channel_name
         db.commit()
+        designer = db.query(User).filter(User.id == project.assigned_designer_id).first()
+        designer_slack_id = designer.slack_user_id if designer else ""
+        await invite_users_to_channel(db, channel_id, [user.slack_user_id, designer_slack_id])
         logger.info(
             "[SLACK CHANNEL] Channel created successfully | project=%s | channel_id=%s | channel_name=%s",
             project.name,
