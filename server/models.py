@@ -61,9 +61,6 @@ class Project(Base):
     phases = relationship(
         "Phase", back_populates="project", cascade="all, delete-orphan"
     )
-    whatsapp_messages = relationship(
-        "WhatsAppMessage", back_populates="project", cascade="all, delete-orphan"
-    )
     slack_activities = relationship(
         "SlackActivity", back_populates="project", cascade="all, delete-orphan"
     )
@@ -82,26 +79,13 @@ class Phase(Base):
     designer_update = Column(Text, default="")
     delay_reason = Column(Text, default="")
     completed_at = Column(String, default=None, nullable=True)
+    assigned_designer_ids = Column(JSON, default=list)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(
         DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
     )
 
     project = relationship("Project", back_populates="phases")
-
-
-class WhatsAppMessage(Base):
-    __tablename__ = "whatsapp_messages"
-
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    content = Column(Text, nullable=False)
-    is_sent = Column(Boolean, default=False)
-    timestamp = Column(String, nullable=False)
-    quick_replies = Column(JSON, default=list)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
-    project = relationship("Project", back_populates="whatsapp_messages")
 
 
 class SlackConfig(Base):

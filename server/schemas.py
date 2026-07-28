@@ -83,6 +83,7 @@ class PhaseResponse(BaseModel):
     designer_update: str
     delay_reason: str
     completed_at: Optional[str] = None
+    assigned_designer_ids: List[int] = []
 
     class Config:
         from_attributes = True
@@ -152,28 +153,6 @@ class UpcomingDeadline(BaseModel):
     assigned_designer: str
     deadline: str
     days_left: int
-
-
-# ---------- WhatsApp ----------
-
-
-class WhatsAppMessageCreate(BaseModel):
-    content: str
-    is_sent: bool = False
-    timestamp: str
-    quick_replies: List[str] = []
-
-
-class WhatsAppMessageResponse(BaseModel):
-    id: int
-    project_id: int
-    content: str
-    is_sent: bool
-    timestamp: str
-    quick_replies: List[str]
-
-    class Config:
-        from_attributes = True
 
 
 # ---------- Stage Actions ----------

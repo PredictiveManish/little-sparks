@@ -84,13 +84,6 @@ const api = {
     createDesigner: (data) => apiFetch('/designers', { method: 'POST', body: data }),
     deleteDesigner: (id) => apiFetch(`/designers/${id}`, { method: 'DELETE' }),
 
-    // WhatsApp
-    getWhatsAppMessages: (projectId) => apiFetch(`/projects/${projectId}/whatsapp-messages`),
-    createWhatsAppMessage: (projectId, data) => apiFetch(`/projects/${projectId}/whatsapp-messages`, { method: 'POST', body: data }),
-    respondToMessage: (projectId) => apiFetch(`/projects/${projectId}/whatsapp-messages/respond`, { method: 'POST' }),
-    sendWelcomeMessage: (projectId) => apiFetch(`/projects/${projectId}/whatsapp-messages/welcome`, { method: 'POST' }),
-    notifyProjectCreated: (projectId) => apiFetch(`/projects/${projectId}/whatsapp-messages/notify-project-created`, { method: 'POST' }),
-
     // Slack
     getSlackConfig: () => apiFetch('/slack/config'),
     saveSlackConfig: (data) => apiFetch('/slack/config', { method: 'POST', body: data }),
@@ -99,4 +92,5 @@ const api = {
     getSlackActivity: (projectId) => apiFetch(`/projects/${projectId}/slack-activity`),
     logSlackMessage: (data) => apiFetch('/slack/messages/log', { method: 'POST', body: data }),
     getSlackMessages: (projectId) => apiFetch(`/projects/${projectId}/slack-messages`),
+    assignStageDesigners: (projectId, stageIndex, designerIds) => apiFetch(`/projects/${projectId}/phases/${stageIndex}/assign-designers`, { method: 'POST', body: { designer_ids: designerIds } }),
 };

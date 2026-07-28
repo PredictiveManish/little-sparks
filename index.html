@@ -25,26 +25,6 @@
                             800: '#9A3412',
                             900: '#7C2D12',
                         },
-                        whatsapp: {
-                            50: '#E6F7EC',
-                            100: '#C6F0CE',
-                            200: '#92DEA3',
-                            300: '#5EC978',
-                            400: '#36B85A',
-                            500: '#25D366',
-                            600: '#128C7E',
-                            700: '#075E54',
-                            800: '#0C4A41',
-                            900: '#083332',
-                        },
-                        chat: {
-                            bg: '#EFEAE2',
-                            sent: '#D9FDD3',
-                            received: '#FFFFFF',
-                            dark: '#0B141A',
-                            darkSecondary: '#202C33',
-                            darkTertiary: '#2A3942',
-                        }
                     },
                     fontFamily: {
                         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
@@ -203,12 +183,12 @@
             </svg>
             Projects
         </a>
-        <a href="#" onclick="event.preventDefault(); navigateTo('whatsapp-chat')" data-nav="whatsapp-chat"
+        <a href="#" onclick="event.preventDefault(); navigateTo('slack-messages')" data-nav="slack-messages"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150">
             <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
             </svg>
-            WhatsApp Chat
+            Slack Messages
         </a>
         <a href="#" onclick="event.preventDefault(); navigateTo('slack-settings')" data-nav="slack-settings"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150">
@@ -703,100 +683,36 @@
 </section>
 
 <!-- ============================================ -->
-<!-- WHATSAPP CHAT PAGE -->
+<!-- SLACK MESSAGES PAGE -->
 <!-- ============================================ -->
-<section id="page-whatsapp-chat" class="page-section hidden">
+<section id="page-slack-messages" class="page-section hidden">
     <div class="mb-6">
-        <h1 class="text-2xl md:text-3xl font-bold text-gray-900">WhatsApp Bot</h1>
-        <p class="text-sm text-gray-500 mt-1">Interactive project management chat. Select a project and start chatting with the bot.</p>
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Slack Messages</h1>
+        <p class="text-sm text-gray-500 mt-1">View project communication from your connected Slack channels.</p>
     </div>
 
     <!-- Project Selector -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
         <h3 class="text-sm font-semibold text-gray-700 mb-3">📁 Select Project</h3>
-        <select id="whatsappProjectSelect" onchange="switchWhatsAppProject()"
+        <select id="slackMessagesProjectSelect" onchange="switchSlackMessagesProject()"
             class="w-full px-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors bg-white">
             <option value="">Loading projects...</option>
         </select>
     </div>
 
-    <!-- Chat Container -->
+    <!-- Messages Feed -->
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <!-- Chat Header -->
-        <div class="bg-chat-dark px-5 py-3.5 flex items-center gap-3">
-            <div class="w-9 h-9 rounded-full bg-whatsapp-500 flex items-center justify-center flex-shrink-0">
-                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                </svg>
-            </div>
-            <div class="flex-1 min-w-0">
-                <p class="text-white font-semibold text-sm">Smartivity Bot</p>
-                <p class="text-gray-400 text-xs" id="botStatus">online</p>
-            </div>
-            <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-400 bg-chat-darkSecondary px-2 py-1 rounded">Smartivity PM</span>
-            </div>
-        </div>
-
-        <!-- Chat Messages Area -->
-        <div id="chatMessages" class="h-[500px] overflow-y-auto p-4" style="background-color: #EFEAE2; background-image: url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23d4cfc4\' fill-opacity=\'0.15\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');">
-            <!-- Messages will be injected here -->
-        </div>
-
-        <!-- Typing Indicator -->
-        <div id="typingIndicator" class="hidden px-4 py-2">
-            <div class="flex items-center gap-2">
-                <div class="w-6 h-6 rounded-full bg-whatsapp-500 flex items-center justify-center flex-shrink-0">
-                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                    </svg>
-                </div>
-                <div class="bg-white rounded-full px-4 py-2 shadow-sm">
-                    <div class="flex gap-1">
-                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
-                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
-                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Chat Input Area -->
-        <div class="bg-chat-darkSecondary px-4 py-3 flex items-center gap-3 border-t border-chat-darkTertiary">
-            <input type="text" id="chatInput" placeholder="Type a message..."
-                class="flex-1 px-4 py-2.5 rounded-full bg-chat-darkTertiary text-white text-sm placeholder-gray-400 outline-none focus:ring-1 focus:ring-whatsapp-500"
-                onkeydown="if(event.key==='Enter')sendUserMessage()">
-            <button onclick="sendUserMessage()" id="sendBtn" class="text-gray-400 hover:text-whatsapp-500 transition-colors p-1">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-                </svg>
-            </button>
+        <div id="slackMessagesFeed" class="h-[500px] overflow-y-auto p-4 space-y-3">
+            <p class="text-sm text-gray-400 text-center py-8">Select a project to view Slack messages</p>
         </div>
     </div>
 
-    <!-- Quick Actions -->
-    <div class="mt-4 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-        <h3 class="text-sm font-semibold text-gray-700 mb-3">⚡ Quick Actions</h3>
-        <div class="flex flex-wrap gap-2">
-            <button onclick="sendQuickCommand('project info')" class="px-3 py-1.5 bg-whatsapp-500 bg-opacity-10 text-whatsapp-700 rounded-full text-xs font-medium hover:bg-whatsapp-500 hover:text-white transition-colors border border-whatsapp-200">
-                📦 Project Info
-            </button>
-            <button onclick="sendQuickCommand('stage update')" class="px-3 py-1.5 bg-whatsapp-500 bg-opacity-10 text-whatsapp-700 rounded-full text-xs font-medium hover:bg-whatsapp-500 hover:text-white transition-colors border border-whatsapp-200">
-                🔄 Stage Update
-            </button>
-            <button onclick="sendQuickCommand('progress')" class="px-3 py-1.5 bg-whatsapp-500 bg-opacity-10 text-whatsapp-700 rounded-full text-xs font-medium hover:bg-whatsapp-500 hover:text-white transition-colors border border-whatsapp-200">
-                📊 Progress
-            </button>
-            <button onclick="sendQuickCommand('mark complete')" class="px-3 py-1.5 bg-green-500 bg-opacity-10 text-green-700 rounded-full text-xs font-medium hover:bg-green-500 hover:text-white transition-colors border border-green-200">
-                ✅ Complete Stage
-            </button>
-            <button onclick="sendQuickCommand('delay')" class="px-3 py-1.5 bg-red-500 bg-opacity-10 text-red-700 rounded-full text-xs font-medium hover:bg-red-500 hover:text-white transition-colors border border-red-200">
-                ⚠️ Report Delay
-            </button>
-            <button onclick="sendQuickCommand('help')" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-xs font-medium hover:bg-gray-200 transition-colors border border-gray-300">
-                ❓ Help
-            </button>
-        </div>
+    <!-- Auto-refresh indicator -->
+    <div class="mt-3 flex items-center justify-between">
+        <p class="text-xs text-gray-400">Messages refresh every 30 seconds</p>
+        <button onclick="fetchSlackMessages()" class="text-xs text-brand-600 hover:text-brand-700 font-medium">
+            🔄 Refresh Now
+        </button>
     </div>
 </section>
 

@@ -3,6 +3,8 @@
 // ============================================
 let currentView = 'dashboard';
 let selectedProjectId = 1;
+let slackMessagesPollInterval = null;
+let selectedSlackProjectId = null;
 let designerModalStageIndex = null;
 let tempDesignerSelections = [];
 let DESIGNERS = [];
@@ -324,7 +326,7 @@ function navigateTo(view, projectId = null) {
         'edit-project': 'page-edit-project',
         'designers': 'page-designers',
         'settings': 'page-settings',
-        'whatsapp-chat': 'page-whatsapp-chat',
+        'slack-messages': 'page-slack-messages',
         'slack-settings': 'page-slack-settings',
     };
     const targetId = pageMap[view];
@@ -344,7 +346,7 @@ function navigateTo(view, projectId = null) {
         'project-details': 'projects',
         'edit-project': 'projects',
         'designers': 'designers',
-        'whatsapp-chat': 'whatsapp-chat',
+        'slack-messages': 'slack-messages',
         'slack-settings': 'slack-settings',
     };
     const navKey = navMap[view];
@@ -362,7 +364,7 @@ function navigateTo(view, projectId = null) {
     if (view === 'designers') populateDesignersPage();
     if (view === 'create-project') resetCreateProjectForm();
     if (view === 'dashboard') loadDashboard();
-    if (view === 'whatsapp-chat') loadWhatsAppChat();
+    if (view === 'slack-messages') loadSlackMessages();
 
     // Attach date change listeners for phase deadlines
     const startDateInputs = document.querySelectorAll('#page-create-project form input[type="date"]');
@@ -950,18 +952,10 @@ async function handleCreateProject(event) {
             manager_notes: '',
             phases: phases
         });
-        try {
-            await api.notifyProjectCreated(project.id);
-        } catch (notifyErr) {
-            // Non-critical: WhatsApp notification failure shouldn't block project creation
-        }
-        try {
-            await populateWhatsAppProjectSelect();
-        } catch (e) { }
         const successMsg = document.getElementById('createSuccessMessage');
         form.classList.add('hidden');
         successMsg.classList.remove('hidden');
-        showToast('Project created successfully! WhatsApp notification sent.');
+        showToast('Project created successfully!');
     } catch (err) {
         showToast(err.message);
     }
@@ -1045,28 +1039,49 @@ function toggleDesignerSelection(designerId, isChecked) {
     }
 }
 
-function saveDesignerAssignment() {
+async function saveDesignerAssignment() {
     if (designerModalStageIndex === null) return;
-    closeDesignerModal();
-    populateProjectDetails();
-    const assignedCount = tempDesignerSelections.length;
-    showToast(`${assignedCount} designer${assignedCount !== 1 ? 's' : ''} assigned to "${WORKFLOW_STAGES[designerModalStageIndex]}"`);
+    try {
+        await api.assignStageDesigners(selectedProjectId, designerModalStageIndex, tempDesignerSelections);
+        closeDesignerModal();
+        populateProjectDetails();
+        const assignedCount = tempDesignerSelections.length;
+        showToast(`${assignedCount} designer${assignedCount !== 1 ? 's' : ''} assigned to "${WORKFLOW_STAGES[designerModalStageIndex]}"`);
+    } catch (err) {
+        showToast('Failed to assign designers: ' + err.message);
+    }
 }
 
 // ============================================
-// WHATSAPP CHAT
+// SLACK MESSAGES
 // ============================================
-let whatsappPollInterval = null;
-let isTyping = false;
+async function loadSlackMessages() {
+    await populateSlackMessagesProjectSelect();
+    if (!selectedSlackProjectId) {
+        const projects = await api.getProjects();
+        if (projects.length > 0) {
+            selectedSlackProjectId = projects[0].id;
+            const select = document.getElementById('slackMessagesProjectSelect');
+            if (select) select.value = selectedSlackProjectId;
+        } else {
+            return;
+        }
+    }
+    if (slackMessagesPollInterval) clearInterval(slackMessagesPollInterval);
+    const feed = document.getElementById('slackMessagesFeed');
+    if (feed) feed.innerHTML = '<p class="text-sm text-gray-400 text-center py-8">Loading messages...</p>';
+    await fetchSlackMessages();
+    slackMessagesPollInterval = setInterval(fetchSlackMessages, 30000);
+}
 
-async function populateWhatsAppProjectSelect() {
+async function populateSlackMessagesProjectSelect() {
     try {
         const projects = await api.getProjects();
-        const select = document.getElementById('whatsappProjectSelect');
+        const select = document.getElementById('slackMessagesProjectSelect');
         if (!select) return;
         let html = '<option value="">Select a project</option>';
         projects.forEach(p => {
-            html += `<option value="${p.id}" ${p.id === selectedProjectId ? 'selected' : ''}>${p.name}</option>`;
+            html += `<option value="${p.id}" ${p.id === selectedSlackProjectId ? 'selected' : ''}>${p.name}</option>`;
         });
         select.innerHTML = html;
     } catch (err) {
@@ -1074,152 +1089,57 @@ async function populateWhatsAppProjectSelect() {
     }
 }
 
-async function switchWhatsAppProject() {
-    const select = document.getElementById('whatsappProjectSelect');
+async function switchSlackMessagesProject() {
+    const select = document.getElementById('slackMessagesProjectSelect');
     if (!select) return;
-    selectedProjectId = parseInt(select.value);
-    await loadWhatsAppChat();
+    selectedSlackProjectId = parseInt(select.value);
+    await loadSlackMessages();
 }
 
-async function loadWhatsAppChat() {
-    await populateWhatsAppProjectSelect();
-    if (!selectedProjectId) {
-        const projects = await api.getProjects();
-        if (projects.length > 0) {
-            selectedProjectId = projects[0].id;
-            const select = document.getElementById('whatsappProjectSelect');
-            if (select) select.value = selectedProjectId;
-        } else {
-            return;
-        }
-    }
-    if (whatsappPollInterval) clearInterval(whatsappPollInterval);
-    const chatContainer = document.getElementById('chatMessages');
-    if (chatContainer) chatContainer.innerHTML = '';
-    await fetchWhatsAppMessages();
-    whatsappPollInterval = setInterval(fetchWhatsAppMessages, 10000);
-}
-
-async function fetchWhatsAppMessages() {
+async function fetchSlackMessages() {
+    if (!selectedSlackProjectId) return;
     try {
-        const messages = await api.getWhatsAppMessages(selectedProjectId);
-        const chatContainer = document.getElementById('chatMessages');
-        if (!chatContainer) return;
+        const messages = await api.getSlackMessages(selectedSlackProjectId);
+        const feed = document.getElementById('slackMessagesFeed');
+        if (!feed) return;
         const existingIds = new Set();
-        chatContainer.querySelectorAll('.msg-bubble').forEach(el => {
+        feed.querySelectorAll('.slack-msg-bubble').forEach(el => {
             existingIds.add(el.dataset.msgId);
         });
         const newMessages = messages.filter(m => !existingIds.has(String(m.id)));
         if (newMessages.length > 0) {
             newMessages.forEach(msg => {
-                const bubble = createMessageBubble(msg.content, msg.is_sent, msg.timestamp, msg.quick_replies || []);
-                bubble.classList.add('msg-bubble');
+                const bubble = createSlackMessageBubble(msg);
+                bubble.classList.add('slack-msg-bubble');
                 bubble.dataset.msgId = msg.id;
-                chatContainer.appendChild(bubble);
+                feed.appendChild(bubble);
             });
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            feed.scrollTop = feed.scrollHeight;
         }
     } catch (err) {
         // Silently fail for polling
     }
 }
 
-function createMessageBubble(content, isSent, timestamp, quickReplies = []) {
+function createSlackMessageBubble(msg) {
     const bubble = document.createElement('div');
-    bubble.className = `flex ${isSent ? 'justify-end' : 'justify-start'} mb-2`;
-    const quickRepliesHTML = quickReplies.length > 0
-        ? `<div class="flex flex-wrap gap-1.5 mt-2">${quickReplies.map(qr =>
-            `<button class="px-2.5 py-1.5 rounded-full border border-whatsapp-500 text-whatsapp-700 text-xs font-medium hover:bg-whatsapp-50 transition-colors whitespace-nowrap quick-reply-btn" onclick="handleQuickReply('${qr.replace(/'/g, "\\'")}')">${qr}</button>`
-        ).join('')}</div>`
-        : '';
+    bubble.className = 'flex items-start gap-3 mb-3';
+    const avatarColor = msg.slack_user_id ? 'bg-blue-500' : 'bg-gray-400';
+    const displayName = msg.slack_user_name || 'Slack Bot';
+    const time = msg.ts ? new Date(parseInt(msg.ts) * 1000).toLocaleString() : msg.created_at || '';
     bubble.innerHTML = `
-        <div class="max-w-[80%] md:max-w-[65%] ${isSent ? 'bg-chat_sent rounded-lg rounded-tr-sm' : 'bg-chat_received rounded-lg rounded-tl-sm'} px-3 py-2 shadow-sm">
-            <p class="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">${formatWhatsAppText(content)}</p>
-            ${quickRepliesHTML}
-            <div class="flex items-center justify-end gap-1 mt-1">
-                <span class="text-[10px] text-gray-500">${timestamp}</span>
-                ${isSent ? `
-                <svg class="w-3.5 h-3.5 text-whatsapp-500" fill="currentColor" viewBox="0 0 16 15">
-                    <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.503.08l-1.65 2.232a.365.365 0 0 1-.503.08l-.476-.372a.364.364 0 0 0-.503.08l-.478.372a.364.364 0 0 0 .08.503l1.65 2.232a.365.365 0 0 1 .08.503l-.372.478a.364.364 0 0 0 .08.503l.478.372a.364.364 0 0 0 .503-.08l1.65 2.232a.365.365 0 0 1 .503-.08l.478.372a.364.364 0 0 0 .503-.08l.372-.478a.364.364 0 0 0-.08-.503l-1.65 2.232a.365.365 0 0 1-.08-.503l.372-.478a.364.364 0 0 0-.08-.503z"/>
-                </svg>` : ''}
+        <div class="flex-shrink-0 w-8 h-8 rounded-full ${avatarColor} flex items-center justify-center text-white text-xs font-bold">
+            ${displayName.charAt(0).toUpperCase()}
+        </div>
+        <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-semibold text-gray-900">${displayName}</span>
+                <span class="text-xs text-gray-400">${time}</span>
             </div>
+            <p class="text-sm text-gray-700 mt-1 whitespace-pre-wrap break-words">${msg.text || ''}</p>
         </div>
     `;
     return bubble;
-}
-
-function showTypingIndicator() {
-    const typingEl = document.getElementById('typingIndicator');
-    const chatContainer = document.getElementById('chatMessages');
-    if (!typingEl || isTyping) return;
-    isTyping = true;
-    typingEl.classList.remove('hidden');
-    if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
-    const statusEl = document.getElementById('botStatus');
-    if (statusEl) statusEl.textContent = 'typing...';
-}
-
-function hideTypingIndicator() {
-    const typingEl = document.getElementById('typingIndicator');
-    if (!typingEl || !isTyping) return;
-    isTyping = false;
-    typingEl.classList.add('hidden');
-    const statusEl = document.getElementById('botStatus');
-    if (statusEl) statusEl.textContent = 'online';
-}
-
-async function sendUserMessage() {
-    const input = document.getElementById('chatInput');
-    const sendBtn = document.getElementById('sendBtn');
-    if (!input || !input.value.trim()) return;
-    if (!selectedProjectId) {
-        showToast('Please select a project first');
-        return;
-    }
-    const userText = input.value.trim();
-    input.value = '';
-    sendBtn.disabled = true;
-    sendBtn.classList.add('opacity-50');
-
-    const chatContainer = document.getElementById('chatMessages');
-    if (chatContainer) {
-        const bubble = createMessageBubble(userText, true, generateTime(), []);
-        bubble.classList.add('msg-bubble');
-        bubble.dataset.msgId = 'temp_' + Date.now();
-        chatContainer.appendChild(bubble);
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    }
-    try {
-        await api.createWhatsAppMessage(selectedProjectId, { content: userText, is_sent: true, timestamp: generateTime(), quick_replies: [] });
-        showTypingIndicator();
-        setTimeout(async () => {
-            try {
-                await api.respondToMessage(selectedProjectId);
-                await fetchWhatsAppMessages();
-            } catch (err) {
-                showToast('Bot response failed: ' + err.message);
-            }
-            hideTypingIndicator();
-            sendBtn.disabled = false;
-            sendBtn.classList.remove('opacity-50');
-        }, 1000 + Math.random() * 1500);
-    } catch (err) {
-        showToast('Failed to send message: ' + err.message);
-        sendBtn.disabled = false;
-        sendBtn.classList.remove('opacity-50');
-    }
-}
-
-function sendQuickCommand(text) {
-    const input = document.getElementById('chatInput');
-    if (input) {
-        input.value = text;
-        sendUserMessage();
-    }
-}
-
-function handleQuickReply(text) {
-    sendQuickCommand(text);
 }
 
 // ============================================

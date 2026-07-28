@@ -47,7 +47,6 @@ from .models import (
     User,
     Project,
     Phase,
-    WhatsAppMessage,
     SlackConfig,
     SlackActivity,
     SlackMessage,
@@ -64,8 +63,6 @@ from .schemas import (
     DashboardStats,
     RecentProject,
     UpcomingDeadline,
-    WhatsAppMessageCreate,
-    WhatsAppMessageResponse,
     SlackConfigCreate,
     SlackConfigResponse,
     SlackActivityResponse,
@@ -1177,7 +1174,7 @@ def create_project(
     async def _notify():
         async with SessionLocal() as bg_db:
             try:
-                await notify_project_created(bg_db, project.id, user.slack_user_id)
+                await notify_project_created(bg_db, project.id, user.slack_user_id, user.role.upper())
             except Exception:
                 pass
 
@@ -1236,27 +1233,12 @@ def update_project(
         now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
         current_stage = _get_current_stage_name(project.stage_index)
 
-        changes_text = "\n".join([f"• {c}" for c in changes])
-        notify = (
-            f"📝 *Project Updated*\n\n"
-            f"*{project.name}*\n\n"
-            f"👤 Designer: {designer_name}\n"
-            f"🔄 Current Stage: {current_stage}\n"
-            f"📊 Progress: {project.progress}%\n\n"
-            f"*Changes:*\n{changes_text}\n\n"
-            f"Updated at: {now_str}"
-        )
-
-        msg = WhatsAppMessage(
-            project_id=project_id,
-            content=notify,
-            is_sent=False,
-            timestamp=now_str,
-            quick_replies=["📊 View Progress", "📦 Project Info", "🔙 Main Menu"],
-        )
-        db.add(msg)
-        db.commit()
-        db.refresh(msg)
+        async def _notify_update():
+            async with SessionLocal() as bg_db:
+                try:
+                    await notify_project_updated(bg_db, project_id)
+                except Exception:
+                    pass
     else:
         db.commit()
         db.refresh(project)
@@ -1355,16 +1337,12 @@ async def complete_stage(
             f"Reply with 'stage update' for more details."
         )
 
-    msg = WhatsAppMessage(
-        project_id=project_id,
-        content=notify,
-        is_sent=False,
-        timestamp=now_str,
-        quick_replies=["📊 View Progress", "📦 Project Info", "🔄 Stage Update"],
-    )
-    db.add(msg)
-    db.commit()
-    db.refresh(msg)
+    async def _notify_stage():
+        async with SessionLocal() as bg_db:
+            try:
+                await notify_stage_completed(bg_db, project_id, stage_index)
+            except Exception:
+                pass
 
     return {"message": "Stage marked complete"}
 
@@ -1421,18 +1399,58 @@ async def unmark_stage(
         f"Please complete this stage to continue."
     )
 
-    msg = WhatsAppMessage(
-        project_id=project_id,
-        content=notify,
-        is_sent=False,
-        timestamp=now_str,
-        quick_replies=["📊 View Progress", "✅ Complete Stage", "📦 Project Info"],
-    )
-    db.add(msg)
-    db.commit()
-    db.refresh(msg)
+    async def _notify_unmark():
+        async with SessionLocal() as bg_db:
+            try:
+                await notify_stage_unmarked(bg_db, project_id, stage_index)
+            except Exception:
+                pass
 
     return {"message": "Stage unmarked"}
+
+
+@app.post("/api/projects/{project_id}/phases/{stage_index}/assign-designers")
+async def assign_designers_to_phase(
+    project_id: int,
+    stage_index: int,
+    data: dict,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    phases = (
+        db.query(Phase)
+        .filter(Phase.project_id == project_id)
+        .order_by(Phase.stage_index)
+        .all()
+    )
+    if stage_index >= len(phases):
+        raise HTTPException(status_code=400, detail="Stage not found")
+
+    designer_ids = data.get("designer_ids", [])
+    phases[stage_index].assigned_designer_ids = designer_ids
+    db.commit()
+
+    if project.slack_channel_id and designer_ids:
+        slack_user_ids = []
+        for did in designer_ids:
+            d = db.query(User).filter(User.id == did).first()
+            if d and d.slack_user_id:
+                slack_user_ids.append(d.slack_user_id)
+        if slack_user_ids:
+            await invite_users_to_channel(db, project.slack_channel_id, slack_user_ids)
+
+            async def _notify_assign():
+                async with SessionLocal() as bg_db:
+                    try:
+                        await notify_designers_assigned(bg_db, project_id, stage_index, designer_ids)
+                    except Exception:
+                        pass
+
+    return {"message": "Designers assigned", "designer_ids": designer_ids}
 
 
 # ---------- Designers ----------
@@ -1499,14 +1517,13 @@ def delete_designer(
         {"assigned_designer_id": None}
     )
     db.query(Phase).delete()
-    db.query(WhatsAppMessage).delete()
 
     db.delete(user)
     db.commit()
     return {"message": "Designer removed"}
 
 
-# ---------- WhatsApp Messages ----------
+# ---------- Slack Integration ----------
 
 
 def _get_project_details(db, project_id):
@@ -1542,375 +1559,6 @@ def _get_current_stage_name(stage_index):
     return (
         stage_names[stage_index] if stage_index < len(stage_names) else "Unknown Stage"
     )
-
-
-def _generate_bot_response(db, project_id, user_message):
-    project, designer, phases = _get_project_details(db, project_id)
-    if not project:
-        return None, "❌ Project not found. Please check the project ID."
-
-    msg_lower = user_message.strip().lower()
-    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
-    designer_name = designer.name if designer else "Unassigned"
-
-    if any(
-        kw in msg_lower
-        for kw in [
-            "project info",
-            "project details",
-            "tell me about",
-            "project status",
-            "status",
-        ]
-    ):
-        today_str = datetime.utcnow().strftime("%Y-%m-%d")
-        stages_completed = sum(1 for p in phases if p.completed_at)
-        total_stages = len(phases)
-        current_stage = _get_current_stage_name(project.stage_index)
-        days_left = (
-            datetime.strptime(project.deadline, "%Y-%m-%d") - datetime.now()
-        ).days
-        reply = (
-            f"📦 *Project: {project.name}*\n\n"
-            f"👤 Designer: {designer_name}\n"
-            f"📊 Progress: {project.progress}%\n"
-            f"🔄 Current Stage: {current_stage}\n"
-            f"📅 Deadline: {project.deadline} ({days_left} days left)\n"
-            f"⚡ Priority: {project.priority}\n"
-            f"📌 Status: {project.status.replace('_', ' ')}\n\n"
-            f"✅ {stages_completed}/{total_stages} stages completed"
-        )
-        return reply, "What would you like to do?"
-
-    if any(
-        kw in msg_lower
-        for kw in ["stage update", "current stage", "what stage", "where we are"]
-    ):
-        current_stage = _get_current_stage_name(project.stage_index)
-        current_phase = (
-            phases[project.stage_index] if project.stage_index < len(phases) else None
-        )
-        deadline = current_phase.deadline if current_phase else "N/A"
-        reply = (
-            f"🔄 *Current Stage: {current_stage}*\n\n"
-            f"📅 Deadline: {deadline}\n"
-            f"👤 Assigned: {designer_name}\n"
-            f"📊 Progress: {project.progress}%\n\n"
-            f"Reply with:\n*1* — Mark stage complete\n*2* — Report delay\n*3* — Update notes"
-        )
-        return reply, ["✅ Complete Stage", "⚠️ Report Delay", "📝 Update Notes"]
-
-    if any(
-        kw in msg_lower
-        for kw in ["mark complete", "stage complete", "completed", "done", "finished"]
-    ):
-        if project.stage_index >= len(phases):
-            return None, "🎉 All stages are already complete!"
-        prev_phase = (
-            phases[project.stage_index - 1] if project.stage_index > 0 else None
-        )
-        if project.stage_index > 0 and not prev_phase.completed_at:
-            prev_name = _get_current_stage_name(project.stage_index - 1)
-            return (
-                None,
-                f"❌ Complete *{prev_name}* first before moving to the next stage.",
-            )
-        now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
-        phases[project.stage_index].completed_at = now
-        total = len(phases)
-        completed = sum(1 for ph in phases if ph.completed_at)
-        project.progress = round((completed / total) * 100)
-        project.stage_index = min(project.stage_index + 1, total - 1)
-        today_str = datetime.utcnow().strftime("%Y-%m-%d")
-        if project.progress == 100:
-            project.status = "COMPLETED"
-        elif project.deadline < today_str:
-            project.status = "DELAYED"
-        else:
-            project.status = "ON_TRACK"
-        db.commit()
-        new_stage = _get_current_stage_name(project.stage_index)
-        if project.progress == 100:
-            reply = (
-                f"🎉 *Congratulations!*\n\n"
-                f"Project *{project.name}* is now 100% complete!\n"
-                f"All {total} stages have been marked as done."
-            )
-        else:
-            reply = (
-                f"✅ *Stage Complete!*\n\n"
-                f"Moved to next stage: *{new_stage}*\n"
-                f"📊 Total Progress: {project.progress}%\n\n"
-                f"Reply with 'stage update' for more details."
-            )
-        return reply, ["📊 View Progress", "📦 Project Info", "🔙 Main Menu"]
-
-    if any(
-        kw in msg_lower
-        for kw in ["delay", "behind", "late", "cannot complete", "will miss"]
-    ):
-        reply = (
-            f"⚠️ *Delay Reported*\n\n"
-            f"Please reply with:\n"
-            f"1. Reason for delay\n"
-            f"2. Revised deadline (YYYY-MM-DD)\n\n"
-            f"Example: 'Need more time for graphics, revised date 2025-02-15'"
-        )
-        return reply, "Waiting for your response..."
-
-    if "reason" in msg_lower or "revised" in msg_lower or "more time" in msg_lower:
-        reason_match = re.search(
-            r"(?:reason|because|since|due to)[:\s]+(.+?)(?:\n|$)", msg_lower
-        )
-        revised_match = re.search(
-            r"(?:revised|new|new date|date)[:\s]+(\d{4}-\d{2}-\d{2})", msg_lower
-        )
-        reason = reason_match.group(1).strip() if reason_match else "No reason provided"
-        revised_date = revised_match.group(1) if revised_match else "TBD"
-        if phases[project.stage_index]:
-            phases[
-                project.stage_index
-            ].delay_reason = f"{reason} (Revised: {revised_date})"
-            db.commit()
-        reply = (
-            f"⚠️ *Delay Acknowledged*\n\n"
-            f"📋 Reason: {reason}\n"
-            f"📅 Revised Deadline: {revised_date}\n\n"
-            f"The project manager has been notified."
-        )
-        return reply, ["📊 View Status", "📦 Project Info", "🔙 Main Menu"]
-
-    if any(
-        kw in msg_lower
-        for kw in ["update notes", "update", "add note", "progress update"]
-    ):
-        reply = (
-            f"📝 *Update Notes*\n\n"
-            f"Please type your update/progress note below.\n"
-            f"It will be logged to the current stage."
-        )
-        return reply, "Waiting for your note..."
-
-    if "update" in msg_lower or "note" in msg_lower or "progress" in msg_lower:
-        if phases[project.stage_index]:
-            phases[project.stage_index].designer_update = user_message
-            db.commit()
-        reply = (
-            f"✅ *Note Updated!*\n\n"
-            f"Your update has been logged to the current stage.\n\n"
-            f"Current stage: {_get_current_stage_name(project.stage_index)}"
-        )
-        return reply, ["📊 View Progress", "📦 Project Info", "🔙 Main Menu"]
-
-    if any(kw in msg_lower for kw in ["progress", "how far", "how much", "completion"]):
-        today_str = datetime.utcnow().strftime("%Y-%m-%d")
-        stages_completed = sum(1 for p in phases if p.completed_at)
-        total_stages = len(phases)
-        current_stage = _get_current_stage_name(project.stage_index)
-        reply = (
-            f"📊 *Progress Report*\n\n"
-            f"Project: {project.name}\n"
-            f"Total Progress: {project.progress}%\n"
-            f"Current Stage: {current_stage}\n\n"
-            f"Stage Breakdown:\n"
-        )
-        for i, phase in enumerate(phases):
-            check = "✅" if phase.completed_at else "⬜"
-            marker = " ➜" if i == project.stage_index else ""
-            reply += f"{check} {i + 1}. {phase.deadline}{marker}\n"
-        reply += f"\n📅 Deadline: {project.deadline}"
-        return reply, ["📦 Project Info", "✅ Complete Stage", "🔙 Main Menu"]
-
-    if any(
-        kw in msg_lower
-        for kw in ["all projects", "list projects", "my projects", "show projects"]
-    ):
-        all_projects = db.query(Project).all()
-        if not all_projects:
-            return None, "No projects found."
-        reply = "📦 *Your Projects:*\n\n"
-        for p in all_projects:
-            d = db.query(User).filter(User.id == p.assigned_designer_id).first()
-            d_name = d.name if d else "Unassigned"
-            reply += f"{'✅' if p.progress == 100 else '🔄'} {p.name} — {p.progress}% ({d_name})\n"
-        return reply, "Reply with a project name for details."
-
-    if any(
-        kw in msg_lower for kw in ["help", "menu", "options", "what can", "commands"]
-    ):
-        reply = (
-            f"🤖 *Smartivity Bot — Available Commands:*\n\n"
-            f"*📦 Project Info* — View project details\n"
-            f"*🔄 Stage Update* — Current stage info\n"
-            f"*✅ Complete Stage* — Mark current stage done\n"
-            f"*⚠️ Delay* — Report a delay\n"
-            f"*📝 Update Notes* — Log progress notes\n"
-            f"*📊 Progress* — View progress breakdown\n"
-            f"*📋 All Projects* — List all projects\n"
-            f"*❓ Help* — Show this menu\n\n"
-            f"Type any of these to get started!"
-        )
-        return reply, [
-            "📦 Project Info",
-            "🔄 Stage Update",
-            "📊 Progress",
-            "📋 All Projects",
-        ]
-
-    if any(
-        kw in msg_lower
-        for kw in ["hello", "hi", "hey", "good morning", "good afternoon"]
-    ):
-        return (
-            None,
-            f"👋 Hello! How can I help you today?\n\nReply with *help* to see available commands.",
-        )
-
-    current_stage = _get_current_stage_name(project.stage_index)
-    return None, (
-        f"🤖 I didn't quite understand that.\n\n"
-        f"Current stage: *{current_stage}*\n"
-        f"Reply with *help* to see available commands."
-    )
-
-
-@app.get(
-    "/api/projects/{project_id}/whatsapp-messages",
-    response_model=List[WhatsAppMessageResponse],
-)
-def get_whatsapp_messages(
-    project_id: int,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    messages = (
-        db.query(WhatsAppMessage)
-        .filter(WhatsAppMessage.project_id == project_id)
-        .order_by(WhatsAppMessage.created_at)
-        .all()
-    )
-    return [WhatsAppMessageResponse.model_validate(m) for m in messages]
-
-
-@app.post(
-    "/api/projects/{project_id}/whatsapp-messages",
-    response_model=WhatsAppMessageResponse,
-    status_code=201,
-)
-def create_whatsapp_message(
-    project_id: int,
-    data: WhatsAppMessageCreate,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if not db.query(Project).filter(Project.id == project_id).first():
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    msg = WhatsAppMessage(
-        project_id=project_id,
-        content=data.content,
-        is_sent=data.is_sent,
-        timestamp=data.timestamp,
-        quick_replies=data.quick_replies,
-    )
-    db.add(msg)
-    db.commit()
-    db.refresh(msg)
-    return WhatsAppMessageResponse.model_validate(msg)
-
-
-@app.post("/api/projects/{project_id}/whatsapp-messages/respond")
-def bot_respond(
-    project_id: int,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    project, designer, phases = _get_project_details(db, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    last_user_msg = (
-        db.query(WhatsAppMessage)
-        .filter(
-            WhatsAppMessage.project_id == project_id, WhatsAppMessage.is_sent == True
-        )
-        .order_by(WhatsAppMessage.created_at.desc())
-        .first()
-    )
-    if not last_user_msg:
-        raise HTTPException(status_code=400, detail="No user message to respond to")
-
-    bot_content, quick_replies = _generate_bot_response(
-        db, project_id, last_user_msg.content
-    )
-    if bot_content is None:
-        bot_content = quick_replies
-        quick_replies = []
-
-    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
-    bot_msg = WhatsAppMessage(
-        project_id=project_id,
-        content=bot_content,
-        is_sent=False,
-        timestamp=now_str,
-        quick_replies=quick_replies,
-    )
-    db.add(bot_msg)
-    db.commit()
-    db.refresh(bot_msg)
-    return WhatsAppMessageResponse.model_validate(bot_msg)
-
-
-@app.post("/api/projects/{project_id}/whatsapp-messages/welcome")
-def send_welcome_message(
-    project_id: int,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    project, designer, phases = _get_project_details(db, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    existing = (
-        db.query(WhatsAppMessage)
-        .filter(
-            WhatsAppMessage.project_id == project_id,
-            WhatsAppMessage.content.contains("Welcome"),
-        )
-        .first()
-    )
-    if existing:
-        return None
-
-    designer_name = designer.name if designer else "Unassigned"
-    now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
-    current_stage = _get_current_stage_name(project.stage_index)
-
-    welcome = (
-        f"👋 Welcome to *Smartivity Bot*!\n\n"
-        f"📦 Project: *{project.name}*\n"
-        f"👤 Designer: {designer_name}\n"
-        f"📅 Deadline: {project.deadline}\n"
-        f"⚡ Priority: {project.priority}\n"
-        f"📊 Progress: {project.progress}%\n\n"
-        f"Current Stage: *{current_stage}*\n\n"
-        f"Type *help* to see all available commands!"
-    )
-
-    msg = WhatsAppMessage(
-        project_id=project_id,
-        content=welcome,
-        is_sent=False,
-        timestamp=now_str,
-        quick_replies=["📦 Project Info", "🔄 Stage Update", "📊 Progress", "❓ Help"],
-    )
-    db.add(msg)
-    db.commit()
-    db.refresh(msg)
-    return WhatsAppMessageResponse.model_validate(msg)
-
-
-# ---------- Slack Integration ----------
 
 
 def get_slack_config(db):
@@ -2046,7 +1694,7 @@ async def send_slack_notification(db, project_id, text, blocks=None, channel_id=
         db.commit()
 
 
-async def notify_project_created(db, project_id, manager_slack_user_id=""):
+async def notify_project_created(db, project_id, manager_slack_user_id="", user_role=""):
     project, designer, phases = _get_project_details(db, project_id)
     if not project:
         return
@@ -2063,8 +1711,11 @@ async def notify_project_created(db, project_id, manager_slack_user_id=""):
             project.slack_channel_name = channel_name
             db.commit()
             db.refresh(project)
-            designer_slack_id = designer.slack_user_id if designer else ""
-            await invite_users_to_channel(db, result["channel"]["id"], [manager_slack_user_id, designer_slack_id])
+            if user_role == "ADMIN":
+                await invite_users_to_channel(db, result["channel"]["id"], [manager_slack_user_id])
+            else:
+                designer_slack_id = designer.slack_user_id if designer else ""
+                await invite_users_to_channel(db, result["channel"]["id"], [manager_slack_user_id, designer_slack_id])
         else:
             return
     channel_id = project.slack_channel_id
@@ -2082,12 +1733,21 @@ async def notify_project_created(db, project_id, manager_slack_user_id=""):
             "text": {
                 "type": "mrkdwn",
                 "text": (
+                    f"*Project Details*\n"
                     f"👤 *Designer:* {designer_name}\n"
-                    f"📅 *Start:* {project.start_date}\n"
+                    f"📅 *Start Date:* {project.start_date}\n"
                     f"📅 *Deadline:* {project.deadline}\n"
-                    f"⚡ *Priority:* {project.priority}\n\n"
-                    f"*9-Stage Workflow:*\n{stage_list}"
+                    f"⚡ *Priority:* {project.priority.upper()}\n"
+                    f"📊 *Status:* {project.status.replace('_', ' ')}"
                 ),
+            },
+        },
+        {"type": "divider"},
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Workflow — {len(phases)} Stages*\n{stage_list}",
             },
         },
         {"type": "divider"},
@@ -2116,7 +1776,7 @@ async def notify_project_created(db, project_id, manager_slack_user_id=""):
         },
     ]
     await send_slack_notification(
-        db, project_id, f"New project assigned: {project.name}", blocks, channel_id
+        db, project_id, f"📦 New project: {project.name}", blocks, channel_id
     )
 
 
@@ -2292,6 +1952,64 @@ async def notify_stage_unmarked(db, project_id, stage_index):
             blocks,
             project.slack_channel_id,
         )
+
+
+async def notify_designers_assigned(db, project_id, stage_index, designer_ids):
+    project, designer, phases = _get_project_details(db, project_id)
+    if not project:
+        return
+    config = get_slack_config(db)
+    if not config:
+        return
+    if not project.slack_channel_id:
+        return
+    stage_name = _get_current_stage_name(stage_index)
+    assigned_names = []
+    for did in designer_ids:
+        d = db.query(User).filter(User.id == did).first()
+        if d:
+            assigned_names.append(d.name)
+    names_text = ", ".join(assigned_names) if assigned_names else "Unassigned"
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"👥 Designers Assigned: {stage_name}",
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"📦 *Project:* {project.name}\n"
+                    f"🔄 *Stage:* {stage_name}\n"
+                    f"👤 *Assigned Designers:* {names_text}\n\n"
+                    f"The assigned designers have been added to this channel."
+                ),
+            },
+        },
+        {"type": "divider"},
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "📋 View Project"},
+                    "action_id": "view_project",
+                    "value": str(project.id),
+                },
+            ],
+        },
+    ]
+    await send_slack_notification(
+        db,
+        project_id,
+        f"👥 Designers assigned to {stage_name}: {project.name}",
+        blocks,
+        project.slack_channel_id,
+    )
 
 
 def _build_project_block(project, designer, phases):
@@ -3335,7 +3053,10 @@ async def create_slack_channel(
         db.commit()
         designer = db.query(User).filter(User.id == project.assigned_designer_id).first()
         designer_slack_id = designer.slack_user_id if designer else ""
-        await invite_users_to_channel(db, channel_id, [user.slack_user_id, designer_slack_id])
+        if user.role.upper() == "ADMIN":
+            await invite_users_to_channel(db, channel_id, [user.slack_user_id])
+        else:
+            await invite_users_to_channel(db, channel_id, [user.slack_user_id, designer_slack_id])
         logger.info(
             "[SLACK CHANNEL] Channel created successfully | project=%s | channel_id=%s | channel_name=%s",
             project.name,

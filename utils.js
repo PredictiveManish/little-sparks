@@ -61,10 +61,6 @@ function generateTime() {
     return now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
 }
 
-function formatWhatsAppText(text) {
-    return text.replace(/\*([^*]+)\*/g, '$1');
-}
-
 function showToast(message) {
     const toast = document.getElementById('toast');
     const toastMsg = document.getElementById('toastMessage');
