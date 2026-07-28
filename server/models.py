@@ -108,7 +108,7 @@ class SlackConfig(Base):
     __tablename__ = "slack_config"
 
     id = Column(Integer, primary_key=True, index=True)
-    bot_token = Column(String, nullable=False)
+    bot_token = Column(String, nullable=True)
     signing_secret = Column(String, nullable=False)
     slack_team_id = Column(String, default="")
     encrypted = Column(Boolean, default=False)
