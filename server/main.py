@@ -1172,7 +1172,7 @@ async def create_project(
     from fastapi import BackgroundTasks
 
     async def _notify():
-        async with SessionLocal() as bg_db:
+        with SessionLocal() as bg_db:
             try:
                 await notify_project_created(bg_db, project.id, user.slack_user_id, user.role.upper())
             except Exception:
@@ -1236,7 +1236,7 @@ async def update_project(
         current_stage = _get_current_stage_name(project.stage_index)
 
         async def _notify_update():
-            async with SessionLocal() as bg_db:
+            with SessionLocal() as bg_db:
                 try:
                     await notify_project_updated(bg_db, project_id)
                 except Exception:
@@ -1342,7 +1342,7 @@ async def complete_stage(
         )
 
     async def _notify_stage():
-        async with SessionLocal() as bg_db:
+        with SessionLocal() as bg_db:
             try:
                 await notify_stage_completed(bg_db, project_id, stage_index)
             except Exception:
@@ -1406,7 +1406,7 @@ async def unmark_stage(
     )
 
     async def _notify_unmark():
-        async with SessionLocal() as bg_db:
+        with SessionLocal() as bg_db:
             try:
                 await notify_stage_unmarked(bg_db, project_id, stage_index)
             except Exception:
@@ -1452,7 +1452,7 @@ async def assign_designers_to_phase(
             await invite_users_to_channel(db, project.slack_channel_id, slack_user_ids)
 
         async def _notify_assign():
-            async with SessionLocal() as bg_db:
+            with SessionLocal() as bg_db:
                 try:
                     await notify_designers_assigned(bg_db, project_id, stage_index, designer_ids)
                 except Exception:
