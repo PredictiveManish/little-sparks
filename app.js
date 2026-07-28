@@ -1099,23 +1099,31 @@ async function switchSlackMessagesProject() {
 async function fetchSlackMessages() {
     if (!selectedSlackProjectId) return;
     try {
-        const messages = await api.getSlackMessages(selectedSlackProjectId);
+        const data = await api.getSlackChannelHistory(selectedSlackProjectId);
         const feed = document.getElementById('slackMessagesFeed');
         if (!feed) return;
+        if (!data.has_channel) {
+            feed.innerHTML = '<p class="text-sm text-amber-500 text-center py-8">⚠️ This project is not connected to a Slack channel yet.</p>';
+            return;
+        }
+        if (data.error && (!data.messages || data.messages.length === 0)) {
+            feed.innerHTML = `<p class="text-sm text-red-500 text-center py-8">Failed to load Slack messages: ${data.error}</p>`;
+            return;
+        }
         const existingIds = new Set();
         feed.querySelectorAll('.slack-msg-bubble').forEach(el => {
             existingIds.add(el.dataset.msgId);
         });
-        const newMessages = messages.filter(m => !existingIds.has(String(m.id)));
-        if (newMessages.length > 0) {
-            newMessages.forEach(msg => {
-                const bubble = createSlackMessageBubble(msg);
-                bubble.classList.add('slack-msg-bubble');
-                bubble.dataset.msgId = msg.id;
-                feed.appendChild(bubble);
-            });
-            feed.scrollTop = feed.scrollHeight;
-        }
+        const newMessages = data.messages.filter(m => !existingIds.has(String(m.id)));
+        const allMessages = data.messages;
+        feed.innerHTML = '';
+        allMessages.forEach(msg => {
+            const bubble = createSlackMessageBubble(msg);
+            bubble.classList.add('slack-msg-bubble');
+            bubble.dataset.msgId = msg.id;
+            feed.appendChild(bubble);
+        });
+        feed.scrollTop = feed.scrollHeight;
     } catch (err) {
         // Silently fail for polling
     }
@@ -1124,9 +1132,13 @@ async function fetchSlackMessages() {
 function createSlackMessageBubble(msg) {
     const bubble = document.createElement('div');
     bubble.className = 'flex items-start gap-3 mb-3';
-    const avatarColor = msg.slack_user_id ? 'bg-blue-500' : 'bg-gray-400';
-    const displayName = msg.slack_user_name || 'Slack Bot';
+    const avatarColor = msg.is_bot ? 'bg-purple-500' : (msg.slack_user_id ? 'bg-blue-500' : 'bg-gray-400');
+    const displayName = msg.user_name || 'Slack User';
     const time = msg.ts ? new Date(parseInt(msg.ts) * 1000).toLocaleString() : msg.created_at || '';
+    const text = msg.text || '';
+    const cleanText = text.replace(/<@[^>]+>/g, (match) => {
+        return '@' + match.replace(/[<>@]/g, '');
+    });
     bubble.innerHTML = `
         <div class="flex-shrink-0 w-8 h-8 rounded-full ${avatarColor} flex items-center justify-center text-white text-xs font-bold">
             ${displayName.charAt(0).toUpperCase()}
@@ -1134,9 +1146,10 @@ function createSlackMessageBubble(msg) {
         <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
                 <span class="text-sm font-semibold text-gray-900">${displayName}</span>
+                ${msg.is_bot ? '<span class="text-xs text-purple-500 font-medium">Bot</span>' : ''}
                 <span class="text-xs text-gray-400">${time}</span>
             </div>
-            <p class="text-sm text-gray-700 mt-1 whitespace-pre-wrap break-words">${msg.text || ''}</p>
+            <p class="text-sm text-gray-700 mt-1 whitespace-pre-wrap break-words">${cleanText || ''}</p>
         </div>
     `;
     return bubble;

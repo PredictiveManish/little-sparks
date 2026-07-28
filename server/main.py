@@ -1178,6 +1178,8 @@ def create_project(
             except Exception:
                 pass
 
+    await _notify()
+
     return ProjectResponse(
         id=project.id,
         name=project.name,
@@ -1239,6 +1241,8 @@ def update_project(
                     await notify_project_updated(bg_db, project_id)
                 except Exception:
                     pass
+
+        await _notify_update()
     else:
         db.commit()
         db.refresh(project)
@@ -1344,6 +1348,8 @@ async def complete_stage(
             except Exception:
                 pass
 
+    await _notify_stage()
+
     return {"message": "Stage marked complete"}
 
 
@@ -1406,6 +1412,8 @@ async def unmark_stage(
             except Exception:
                 pass
 
+    await _notify_unmark()
+
     return {"message": "Stage unmarked"}
 
 
@@ -1443,12 +1451,14 @@ async def assign_designers_to_phase(
         if slack_user_ids:
             await invite_users_to_channel(db, project.slack_channel_id, slack_user_ids)
 
-            async def _notify_assign():
-                async with SessionLocal() as bg_db:
-                    try:
-                        await notify_designers_assigned(bg_db, project_id, stage_index, designer_ids)
-                    except Exception:
-                        pass
+        async def _notify_assign():
+            async with SessionLocal() as bg_db:
+                try:
+                    await notify_designers_assigned(bg_db, project_id, stage_index, designer_ids)
+                except Exception:
+                    pass
+
+        await _notify_assign()
 
     return {"message": "Designers assigned", "designer_ids": designer_ids}
 
@@ -1720,23 +1730,32 @@ async def notify_project_created(db, project_id, manager_slack_user_id="", user_
             return
     channel_id = project.slack_channel_id
     designer_name = designer.name if designer else "Unassigned"
+    manager_name = "Admin"
+    if user_role == "ADMIN" and manager_slack_user_id:
+        manager_name = "Admin"
     stage_list = ""
     for i, phase in enumerate(phases):
-        stage_list += f"  {i + 1}. {phase.deadline}\n"
+        stage_list += f"  {i + 1}. *{phase.deadline}*\n"
+    description_text = project.description if project.description else "No description provided."
     blocks = [
         {
             "type": "header",
-            "text": {"type": "plain_text", "text": f"📦 New Project: {project.name}"},
+            "text": {"type": "plain_text", "text": f"📦 New Project Created: {project.name}"},
         },
         {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
                 "text": (
+                    f"*Why this channel?*\n"
+                    f"This channel was created to coordinate work on *{project.name}*.\n"
+                    f"All project updates, stage completions, and designer assignments will be posted here.\n\n"
                     f"*Project Details*\n"
-                    f"👤 *Designer:* {designer_name}\n"
+                    f"📝 *Description:* {description_text}\n"
+                    f"👤 *Assigned Designer:* {designer_name}\n"
+                    f"👷 *Manager:* {manager_name}\n"
                     f"📅 *Start Date:* {project.start_date}\n"
-                    f"📅 *Deadline:* {project.deadline}\n"
+                    f"📅 *Expected Completion:* {project.deadline}\n"
                     f"⚡ *Priority:* {project.priority.upper()}\n"
                     f"📊 *Status:* {project.status.replace('_', ' ')}"
                 ),
@@ -1747,7 +1766,7 @@ async def notify_project_created(db, project_id, manager_slack_user_id="", user_
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*Workflow — {len(phases)} Stages*\n{stage_list}",
+                "text": f"*Workflow — {len(phases)} Stages*\n\n{stage_list}",
             },
         },
         {"type": "divider"},
@@ -2370,6 +2389,99 @@ def get_slack_messages(
         .all()
     )
     return [SlackMessageResponse.model_validate(m) for m in messages]
+
+
+@app.get(
+    "/api/projects/{project_id}/slack-channel-history",
+)
+async def get_slack_channel_history(
+    project_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not project.slack_channel_id:
+        return {"messages": [], "channel_id": "", "has_channel": False}
+    config = get_slack_config(db)
+    if not config:
+        return {"messages": [], "channel_id": project.slack_channel_id, "has_channel": True}
+    bot_token = (
+        decrypt_token(config.bot_token) if config.encrypted else config.bot_token
+    )
+    if not bot_token:
+        return {"messages": [], "channel_id": project.slack_channel_id, "has_channel": True}
+    headers = {
+        "Authorization": f"Bearer {bot_token}",
+        "Content-Type": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{SLACK_API_BASE}/conversations.history",
+                headers=headers,
+                json={"channel": project.slack_channel_id, "limit": 100},
+                timeout=10.0,
+            )
+            result = resp.json()
+            if not result.get("ok"):
+                logger.warning(
+                    "[SLACK HISTORY] Failed to fetch channel history | error=%s",
+                    result.get("error"),
+                )
+                return {
+                    "messages": [],
+                    "channel_id": project.slack_channel_id,
+                    "has_channel": True,
+                    "error": result.get("error"),
+                }
+            raw_messages = result.get("messages", [])
+            formatted = []
+            for msg in raw_messages:
+                user_name = ""
+                if msg.get("user"):
+                    user_resp = await client.post(
+                        f"{SLACK_API_BASE}/users.info",
+                        headers=headers,
+                        json={"user": msg["user"]},
+                        timeout=10.0,
+                    )
+                    user_data = user_resp.json()
+                    if user_data.get("ok"):
+                        user_name = user_data["user"]["profile"].get(
+                            "real_name", "Unknown"
+                        )
+                ts_float = float(msg["ts"])
+                ts_int = int(ts_float)
+                dt = datetime.fromtimestamp(ts_int)
+                time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+                formatted.append(
+                    {
+                        "id": msg.get("ts", ""),
+                        "user_id": msg.get("user", ""),
+                        "user_name": user_name or "Slack Bot",
+                        "text": msg.get("text", ""),
+                        "ts": msg.get("ts", ""),
+                        "created_at": time_str,
+                        "is_bot": msg.get("bot_id") is not None,
+                    }
+                )
+            return {
+                "messages": formatted,
+                "channel_id": project.slack_channel_id,
+                "has_channel": True,
+            }
+    except Exception as e:
+        logger.error(
+            "[SLACK HISTORY] Error fetching channel history | error=%s", e
+        )
+        return {
+            "messages": [],
+            "channel_id": project.slack_channel_id,
+            "has_channel": True,
+            "error": str(e),
+        }
 
 
 # ---------- Slack Webhook Endpoint ----------
