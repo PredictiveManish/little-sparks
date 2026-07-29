@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional
+from pydantic import BaseModel
 from jose import jwt
 from itsdangerous import Signer, BadSignature
 from cryptography.fernet import Fernet, InvalidToken
