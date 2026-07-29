@@ -376,8 +376,6 @@ def decrypt_token(encrypted: str) -> str:
 
 # ---------- Slack token refresh (token rotation support) ----------
 
-_slack_api_lock = threading.Lock()
-
 
 async def refresh_slack_token(db):
     """Exchange the stored refresh_token for a new access_token + refresh_token.
@@ -1155,6 +1153,8 @@ def get_projects(user: User = Depends(get_current_user), db: Session = Depends(g
                 status=p.status,
                 priority=p.priority,
                 manager_notes=p.manager_notes,
+                slack_channel_id=p.slack_channel_id or "",
+                slack_channel_name=p.slack_channel_name or "",
                 phases=[PhaseResponse.model_validate(ph) for ph in phases],
             )
         )
@@ -1188,6 +1188,8 @@ def get_project(
         status=project.status,
         priority=project.priority,
         manager_notes=project.manager_notes,
+        slack_channel_id=project.slack_channel_id or "",
+        slack_channel_name=project.slack_channel_name or "",
         phases=[PhaseResponse.model_validate(ph) for ph in phases],
     )
 
@@ -1309,6 +1311,12 @@ async def update_project(
     if data.manager_notes is not None and data.manager_notes != project.manager_notes:
         changes.append(f"Manager notes updated")
         project.manager_notes = data.manager_notes
+    if data.slack_channel_id is not None and data.slack_channel_id != project.slack_channel_id:
+        changes.append(f"Slack channel ID updated")
+        project.slack_channel_id = data.slack_channel_id
+    if data.slack_channel_name is not None and data.slack_channel_name != project.slack_channel_name:
+        changes.append(f"Slack channel name updated")
+        project.slack_channel_name = data.slack_channel_name
 
     if changes:
         db.commit()
@@ -1352,6 +1360,8 @@ async def update_project(
         status=project.status,
         priority=project.priority,
         manager_notes=project.manager_notes,
+        slack_channel_id=project.slack_channel_id or "",
+        slack_channel_name=project.slack_channel_name or "",
         phases=[PhaseResponse.model_validate(ph) for ph in phases],
     )
 
@@ -1814,6 +1824,35 @@ async def invite_users_to_channel(db, channel_id, slack_user_ids):
         "channel": channel_id,
         "users": ",".join(valid)
     })
+
+
+async def verify_channel(db, channel_id):
+    """Verify a Slack channel still exists and is not archived.
+    
+    Returns a dict with:
+        status: 'connected' | 'archived' | 'not_found' | 'unknown'
+        channel_name: str | None
+        error: str | None
+    """
+    if not channel_id:
+        return {"status": "not_found", "channel_name": None, "error": "No channel_id provided"}
+    
+    result = await slack_api_call(db, "conversations.info", {"channel": channel_id})
+    
+    if result is None:
+        return {"status": "unknown", "channel_name": None, "error": "Slack API unreachable"}
+    
+    if not result.get("ok"):
+        error_code = result.get("error", "")
+        if error_code in ("channel_not_found", "invalid_channel_id", "not_in_channel"):
+            return {"status": "not_found", "channel_name": None, "error": error_code}
+        return {"status": "unknown", "channel_name": None, "error": error_code}
+    
+    channel = result.get("channel", {})
+    if channel.get("is_archived"):
+        return {"status": "archived", "channel_name": channel.get("name"), "error": "Channel is archived"}
+    
+    return {"status": "connected", "channel_name": channel.get("name"), "error": None}
 
 
 async def send_slack_notification(db, project_id, text, blocks=None, channel_id=None):
@@ -2495,7 +2534,7 @@ async def slack_install_callback(
     return response
 
 
-@app.get("/api/slack/status")
+@app.get("/api/slack/status", response_model=SlackStatusResponse)
 def get_slack_connection_status(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -2503,16 +2542,16 @@ def get_slack_connection_status(
     """Returns the overall Slack connection health status including token expiry info."""
     config = get_slack_config(db)
     if not config:
-        return {
-            "configured": False,
-            "channel_id": "",
-            "channel_name": "",
-            "bot_token_set": False,
-            "refresh_token_set": False,
-            "token_expires_at": None,
-            "token_expiring_soon": False,
-            "connection_health": "not_configured",
-        }
+        return SlackStatusResponse(
+            configured=False,
+            channel_id="",
+            channel_name="",
+            bot_token_set=False,
+            refresh_token_set=False,
+            token_expires_at=None,
+            token_expiring_soon=False,
+            connection_health="not_configured",
+        )
 
     bot_token_set = bool(config.bot_token)
     refresh_token_set = bool(config.refresh_token)
@@ -2534,16 +2573,16 @@ def get_slack_connection_status(
         # Has bot_token but no refresh_token — rotation likely not enabled, token shouldn't expire
         health = "healthy_no_rotation"
 
-    return {
-        "configured": True,
-        "channel_id": "",
-        "channel_name": "",
-        "bot_token_set": bot_token_set,
-        "refresh_token_set": refresh_token_set,
-        "token_expires_at": token_expires_at.strftime("%Y-%m-%d %H:%M:%S") if token_expires_at else None,
-        "token_expiring_soon": _is_token_expiring_soon(token_expires_at) if token_expires_at else False,
-        "connection_health": health,
-    }
+    return SlackStatusResponse(
+        configured=True,
+        channel_id="",
+        channel_name="",
+        bot_token_set=bot_token_set,
+        refresh_token_set=refresh_token_set,
+        token_expires_at=token_expires_at.strftime("%Y-%m-%d %H:%M:%S") if token_expires_at else None,
+        token_expiring_soon=_is_token_expiring_soon(token_expires_at) if token_expires_at else False,
+        connection_health=health,
+    )
 
 
 @app.post("/api/slack/status")
@@ -3453,6 +3492,69 @@ def get_slack_activity(
     )
     return [SlackActivityResponse.model_validate(a) for a in activities]
 
+
+
+
+# ---------- Slack Channel Status ----------
+
+
+class ProjectSlackStatus(BaseModel):
+    project_id: int
+    project_name: str
+    slack_channel_id: str
+    slack_channel_name: str
+    status: str  # 'connected' | 'archived' | 'not_found' | 'unknown'
+    error: str = ""
+
+
+class SlackChannelStatusBatchResponse(BaseModel):
+    statuses: List[ProjectSlackStatus]
+    corrected: List[ProjectSlackStatus] = []
+
+
+@app.get(
+    "/api/projects/slack-channel-status",
+    response_model=SlackChannelStatusBatchResponse,
+)
+async def get_slack_channel_status(
+    auto_correct: bool = False,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Batch endpoint to check real Slack channel status for all projects.
+
+    If auto_correct=True, clears slack_channel_id/name for projects where
+    Slack reports the channel is missing or archived.
+    """
+    config = get_slack_config(db)
+    projects = db.query(Project).filter(
+        Project.slack_channel_id != ""
+    ).all()
+
+    statuses = []
+    corrected = []
+
+    for project in projects:
+        result = await verify_channel(db, project.slack_channel_id)
+        status = ProjectSlackStatus(
+            project_id=project.id,
+            project_name=project.name,
+            slack_channel_id=project.slack_channel_id,
+            slack_channel_name=project.slack_channel_name,
+            status=result["status"],
+            error=result["error"] or "",
+        )
+        statuses.append(status)
+
+        if auto_correct and result["status"] in ("not_found", "archived"):
+            project.slack_channel_id = ""
+            project.slack_channel_name = ""
+            corrected.append(status)
+
+    if corrected:
+        db.commit()
+
+    return SlackChannelStatusBatchResponse(statuses=statuses, corrected=corrected)
 
 # ---------- Startup ----------
 

@@ -1221,27 +1221,65 @@ async function populateSlackChannels() {
             container.innerHTML = '<p class="text-sm text-gray-500">No projects found. Create a project first to get a Slack channel.</p>';
             return;
         }
+
+        let channelStatuses = [];
+        try {
+            const statusResult = await api.getSlackChannelStatus(false);
+            channelStatuses = (statusResult && statusResult.statuses) ? statusResult.statuses : [];
+        } catch (statusErr) {
+            console.warn('[SLACK] Failed to fetch channel status:', statusErr.message);
+        }
+
+        const statusMap = {};
+        channelStatuses.forEach(s => {
+            statusMap[s.project_id] = s;
+        });
+
         let html = '';
         projects.forEach(p => {
+            const statusInfo = statusMap[p.id];
             const hasChannel = p.slack_channel_id || false;
+            
+            let statusBadge = '';
+            let actionButton = '';
+
+            if (!hasChannel) {
+                statusBadge = '<span class="text-gray-400">Not connected</span>';
+                actionButton = `<button onclick="createSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors ml-3">
+                    Create Channel
+                   </button>`;
+            } else if (statusInfo && statusInfo.status === 'connected') {
+                statusBadge = `<span class="text-green-600">✅ Connected to #${p.slack_channel_name || statusInfo.slack_channel_name || 'channel'}</span>`;
+                actionButton = `<button onclick="disconnectSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors ml-3 border border-red-200">
+                    Disconnect
+                   </button>`;
+            } else if (statusInfo && (statusInfo.status === 'not_found' || statusInfo.status === 'archived')) {
+                const reason = statusInfo.status === 'archived' ? 'Channel archived in Slack' : 'Channel not found in Slack';
+                statusBadge = `<span class="text-amber-600">⚠️ ${reason}</span>`;
+                actionButton = `<button onclick="reconnectSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600 transition-colors ml-3">
+                    Recreate Channel
+                   </button>`;
+            } else if (statusInfo && statusInfo.status === 'unknown') {
+                statusBadge = `<span class="text-gray-500">⏳ Status unknown (${statusInfo.error || 'Slack unreachable'})</span>`;
+                actionButton = `<button onclick="reconnectSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors ml-3">
+                    Recreate Channel
+                   </button>`;
+            } else {
+                statusBadge = `<span class="text-green-600">✅ Connected to #${p.slack_channel_name || 'channel'}</span>`;
+                actionButton = `<button onclick="disconnectSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors ml-3 border border-red-200">
+                    Disconnect
+                   </button>`;
+            }
+
             html += `
                 <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
                     <div class="flex-1 min-w-0">
                         <p class="text-sm font-semibold text-gray-900">${p.name}</p>
                         <p class="text-xs text-gray-500 mt-0.5">
-                            ${hasChannel
-                                ? `<span class="text-green-600">✅ Connected to #${p.slack_channel_name || 'channel'}</span>`
-                                : '<span class="text-gray-400">Not connected</span>'}
+                            ${statusBadge}
                         </p>
                     </div>
-                    ${!hasChannel
-                        ? `<button onclick="createSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors ml-3">
-                            Create Channel
-                           </button>`
-                        : `<button onclick="disconnectSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors ml-3 border border-red-200">
-                            Disconnect
-                           </button>`
-                    }
+                    ${actionButton}
                 </div>
             `;
         });
@@ -1275,12 +1313,32 @@ async function createSlackChannel(projectId, btn) {
 
 async function disconnectSlackChannel(projectId, btn) {
     if (!confirm('Disconnect this project from Slack? Notifications will stop.')) return;
-    const project = await api.getProject(projectId);
-    project.slack_channel_id = '';
-    project.slack_channel_name = '';
-    await api.updateProject(projectId, {});
+    await api.updateProject(projectId, { slack_channel_id: '', slack_channel_name: '' });
     showToast('Disconnected from Slack');
     await populateSlackChannels();
+}
+
+async function reconnectSlackChannel(projectId, btn) {
+    if (!slackConfigured) {
+        showToast('Please configure Slack credentials first');
+        return;
+    }
+    if (!confirm('The Slack channel for this project is missing or archived. Recreate it now?')) return;
+    btn.disabled = true;
+    btn.textContent = 'Recreating...';
+    try {
+        const result = await api.createSlackChannel(projectId);
+        if (result.success) {
+            showToast('Slack channel recreated!');
+            await populateSlackChannels();
+        } else {
+            showToast('Failed: ' + result.message);
+        }
+    } catch (err) {
+        showToast('Failed: ' + err.message);
+    }
+    btn.disabled = false;
+    btn.textContent = 'Recreate Channel';
 }
 
 function copyWebhookUrl() {

@@ -109,6 +109,8 @@ class ProjectUpdate(BaseModel):
     priority: Optional[str] = None
     deadline: Optional[str] = None
     manager_notes: Optional[str] = None
+    slack_channel_id: Optional[str] = None
+    slack_channel_name: Optional[str] = None
 
 
 class ProjectResponse(BaseModel):
@@ -123,6 +125,8 @@ class ProjectResponse(BaseModel):
     status: str
     priority: str
     manager_notes: str
+    slack_channel_id: str = ""
+    slack_channel_name: str = ""
     phases: List[PhaseResponse] = []
 
     class Config:
@@ -217,12 +221,6 @@ class SlackChannelCreateResponse(BaseModel):
     channel_name: str
     success: bool
     message: str = ""
-
-
-class SlackStatusResponse(BaseModel):
-    configured: bool
-    channel_id: str = ""
-    channel_name: str = ""
 
 
 class SlackMessageResponse(BaseModel):

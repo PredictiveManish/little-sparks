@@ -93,5 +93,6 @@ const api = {
     logSlackMessage: (data) => apiFetch('/slack/messages/log', { method: 'POST', body: data }),
     getSlackMessages: (projectId) => apiFetch(`/projects/${projectId}/slack-messages`),
     getSlackChannelHistory: (projectId) => apiFetch(`/projects/${projectId}/slack-channel-history`),
+    getSlackChannelStatus: (autoCorrect) => apiFetch(`/projects/slack-channel-status?auto_correct=${autoCorrect || false}`),
     assignStageDesigners: (projectId, stageIndex, designerIds) => apiFetch(`/projects/${projectId}/phases/${stageIndex}/assign-designers`, { method: 'POST', body: { designer_ids: designerIds } }),
 };
