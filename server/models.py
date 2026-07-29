@@ -33,7 +33,7 @@ class User(Base):
         DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
     )
 
-    projects = relationship("Project", back_populates="designer")
+    projects = relationship("Project", back_populates="designer", foreign_keys="Project.assigned_designer_id")
 
 
 class Project(Base):
