@@ -177,11 +177,24 @@ class SlackConfigResponse(BaseModel):
     signing_secret: str
     slack_team_id: str
     encrypted: bool
+    refresh_token: Optional[str] = None
+    token_expires_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+
+class SlackStatusResponse(BaseModel):
+    configured: bool
+    channel_id: str = ""
+    channel_name: str = ""
+    bot_token_set: bool = False
+    refresh_token_set: bool = False
+    token_expires_at: Optional[datetime] = None
+    token_expiring_soon: bool = False
+    connection_health: str = "unknown"
 
 
 class SlackActivityResponse(BaseModel):

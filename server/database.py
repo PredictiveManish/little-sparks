@@ -64,12 +64,47 @@ def init_wal_mode():
         logger.debug("Skipping WAL mode (not SQLite)")
 
 
+def _migrate_slack_config_columns():
+    """Add refresh_token and token_expires_at columns to slack_config if missing.
+    Safe to run on every startup — no-op if columns already exist."""
+    if "sqlite" not in DATABASE_URL:
+        logger.debug("Skipping SlackConfig migration (not SQLite)")
+        return
+    try:
+        with engine.connect() as conn:
+            # Read the raw CREATE TABLE statement from SQLite's internal schema
+            result = conn.execute(
+                text(
+                    "SELECT sql FROM sqlite_master "
+                    "WHERE type='table' AND name='slack_config'"
+                )
+            )
+            row = result.fetchone()
+            if not row or not row[0]:
+                logger.warning("slack_config table not found; will be created by create_all")
+                return
+            create_sql = row[0]
+            if "refresh_token" not in create_sql:
+                logger.info("Adding refresh_token column to slack_config")
+                conn.execute(text("ALTER TABLE slack_config ADD COLUMN refresh_token TEXT"))
+                conn.commit()
+            if "token_expires_at" not in create_sql:
+                logger.info("Adding token_expires_at column to slack_config")
+                conn.execute(text("ALTER TABLE slack_config ADD COLUMN token_expires_at DATETIME"))
+                conn.commit()
+        logger.info("SlackConfig migration check completed successfully")
+    except Exception as e:
+        # Column might already exist (SQLite returns error on duplicate ADD COLUMN)
+        logger.warning("SlackConfig migration encountered issue (likely no-op): %s", e)
+
+
 def init_db():
-    """Initialize database tables and WAL mode."""
+    """Initialize database tables, run migrations, and WAL mode."""
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables initialized successfully")
     except Exception as e:
         logger.error("Failed to initialize database tables: %s", e)
         raise
+    _migrate_slack_config_columns()
     init_wal_mode()

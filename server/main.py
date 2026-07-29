@@ -10,7 +10,6 @@ from itsdangerous import Signer, BadSignature
 from cryptography.fernet import Fernet, InvalidToken
 import argon2
 import hashlib
-import re
 import hmac
 import hashlib as hashlib_lib
 import base64
@@ -22,6 +21,8 @@ import logging
 from logging.handlers import RotatingFileHandler
 import sys
 import traceback
+
+import threading
 
 # ---------- Structured logging setup ----------
 logging.basicConfig(
@@ -356,6 +357,7 @@ def clear_session_cookie(response: Response):
 
 # ---------- Slack token encryption ----------
 
+_slack_api_lock = threading.Lock()
 
 def encrypt_token(plaintext: str) -> str:
     return fernet.encrypt(plaintext.encode()).decode()
@@ -370,6 +372,90 @@ def decrypt_token(encrypted: str) -> str:
             encrypted[:20] if encrypted else "None",
         )
         return None
+
+
+# ---------- Slack token refresh (token rotation support) ----------
+
+_slack_api_lock = threading.Lock()
+
+
+async def refresh_slack_token(db):
+    """Exchange the stored refresh_token for a new access_token + refresh_token.
+    Returns (success: bool, error_message: str or None)."""
+    config = get_slack_config(db)
+    if not config:
+        return False, "No Slack configuration found"
+    if not config.refresh_token:
+        return False, "No refresh_token stored — token rotation may not be enabled on your Slack app"
+    try:
+        decrypted_refresh = decrypt_token(config.refresh_token)
+        if not decrypted_refresh:
+            return False, "Failed to decrypt refresh_token"
+    except Exception as e:
+        return False, f"Failed to decrypt refresh_token: {e}"
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://slack.com/api/oauth.v2.access",
+                data={
+                    "client_id": SLACK_CLIENT_ID,
+                    "client_secret": SLACK_CLIENT_SECRET,
+                    "grant_type": "refresh_token",
+                    "refresh_token": decrypted_refresh,
+                },
+                timeout=10.0,
+            )
+            result = resp.json()
+        if not result.get("ok"):
+            error = result.get("error", "unknown")
+            logger.error(
+                "[SLACK REFRESH] Token refresh failed | error=%s | response=%s",
+                error,
+                json.dumps(result)[:500],
+            )
+            return False, f"Token refresh failed: {error}"
+        new_bot_token = result.get("access_token", "")
+        new_refresh_token = result.get("refresh_token", "")
+        expires_in = result.get("expires_in", 0)
+        team_id = result.get("team", {}).get("id", "")
+        with _slack_api_lock:
+            config.bot_token = encrypt_token(new_bot_token)
+            config.slack_team_id = team_id or config.slack_team_id
+            if new_refresh_token:
+                config.refresh_token = encrypt_token(new_refresh_token)
+            if expires_in:
+                config.token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+            db.commit()
+        logger.info(
+            "[SLACK REFRESH] Token refreshed successfully | team_id=%s | new_token=%s... | expires_in=%ss",
+            team_id,
+            new_bot_token[:10] if new_bot_token else "None",
+            expires_in,
+        )
+        return True, None
+    except Exception as e:
+        logger.error("[SLACK REFRESH] Unexpected error during token refresh | error=%s", e)
+        return False, str(e)
+
+
+def _is_token_expiring_soon(token_expires_at):
+    """Check if the token is expiring within 10 minutes."""
+    if not token_expires_at:
+        return False
+    if isinstance(token_expires_at, str):
+        try:
+            token_expires_at = datetime.strptime(token_expires_at, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return False
+    now = datetime.utcnow()
+    return (token_expires_at - now) < timedelta(minutes=10)
+
+
+def _should_proactively_refresh(config):
+    """Determine if we should proactively refresh before making an API call."""
+    if not config.token_expires_at:
+        return False
+    return _is_token_expiring_soon(config.token_expires_at)
 
 
 # ---------- Slack OIDC ----------
@@ -1609,6 +1695,19 @@ async def slack_api_call(db, endpoint, data=None):
     if not config:
         logger.warning("[SLACK API] No Slack config found | endpoint=%s", endpoint)
         return None
+
+    # Proactively refresh if token is expiring soon
+    if _should_proactively_refresh(config):
+        logger.info(
+            "[SLACK API] Proactively refreshing token before %s call", endpoint
+        )
+        success, err = await refresh_slack_token(db)
+        if not success:
+            logger.warning(
+                "[SLACK API] Proactive refresh failed: %s | proceeding with existing token",
+                err,
+            )
+
     bot_token = (
         decrypt_token(config.bot_token) if config.encrypted else config.bot_token
     )
@@ -1645,13 +1744,52 @@ async def slack_api_call(db, endpoint, data=None):
             )
             result = response.json()
             if not result.get("ok"):
+                error_code = result.get("error", "")
                 logger.warning(
                     "[SLACK API] %s returned error | status=%s | error=%s | response=%s",
                     endpoint,
                     response.status_code,
-                    result.get("error"),
+                    error_code,
                     json.dumps(result)[:500],
                 )
+                # Retry once with token refresh for auth-related errors
+                if error_code in ("invalid_auth", "token_expired", "account_inactive"):
+                    logger.info(
+                        "[SLACK API] Auth error detected (%s), attempting token refresh and retry",
+                        error_code,
+                    )
+                    with _slack_api_lock:
+                        success, err = await refresh_slack_token(db)
+                    if success:
+                        # Retry with new token
+                        new_token = decrypt_token(config.bot_token) if config.encrypted else config.bot_token
+                        if new_token:
+                            headers["Authorization"] = f"Bearer {new_token}"
+                            async with httpx.AsyncClient() as retry_client:
+                                retry_resp = await retry_client.post(
+                                    f"{SLACK_API_BASE}/{endpoint}",
+                                    headers=headers,
+                                    json=data or {},
+                                    timeout=10.0,
+                                )
+                                retry_result = retry_resp.json()
+                                if retry_result.get("ok"):
+                                    logger.info(
+                                        "[SLACK API] Retry after token refresh succeeded for %s",
+                                        endpoint,
+                                    )
+                                    return retry_result
+                                else:
+                                    logger.error(
+                                        "[SLACK API] Retry still failed after token refresh | error=%s",
+                                        retry_result.get("error"),
+                                    )
+                    else:
+                        logger.error(
+                            "[SLACK API] Token refresh failed: %s | cannot retry",
+                            err,
+                        )
+                return result
             return result
     except httpx.HTTPStatusError as e:
         logger.error(
@@ -2280,10 +2418,14 @@ async def slack_install_callback(
 
     bot_token = result.get("access_token", "")
     team_id = result.get("team", {}).get("id", "")
+    refresh_token = result.get("refresh_token", "")
+    expires_in = result.get("expires_in", 0)
     logger.info(
-        "[SLACK INSTALL] oauth.v2.access success | team_id=%s | access_token=%s...",
+        "[SLACK INSTALL] oauth.v2.access success | team_id=%s | access_token=%s... | has_refresh_token=%s | expires_in=%s",
         team_id,
         bot_token[:10] if bot_token else "None",
+        bool(refresh_token),
+        expires_in,
     )
 
     config = get_slack_config(db)
@@ -2297,6 +2439,16 @@ async def slack_install_callback(
         config.bot_token = encrypted_token
         config.slack_team_id = team_id
         config.encrypted = True
+        if refresh_token:
+            config.refresh_token = encrypt_token(refresh_token)
+            logger.info(
+                "[SLACK INSTALL] Stored refresh_token (token rotation enabled)"
+            )
+        if expires_in:
+            config.token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+            logger.info(
+                "[SLACK INSTALL] Token expires at: %s", config.token_expires_at
+            )
         # Signing secret is app-level (from Basic Information), not returned by oauth.v2.access.
         # Only set it if it hasn't been configured yet and we have one from env.
         if not config.signing_secret and SLACK_SIGNING_SECRET:
@@ -2317,6 +2469,16 @@ async def slack_install_callback(
             slack_team_id=team_id,
             encrypted=True,
         )
+        if refresh_token:
+            config.refresh_token = encrypt_token(refresh_token)
+            logger.info(
+                "[SLACK INSTALL] Stored refresh_token (token rotation enabled)"
+            )
+        if expires_in:
+            config.token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+            logger.info(
+                "[SLACK INSTALL] Token expires at: %s", config.token_expires_at
+            )
         db.add(config)
         db.commit()
         db.refresh(config)
@@ -2331,6 +2493,57 @@ async def slack_install_callback(
     )
     response.delete_cookie(key=INSTALL_STATE_COOKIE, path="/api/slack/install/callback")
     return response
+
+
+@app.get("/api/slack/status")
+def get_slack_connection_status(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Returns the overall Slack connection health status including token expiry info."""
+    config = get_slack_config(db)
+    if not config:
+        return {
+            "configured": False,
+            "channel_id": "",
+            "channel_name": "",
+            "bot_token_set": False,
+            "refresh_token_set": False,
+            "token_expires_at": None,
+            "token_expiring_soon": False,
+            "connection_health": "not_configured",
+        }
+
+    bot_token_set = bool(config.bot_token)
+    refresh_token_set = bool(config.refresh_token)
+    token_expires_at = config.token_expires_at
+
+    # Determine connection health
+    if not bot_token_set:
+        health = "no_token"
+    elif refresh_token_set:
+        if token_expires_at:
+            if _is_token_expiring_soon(token_expires_at):
+                health = "expiring_soon"
+            else:
+                health = "healthy"
+        else:
+            # Has refresh_token but no expiry — rotation may be enabled but we didn't capture expiry
+            health = "healthy"
+    else:
+        # Has bot_token but no refresh_token — rotation likely not enabled, token shouldn't expire
+        health = "healthy_no_rotation"
+
+    return {
+        "configured": True,
+        "channel_id": "",
+        "channel_name": "",
+        "bot_token_set": bot_token_set,
+        "refresh_token_set": refresh_token_set,
+        "token_expires_at": token_expires_at.strftime("%Y-%m-%d %H:%M:%S") if token_expires_at else None,
+        "token_expiring_soon": _is_token_expiring_soon(token_expires_at) if token_expires_at else False,
+        "connection_health": health,
+    }
 
 
 @app.post("/api/slack/status")

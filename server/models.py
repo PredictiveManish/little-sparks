@@ -96,6 +96,8 @@ class SlackConfig(Base):
     signing_secret = Column(String, nullable=False)
     slack_team_id = Column(String, default="")
     encrypted = Column(Boolean, default=False)
+    refresh_token = Column(String, nullable=True)
+    token_expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(
         DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
