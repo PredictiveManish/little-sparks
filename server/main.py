@@ -1613,21 +1613,27 @@ def create_designer(
 @app.delete("/api/designers/{designer_id}")
 def delete_designer(
     designer_id: int,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.id == designer_id).first()
-    if not user:
+    designer = db.query(User).filter(User.id == designer_id).first()
+    if not designer:
         raise HTTPException(status_code=404, detail="Designer not found")
 
-    db.query(Project).filter(Project.assigned_designer_id == designer_id).update(
-        {"assigned_designer_id": None}
-    )
-    db.query(Phase).delete()
+    projects = db.query(Project).filter(
+        Project.assigned_designer_id == designer_id
+    ).all()
+    if projects:
+        project_names = [p.name for p in projects]
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete designer. Reassign projects first: {', '.join(project_names)}",
+        )
 
-    db.delete(user)
+    db.delete(designer)
     db.commit()
     return {"message": "Designer removed"}
+
 
 
 # ---------- Slack Integration ----------
@@ -3428,15 +3434,30 @@ async def create_slack_channel(
             success=False,
             message="Slack not configured",
         )
-    channel_name = f"project-{project.name.lower().replace(' ', '-')}"
-    logger.info(
-        "[SLACK CHANNEL] Creating Slack channel | project=%s | channel_name=%s",
-        project.name,
-        channel_name,
-    )
-    result = await slack_api_call(
-        db, "conversations.create", {"name": channel_name, "is_private": False}
-    )
+    base_channel_name = f"project-{project.name.lower().replace(' ', '-')}"
+    channel_name = base_channel_name
+    result = None
+    max_attempts = 5
+    for attempt in range(max_attempts):
+        if attempt > 0:
+            channel_name = f"{base_channel_name}-{attempt}"
+        logger.info(
+            "[SLACK CHANNEL] Creating Slack channel | project=%s | channel_name=%s",
+            project.name,
+            channel_name,
+        )
+        result = await slack_api_call(
+            db, "conversations.create", {"name": channel_name, "is_private": False}
+        )
+        if result and result.get("ok"):
+            break
+        error_code = result.get("error", "") if result else ""
+        if error_code != "name_taken":
+            break
+        logger.info(
+            "[SLACK CHANNEL] Channel name taken, trying next | project=%s | attempt=%s",
+            project.name, attempt,
+        )
     if result and result.get("ok"):
         channel_id = result["channel"]["id"]
         project.slack_channel_id = channel_id
