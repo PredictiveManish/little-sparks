@@ -365,6 +365,7 @@ function navigateTo(view, projectId = null) {
     if (view === 'create-project') resetCreateProjectForm();
     if (view === 'dashboard') loadDashboard();
     if (view === 'slack-messages') loadSlackMessages();
+    if (view === 'slack-messages') loadSlackSettings();
 
     // Attach date change listeners for phase deadlines
     const startDateInputs = document.querySelectorAll('#page-create-project form input[type="date"]');
