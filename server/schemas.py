@@ -101,6 +101,7 @@ class ProjectCreate(BaseModel):
     priority: str = "MEDIUM"
     manager_notes: str = ""
     phases: List[PhaseCreate]
+    created_by_user_id: int = 0
 
 
 class ProjectUpdate(BaseModel):
@@ -118,6 +119,7 @@ class ProjectResponse(BaseModel):
     name: str
     description: str
     assigned_designer_id: int
+    created_by_user_id: int
     stage_index: int
     progress: int
     deadline: str

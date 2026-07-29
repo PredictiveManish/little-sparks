@@ -43,6 +43,7 @@ class Project(Base):
     name = Column(String, nullable=False)
     description = Column(Text, default="")
     assigned_designer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     stage_index = Column(Integer, default=0)
     progress = Column(Integer, default=0)
     deadline = Column(String, nullable=False)

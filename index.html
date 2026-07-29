@@ -115,6 +115,41 @@
     </div>
 
     <!-- ============================================ -->
+    <!-- DESIGNER LANDING PAGE -->
+    <!-- ============================================ -->
+    <div id="designerLandingPage" class="hidden min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-brand-50 via-white to-amber-50">
+        <div class="w-full max-w-lg text-center">
+            <div class="w-20 h-20 bg-brand-500 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-xl">
+                <span class="text-white font-extrabold text-3xl leading-none">S</span>
+            </div>
+            <h1 class="text-3xl font-bold text-gray-900 mb-2">Welcome to Smartivity, <span id="designerLandingName"></span>!</h1>
+            <p class="text-lg text-gray-500 mb-8">Your account has been approved. You're now part of the team.</p>
+            
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 mb-8">
+                <div id="designerQuoteContainer" class="mb-6">
+                    <svg class="w-8 h-8 text-brand-400 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z"/>
+                    </svg>
+                    <p id="designerQuoteText" class="text-lg font-medium text-gray-700 italic leading-relaxed"></p>
+                    <p id="designerQuoteAuthor" class="text-sm text-gray-400 mt-2"></p>
+                </div>
+                <div class="border-t border-gray-100 pt-5">
+                    <p class="text-sm text-gray-500 mb-4">You'll manage all your project updates through Slack. Check your workspace for project channels and start collaborating.</p>
+                    <button onclick="continueWithSlack()" id="continueWithSlackBtn"
+                        class="w-full flex items-center justify-center gap-3 px-6 py-3.5 bg-[#4A1547] hover:bg-[#3a1138] text-white rounded-xl font-medium transition-colors shadow-sm">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M5.042 15.165a2.528 2.528 0 1 0 0 5.056 2.528 2.528 0 0 0-2.528-2.528zM12.23 5.042a2.528 2.528 0 1 0 0 5.057 2.528 2.528 0 0 0-2.528-2.528zM16.808 10.07a2.528 2.528 0 1 0 0 5.057 2.528 2.528 0 0 0-2.528-2.528zM10.072 16.808a2.528 2.528 0 1 0 0 5.056 2.528 2.528 0 0 0-2.528-2.528z"/>
+                        </svg>
+                        Continue with Slack
+                    </button>
+                </div>
+            </div>
+            
+            <p class="text-xs text-gray-400">All the best — keep working hard and building a better future! 🚀</p>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
     <!-- ADMIN APPROVAL SCREEN -->
     <!-- ============================================ -->
     <div id="adminPage" class="hidden min-h-screen flex items-center justify-center p-4">

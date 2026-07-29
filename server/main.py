@@ -333,6 +333,29 @@ def require_role(required: List[str]):
     return _dep
 
 
+def get_user_owned_project_query(db, user):
+    """Return a Project query filtered to user's own projects if manager.
+    
+    Admins get all projects. Managers get only projects they created.
+    """
+    q = db.query(Project)
+    if user.role.upper() == "MANAGER":
+        q = q.filter(Project.created_by_user_id == user.id)
+    return q
+
+
+def filter_user_projects(db, user, project_ids):
+    """Filter a list of project IDs to only those the user is allowed to see."""
+    if user.role.upper() == "ADMIN":
+        return project_ids
+    # Manager: only their own projects
+    owned = db.query(Project.id).filter(
+        Project.created_by_user_id == user.id,
+        Project.id.in_(project_ids)
+    ).all()
+    return [p[0] for p in owned]
+
+
 # ---------- Cookie helpers ----------
 
 
@@ -1067,7 +1090,7 @@ def get_pending_users(
 def dashboard_stats(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    projects = db.query(Project).all()
+    projects = get_user_owned_project_query(db, user).all()
     today = datetime.now().strftime("%Y-%m-%d")
     return DashboardStats(
         active_projects=len(projects),
@@ -1081,7 +1104,7 @@ def dashboard_stats(
 def recent_projects(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    projects = db.query(Project).order_by(Project.created_at.desc()).limit(5).all()
+    projects = get_user_owned_project_query(db, user).order_by(Project.created_at.desc()).limit(5).all()
     result = []
     for p in projects:
         designer = db.query(User).filter(User.id == p.assigned_designer_id).first()
@@ -1103,7 +1126,7 @@ def upcoming_deadlines(
 ):
     today = datetime.now().strftime("%Y-%m-%d")
     projects = (
-        db.query(Project)
+        get_user_owned_project_query(db, user)
         .filter(Project.deadline >= today)
         .order_by(Project.deadline.asc())
         .limit(5)
@@ -1132,7 +1155,7 @@ def upcoming_deadlines(
 
 @app.get("/api/projects", response_model=List[ProjectResponse])
 def get_projects(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    projects = db.query(Project).all()
+    projects = get_user_owned_project_query(db, user).all()
     result = []
     for p in projects:
         phases = (
@@ -1171,6 +1194,8 @@ def get_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only access your own projects")
     phases = (
         db.query(Phase)
         .filter(Phase.project_id == project_id)
@@ -1232,6 +1257,7 @@ async def create_project(
         name=data.name,
         description=data.description,
         assigned_designer_id=data.assigned_designer_id,
+        created_by_user_id=user.id,
         start_date=data.start_date,
         deadline=data.deadline,
         priority=data.priority,
@@ -1295,6 +1321,8 @@ async def update_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only modify your own projects")
 
     changes = []
     if data.name is not None and data.name != project.name:
@@ -1377,6 +1405,8 @@ async def complete_stage(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only modify your own projects")
 
     phases = (
         db.query(Phase)
@@ -1616,6 +1646,8 @@ def delete_designer(
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot delete other designers")
     designer = db.query(User).filter(User.id == designer_id).first()
     if not designer:
         raise HTTPException(status_code=404, detail="Designer not found")
@@ -2315,6 +2347,8 @@ def _build_project_card(project, designer, phases):
 def get_slack_config_endpoint(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot access Slack configuration")
     config = get_slack_config(db)
     if not config:
         raise HTTPException(status_code=404, detail="Slack not configured")
@@ -3423,6 +3457,14 @@ async def create_slack_channel(
         return SlackChannelCreateResponse(
             channel_id="", channel_name="", success=False, message="Project not found"
         )
+    if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
+        return SlackChannelCreateResponse(
+            channel_id="", channel_name="", success=False, message="You can only manage Slack channels for your own projects"
+        )
+    if user.role.upper() == "DESIGNER":
+        return SlackChannelCreateResponse(
+            channel_id="", channel_name="", success=False, message="Designers cannot manage Slack channels"
+        )
     config = get_slack_config(db)
     if not config:
         logger.warning(
@@ -3505,6 +3547,13 @@ def get_slack_activity(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only view Slack activity for your own projects")
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot view Slack activity via dashboard")
     activities = (
         db.query(SlackActivity)
         .filter(SlackActivity.project_id == project_id)

@@ -32,6 +32,10 @@ async function checkAuth() {
                 console.log('[APP] checkAuth: User role is ADMIN, showing admin page');
                 showPage('adminPage');
                 loadPendingUsers();
+            } else if (user.role === 'DESIGNER') {
+                console.log('[APP] checkAuth: User role is DESIGNER, showing designer landing page');
+                showPage('designerLandingPage');
+                showDesignerLanding(user);
             } else {
                 console.log('[APP] checkAuth: User authenticated, showing main app');
                 showPage('mainApp');
@@ -48,7 +52,7 @@ async function checkAuth() {
 }
 
 function showPage(pageId, { updateUrl = true } = {}) {
-    ['loginPage', 'pendingPage', 'adminPage', 'mainApp'].forEach(id => {
+    ['loginPage', 'pendingPage', 'designerLandingPage', 'adminPage', 'mainApp'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             if (id === pageId) {
@@ -1351,6 +1355,94 @@ function copyWebhookUrl() {
 }
 
 // ============================================
+// DESIGNER LANDING PAGE
+// ============================================
+const DESIGNER_QUOTES = [
+    {
+        text: "Every great product starts with a designer who dared to imagine a better world.",
+        author: "— Smartivity Team"
+    },
+    {
+        text: "We don't just build products. We build the future our children will inherit.",
+        author: "— Smartivity Mission"
+    },
+    {
+        text: "The best way to predict the future is to create it — one design at a time.",
+        author: "— Peter Drucker"
+    },
+    {
+        text: "Innovation distinguishes between a leader and a follower. You are the leader.",
+        author: "— Steve Jobs"
+    },
+    {
+        text: "Every child deserves a world where creativity and technology work together. That's what we're building.",
+        author: "— Smartivity Vision"
+    },
+    {
+        text: "Design is not just what it looks like and feels like. Design is how it works — and how it changes lives.",
+        author: "— Steve Jobs"
+    },
+    {
+        text: "The world is waiting for your ideas. Go make it a better place.",
+        author: "— Smartivity Team"
+    },
+    {
+        text: "Great design solves problems before they exist. You are solving tomorrow's problems today.",
+        author: "— Smartivity Philosophy"
+    },
+    {
+        text: "Build with purpose. Design with heart. The world needs your brilliance.",
+        author: "— Smartivity Team"
+    },
+    {
+        text: "We are the generation that will give children a future worth designing for. Let's get to work.",
+        author: "— Smartivity Mission"
+    }
+];
+
+function showDesignerLanding(user) {
+    const nameEl = document.getElementById('designerLandingName');
+    const quoteTextEl = document.getElementById('designerQuoteText');
+    const quoteAuthorEl = document.getElementById('designerQuoteAuthor');
+    
+    if (nameEl) {
+        nameEl.textContent = user.name || 'Designer';
+    }
+    
+    if (quoteTextEl && quoteAuthorEl) {
+        const quote = DESIGNER_QUOTES[Math.floor(Math.random() * DESIGNER_QUOTES.length)];
+        quoteTextEl.textContent = `"${quote.text}"`;
+        quoteAuthorEl.textContent = quote.author;
+    }
+}
+
+async function continueWithSlack() {
+    const btn = document.getElementById('continueWithSlackBtn');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.innerHTML = `
+        <svg class="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Connecting to Slack...
+    `;
+    
+    try {
+        window.location.href = '/api/auth/slack-auth-url';
+    } catch (err) {
+        showToast('Failed to connect. Please try again.');
+        btn.disabled = false;
+        btn.innerHTML = `
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M5.042 15.165a2.528 2.528 0 1 0 0 5.056 2.528 2.528 0 0 0-2.528-2.528zM12.23 5.042a2.528 2.528 0 1 0 0 5.057 2.528 2.528 0 0 0-2.528-2.528zM16.808 10.07a2.528 2.528 0 1 0 0 5.057 2.528 2.528 0 0 0-2.528-2.528zM10.072 16.808a2.528 2.528 0 1 0 0 5.056 2.528 2.528 0 0 0-2.528-2.528z"/>
+            </svg>
+            Continue with Slack
+        `;
+    }
+}
+
+// ============================================
 // INITIALIZATION
 // ============================================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1377,4 +1469,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('resize', () => {
         if (window.innerWidth > 768) closeSidebar();
     });
+    
+    // Hide/show sidebar nav items based on user role
+    if (CURRENT_USER) {
+        applyRoleBasedNavVisibility();
+    }
 });
+
+function applyRoleBasedNavVisibility() {
+    const role = USER_ROLE;
+    if (!role) return;
+    
+    const navItems = document.querySelectorAll('.nav-item[data-roles]');
+    navItems.forEach(item => {
+        const allowedRoles = item.getAttribute('data-roles').split(',').map(r => r.trim());
+        if (!allowedRoles.includes(role.toUpperCase())) {
+            item.classList.add('hidden');
+        } else {
+            item.classList.remove('hidden');
+        }
+    });
+}
