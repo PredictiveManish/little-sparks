@@ -493,6 +493,56 @@ async function loadDashboard() {
             });
         }
         deadlineContainer.innerHTML = dHtml;
+
+        // Show pending requests card for admin only
+        if (USER_ROLE === 'ADMIN') {
+            try {
+                const pendingUsers = await api.getPendingUsers();
+                const pendingCard = document.getElementById('pendingRequestsCard');
+                const pendingList = document.getElementById('pendingRequestsList');
+                const pendingBadge = document.getElementById('pendingBadge');
+
+                if (pendingUsers && pendingUsers.length > 0) {
+                    pendingCard.classList.remove('hidden');
+                    pendingBadge.textContent = pendingUsers.length;
+                    pendingBadge.classList.remove('hidden');
+
+                    let pendingHtml = '';
+                    pendingUsers.forEach(u => {
+                        pendingHtml += `
+                            <div class="flex items-center justify-between p-4 bg-amber-50 rounded-lg border border-amber-200">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center text-amber-700 font-bold">${u.name.charAt(0)}</div>
+                                    <div>
+                                        <p class="text-sm font-semibold text-gray-900">${u.name}</p>
+                                        <p class="text-xs text-gray-500">${u.email}</p>
+                                        <p class="text-xs text-amber-600 mt-0.5">Requested role: ${u.requested_role || 'Designer'}</p>
+                                    </div>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="approveUser(${u.id}, 'DESIGNER')" class="px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-medium hover:bg-green-600 transition-colors">
+                                        Approve as Designer
+                                    </button>
+                                    <button onclick="approveUser(${u.id}, 'MANAGER')" class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors">
+                                        Approve as Manager
+                                    </button>
+                                    <button onclick="rejectUser(${u.id})" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors border border-red-200">
+                                        Reject
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    pendingList.innerHTML = pendingHtml;
+                } else {
+                    pendingCard.classList.add('hidden');
+                }
+            } catch (pendingErr) {
+                console.warn('[APP] loadDashboard: Failed to load pending users:', pendingErr.message);
+            }
+        } else {
+            document.getElementById('pendingRequestsCard').classList.add('hidden');
+        }
     } catch (err) {
         console.error('[APP] loadDashboard: Failed to load dashboard:', err.message);
         showToast('Failed to load dashboard: ' + err.message);
@@ -827,54 +877,6 @@ async function populateDesignersPage() {
             `;
         });
         container.innerHTML = html;
-
-        // Load pending approvals for admin
-        if (USER_ROLE === 'ADMIN') {
-            try {
-                const pendingUsers = await api.getPendingUsers();
-                const pendingSection = document.getElementById('pendingApprovalsSection');
-                const pendingList = document.getElementById('pendingUsersList');
-                const pendingBadge = document.getElementById('pendingBadge');
-
-                if (pendingUsers && pendingUsers.length > 0) {
-                    pendingSection.classList.remove('hidden');
-                    pendingBadge.textContent = pendingUsers.length;
-                    pendingBadge.classList.remove('hidden');
-
-                    let pendingHtml = '';
-                    pendingUsers.forEach(u => {
-                        pendingHtml += `
-                            <div class="flex items-center justify-between p-4 bg-amber-50 rounded-lg border border-amber-200">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center text-amber-700 font-bold">${u.name.charAt(0)}</div>
-                                    <div>
-                                        <p class="text-sm font-semibold text-gray-900">${u.name}</p>
-                                        <p class="text-xs text-gray-500">${u.email}</p>
-                                        <p class="text-xs text-amber-600 mt-0.5">Requested role: ${u.requested_role || 'Designer'}</p>
-                                    </div>
-                                </div>
-                                <div class="flex gap-2">
-                                    <button onclick="approveUser(${u.id}, 'DESIGNER', this)" class="px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-medium hover:bg-green-600 transition-colors">
-                                        Approve as Designer
-                                    </button>
-                                    <button onclick="approveUser(${u.id}, 'MANAGER', this)" class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors">
-                                        Approve as Manager
-                                    </button>
-                                    <button onclick="rejectUser(${u.id}, this)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors border border-red-200">
-                                        Reject
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    pendingList.innerHTML = pendingHtml;
-                } else {
-                    pendingSection.classList.add('hidden');
-                }
-            } catch (pendingErr) {
-                console.warn('[APP] Failed to load pending users:', pendingErr.message);
-            }
-        }
     } catch (err) {
         showToast('Failed to load designers: ' + err.message);
     }

@@ -1208,6 +1208,7 @@ def get_project(
         name=project.name,
         description=project.description,
         assigned_designer_id=project.assigned_designer_id,
+        created_by_user_id=project.created_by_user_id,
         stage_index=project.stage_index,
         progress=project.progress,
         deadline=project.deadline,
@@ -1301,6 +1302,7 @@ async def create_project(
         name=project.name,
         description=project.description,
         assigned_designer_id=project.assigned_designer_id,
+        created_by_user_id=project.created_by_user_id,
         stage_index=project.stage_index,
         progress=project.progress,
         deadline=project.deadline,
@@ -1308,9 +1310,8 @@ async def create_project(
         status=project.status,
         priority=project.priority,
         manager_notes=project.manager_notes,
-        created_by_user_id=project.created_by_user_id,
-                slack_channel_id=project.slack_channel_id or "",
-                slack_channel_name=project.slack_channel_name or "",
+        slack_channel_id=project.slack_channel_id or "",
+        slack_channel_name=project.slack_channel_name or "",
         phases=[PhaseResponse.model_validate(ph) for ph in phases],
     )
 
