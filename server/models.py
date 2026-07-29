@@ -58,7 +58,7 @@ class Project(Base):
         DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
     )
 
-    designer = relationship("User", back_populates="projects")
+    designer = relationship("User", back_populates="projects", foreign_keys="Project.assigned_designer_id")
     phases = relationship(
         "Phase", back_populates="project", cascade="all, delete-orphan"
     )
