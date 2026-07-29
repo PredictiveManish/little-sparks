@@ -1179,6 +1179,7 @@ def get_projects(user: User = Depends(get_current_user), db: Session = Depends(g
                 manager_notes=p.manager_notes,
                 slack_channel_id=p.slack_channel_id or "",
                 slack_channel_name=p.slack_channel_name or "",
+                created_by_user_id=p.created_by_user_id,
                 phases=[PhaseResponse.model_validate(ph) for ph in phases],
             )
         )
@@ -1307,6 +1308,9 @@ async def create_project(
         status=project.status,
         priority=project.priority,
         manager_notes=project.manager_notes,
+        created_by_user_id=project.created_by_user_id,
+                slack_channel_id=project.slack_channel_id or "",
+                slack_channel_name=project.slack_channel_name or "",
         phases=[PhaseResponse.model_validate(ph) for ph in phases],
     )
 
@@ -1391,6 +1395,7 @@ async def update_project(
         manager_notes=project.manager_notes,
         slack_channel_id=project.slack_channel_id or "",
         slack_channel_name=project.slack_channel_name or "",
+        created_by_user_id=project.created_by_user_id,
         phases=[PhaseResponse.model_validate(ph) for ph in phases],
     )
 
