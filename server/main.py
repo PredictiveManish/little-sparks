@@ -1859,15 +1859,61 @@ async def slack_api_call(db, endpoint, data=None):
         return None
 
 
+async def resolve_slack_user_id_by_email(db, email):
+    """Look up a Slack user ID by email using users.lookup_by_email API.
+    Returns the slack_user_id string, or empty string if not found."""
+    if not email:
+        return ""
+    result = await slack_api_call(db, "users.lookup_by_email", {"email": email})
+    if result and result.get("ok") and result.get("user"):
+        user_id = result["user"].get("id", "")
+        logger.info(
+            "[SLACK LOOKUP] Found Slack user by email | email=%s | slack_user_id=%s",
+            email,
+            user_id,
+        )
+        return user_id
+    logger.warning(
+        "[SLACK LOOKUP] Could not find Slack user by email | email=%s | result_ok=%s",
+        email,
+        result.get("ok") if result else False,
+    )
+    return ""
+
+
 async def invite_users_to_channel(db, channel_id, slack_user_ids):
     """Invite Slack users to a channel. Skips empty IDs silently."""
     valid = [uid for uid in slack_user_ids if uid]
     if not valid:
+        logger.warning(
+            "[SLACK INVITE] No valid user IDs to invite | channel=%s | raw_ids=%s",
+            channel_id,
+            slack_user_ids,
+        )
         return
-    await slack_api_call(db, "conversations.invite", {
+    result = await slack_api_call(db, "conversations.invite", {
         "channel": channel_id,
         "users": ",".join(valid)
     })
+    if result is None:
+        logger.error(
+            "[SLACK INVITE] slack_api_call returned None | channel=%s | users=%s",
+            channel_id,
+            valid,
+        )
+    elif not result.get("ok"):
+        logger.error(
+            "[SLACK INVITE] Invite failed | channel=%s | users=%s | error=%s",
+            channel_id,
+            valid,
+            result.get("error"),
+        )
+    else:
+        logger.info(
+            "[SLACK INVITE] Users invited successfully | channel=%s | users=%s",
+            channel_id,
+            valid,
+        )
 
 
 async def verify_channel(db, channel_id):
@@ -1946,6 +1992,8 @@ async def notify_project_created(db, project_id, manager_slack_user_id="", user_
                 await invite_users_to_channel(db, result["channel"]["id"], [manager_slack_user_id])
             else:
                 designer_slack_id = designer.slack_user_id if designer else ""
+                if not designer_slack_id and designer:
+                    designer_slack_id = await resolve_slack_user_id_by_email(db, designer.email)
                 await invite_users_to_channel(db, result["channel"]["id"], [manager_slack_user_id, designer_slack_id])
         else:
             return
@@ -3494,6 +3542,8 @@ async def create_slack_channel(
         db.commit()
         designer = db.query(User).filter(User.id == project.assigned_designer_id).first()
         designer_slack_id = designer.slack_user_id if designer else ""
+        if not designer_slack_id and designer:
+            designer_slack_id = await resolve_slack_user_id_by_email(db, designer.email)
         if user.role.upper() == "ADMIN":
             await invite_users_to_channel(db, channel_id, [user.slack_user_id])
         else:
