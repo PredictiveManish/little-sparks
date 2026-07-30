@@ -2706,81 +2706,63 @@ async def get_slack_channel_history(
     config = get_slack_config(db)
     if not config:
         return {"messages": [], "channel_id": project.slack_channel_id, "has_channel": True}
-    bot_token = (
-        decrypt_token(config.bot_token) if config.encrypted else config.bot_token
+
+    result = await slack_api_call(
+        db, "conversations.history", {"channel": project.slack_channel_id, "limit": 100}
     )
-    if not bot_token:
-        return {"messages": [], "channel_id": project.slack_channel_id, "has_channel": True}
-    headers = {
-        "Authorization": f"Bearer {bot_token}",
-        "Content-Type": "application/json",
-    }
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{SLACK_API_BASE}/conversations.history",
-                headers=headers,
-                json={"channel": project.slack_channel_id, "limit": 100},
-                timeout=10.0,
-            )
-            result = resp.json()
-            if not result.get("ok"):
-                logger.warning(
-                    "[SLACK HISTORY] Failed to fetch channel history | error=%s",
-                    result.get("error"),
-                )
-                return {
-                    "messages": [],
-                    "channel_id": project.slack_channel_id,
-                    "has_channel": True,
-                    "error": result.get("error"),
-                }
-            raw_messages = result.get("messages", [])
-            formatted = []
-            for msg in raw_messages:
-                user_name = ""
-                if msg.get("user"):
-                    user_resp = await client.post(
-                        f"{SLACK_API_BASE}/users.info",
-                        headers=headers,
-                        json={"user": msg["user"]},
-                        timeout=10.0,
-                    )
-                    user_data = user_resp.json()
-                    if user_data.get("ok"):
-                        user_name = user_data["user"]["profile"].get(
-                            "real_name", "Unknown"
-                        )
-                ts_float = float(msg["ts"])
-                ts_int = int(ts_float)
-                dt = datetime.fromtimestamp(ts_int)
-                time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-                formatted.append(
-                    {
-                        "id": msg.get("ts", ""),
-                        "user_id": msg.get("user", ""),
-                        "user_name": user_name or "Slack Bot",
-                        "text": msg.get("text", ""),
-                        "ts": msg.get("ts", ""),
-                        "created_at": time_str,
-                        "is_bot": msg.get("bot_id") is not None,
-                    }
-                )
-            return {
-                "messages": formatted,
-                "channel_id": project.slack_channel_id,
-                "has_channel": True,
-            }
-    except Exception as e:
-        logger.error(
-            "[SLACK HISTORY] Error fetching channel history | error=%s", e
+    if result is None:
+        return {
+            "messages": [],
+            "channel_id": project.slack_channel_id,
+            "has_channel": True,
+            "error": "Failed to fetch channel history",
+        }
+    if not result.get("ok"):
+        logger.warning(
+            "[SLACK HISTORY] Failed to fetch channel history | error=%s",
+            result.get("error"),
         )
         return {
             "messages": [],
             "channel_id": project.slack_channel_id,
             "has_channel": True,
-            "error": str(e),
+            "error": result.get("error"),
         }
+
+    raw_messages = result.get("messages", [])
+    formatted = []
+    user_cache = {}
+    for msg in raw_messages:
+        user_name = ""
+        if msg.get("user") and msg["user"] not in user_cache:
+            user_result = await slack_api_call(db, "users.info", {"user": msg["user"]})
+            if user_result and user_result.get("ok"):
+                user_cache[msg["user"]] = user_result["user"]["profile"].get(
+                    "real_name", "Unknown"
+                )
+            else:
+                user_cache[msg["user"]] = ""
+        user_name = user_cache.get(msg.get("user", ""), "")
+        ts_float = float(msg["ts"])
+        ts_int = int(ts_float)
+        dt = datetime.fromtimestamp(ts_int)
+        time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+        formatted.append(
+            {
+                "id": msg.get("ts", ""),
+                "user_id": msg.get("user", ""),
+                "user_name": user_name or "Slack Bot",
+                "text": msg.get("text", ""),
+                "ts": msg.get("ts", ""),
+                "created_at": time_str,
+                "is_bot": msg.get("bot_id") is not None,
+            }
+        )
+    return {
+        "messages": formatted,
+        "channel_id": project.slack_channel_id,
+        "has_channel": True,
+    }
 
 
 # ---------- Slack Webhook Endpoint ----------
