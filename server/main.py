@@ -1813,8 +1813,7 @@ async def slack_api_call(db, endpoint, data=None):
                         "[SLACK API] Auth error detected (%s), attempting token refresh and retry",
                         error_code,
                     )
-                    with _slack_api_lock:
-                        success, err = await refresh_slack_token(db)
+                    success, err = await refresh_slack_token(db)
                     if success:
                         # Retry with new token
                         new_token = decrypt_token(config.bot_token) if config.encrypted else config.bot_token
@@ -2905,12 +2904,12 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     .all()
                 )
                 if action_id == "complete_stage":
+                    stage_idx = int(value)
                     logger.info(
                         "[SLACK WEBHOOK] complete_stage action | project_id=%s | stage_idx=%s",
                         project_id,
                         stage_idx,
                     )
-                    stage_idx = int(value)
                     if stage_idx >= len(phases):
                         logger.warning(
                             "[SLACK WEBHOOK] Stage not found | stage_idx=%s | total_phases=%s",
