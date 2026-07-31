@@ -1,6 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Cookie, Response
+from fastapi import FastAPI, Depends, HTTPException, status, Request, Cookie, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, JSONResponse, FileResponse
+from fastapi.responses import RedirectResponse, JSONResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -24,6 +24,10 @@ import sys
 import traceback
 
 import threading
+import time as time_module
+import csv
+import io
+from zoneinfo import ZoneInfo
 
 # ---------- Structured logging setup ----------
 logging.basicConfig(
@@ -141,6 +145,19 @@ SLACK_BOT_SCOPES = os.getenv(
 SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET", "")
 INSTALL_STATE_COOKIE = "slack_install_state"
 STATE_COOKIE_NAME = "slack_oauth_state"
+
+# ---------- Reminder scheduling ----------
+# Shared secret an external cron service (or the in-process scheduler below)
+# must present to trigger /api/cron/tick. Required for the endpoint to do
+# anything — without it the endpoint just reports itself as unconfigured.
+CRON_SECRET = os.getenv("CRON_SECRET", "")
+REMINDER_TIMEZONE = ZoneInfo(os.getenv("REMINDER_TIMEZONE", "Asia/Kolkata"))
+DAILY_REMINDER_HOUR = int(os.getenv("DAILY_REMINDER_HOUR", "10"))
+# How often the in-process scheduler wakes up to check (only matters while the
+# dyno is awake — e.g. on a paid/always-on Render plan). An external cron
+# hitting /api/cron/tick is still required on the free tier since the process
+# sleeps and this thread sleeps with it.
+SCHEDULER_INTERVAL_SECONDS = int(os.getenv("SCHEDULER_INTERVAL_SECONDS", "300"))
 
 # ---------- Password hashing ----------
 argon2_hasher = argon2.PasswordHasher()
@@ -2127,6 +2144,88 @@ async def notify_project_created(
     )
 
 
+async def send_stage_update_reminder(db, project_id, kind="manual", phase=None):
+    """Post a Slack message to a project's channel asking the designer for an
+    update on the *current* stage (read fresh from the DB each time, so it's
+    always in sync with project.stage_index).
+
+    kind: "daily"    -> automated 10AM daily check-in
+          "deadline"  -> a phase's deadline is today
+          "manual"    -> manager clicked "Send Reminder" in the app
+    """
+    project, designer, phases = _get_project_details(db, project_id)
+    if not project:
+        return False
+    config = get_slack_config(db)
+    if not config or not project.slack_channel_id:
+        return False
+
+    current_phase = (
+        phases[project.stage_index] if project.stage_index < len(phases) else None
+    )
+    stage_name = _get_current_stage_name(project.stage_index)
+    designer_name = designer.name if designer else "Unassigned"
+    designer_mention = (
+        f"<@{designer.slack_user_id}>" if designer and designer.slack_user_id else designer_name
+    )
+
+    headers = {
+        "daily": "☀️ Daily Update Check-in",
+        "deadline": "⏰ Deadline Reminder",
+        "manual": "🔔 Update Requested",
+    }
+    intros = {
+        "daily": f"Good morning {designer_mention}! Here's your daily check-in for *{project.name}*.",
+        "deadline": (
+            f"{designer_mention}, today ({phase.deadline if phase else project.deadline}) "
+            f"is the deadline for *{stage_name}* on *{project.name}*."
+        ),
+        "manual": f"{designer_mention}, the project manager is asking for an update on *{project.name}*.",
+    }
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": headers.get(kind, "🔔 Update Requested")},
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"{intros.get(kind, intros['manual'])}\n\n"
+                    f"🔄 *Current Stage:* {stage_name}\n"
+                    f"📊 *Progress:* {project.progress}%\n"
+                    f"📅 *Stage Deadline:* {current_phase.deadline if current_phase else 'N/A'}\n\n"
+                    f"Please share where things stand using the button below."
+                ),
+            },
+        },
+        {"type": "divider"},
+        {
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "📝 Post Update"},
+                    "action_id": "update_notes",
+                    "value": str(project.id),
+                    "style": "primary",
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "⚠️ Report Delay"},
+                    "action_id": "report_delay",
+                    "value": str(project.id),
+                },
+            ],
+        },
+    ]
+    fallback_text = f"{headers.get(kind, 'Update Requested')}: {project.name} — {stage_name}"
+    await send_slack_notification(db, project_id, fallback_text, blocks, project.slack_channel_id)
+    return True
+
+
 async def notify_project_updated(db, project_id):
     project, designer, phases = _get_project_details(db, project_id)
     if not project:
@@ -3738,12 +3837,349 @@ async def get_slack_channel_status(
     return SlackChannelStatusBatchResponse(statuses=statuses, corrected=corrected)
 
 
+# ---------- Reminder Scheduler ----------
+
+
+async def run_reminder_tick(db):
+    """Core reminder logic, called by both the external cron endpoint and the
+    in-process scheduler. Idempotent within a day, so it's safe to call this
+    as often as you like (e.g. every few minutes) without spamming Slack."""
+    now = datetime.now(REMINDER_TIMEZONE)
+    today_str = now.strftime("%Y-%m-%d")
+    sent_daily = 0
+    sent_deadline = 0
+
+    # 1) Daily ~10AM check-in for every active project, once per calendar day.
+    if now.hour >= DAILY_REMINDER_HOUR:
+        active_projects = (
+            db.query(Project).filter(Project.status != "COMPLETED").all()
+        )
+        for project in active_projects:
+            if not project.slack_channel_id:
+                continue
+            if (project.last_daily_reminder_date or "") == today_str:
+                continue
+            ok = await send_stage_update_reminder(db, project.id, kind="daily")
+            if ok:
+                project.last_daily_reminder_date = today_str
+                project.last_reminder_sent_at = datetime.utcnow()
+                db.commit()
+                sent_daily += 1
+
+    # 2) Deadline-day reminder — fires once per phase, on the exact date of
+    # that phase's deadline, regardless of the current stage.
+    due_phases = (
+        db.query(Phase)
+        .filter(
+            Phase.deadline == today_str,
+            Phase.completed_at.is_(None),
+            Phase.deadline_reminder_sent.is_(False),
+        )
+        .all()
+    )
+    for phase in due_phases:
+        ok = await send_stage_update_reminder(
+            db, phase.project_id, kind="deadline", phase=phase
+        )
+        if ok:
+            phase.deadline_reminder_sent = True
+            db.commit()
+            sent_deadline += 1
+
+    logger.info(
+        "[REMINDER TICK] now=%s | daily_sent=%s | deadline_sent=%s",
+        now.isoformat(),
+        sent_daily,
+        sent_deadline,
+    )
+    return {"daily_sent": sent_daily, "deadline_sent": sent_deadline, "checked_at": now.isoformat()}
+
+
+@app.post("/api/cron/tick")
+async def cron_tick(request: Request, db: Session = Depends(get_db)):
+    """Trigger a reminder check. Call this from an external cron service
+    (e.g. cron-job.org, GitHub Actions, UptimeRobot) every 5-15 minutes.
+    This also doubles as a wake-up ping for a sleeping free-tier Render
+    service — the tick logic itself only sends messages once per day/phase
+    no matter how often it's called."""
+    if not CRON_SECRET:
+        raise HTTPException(
+            status_code=503,
+            detail="CRON_SECRET is not configured on the server.",
+        )
+    provided = request.headers.get("x-cron-secret") or request.query_params.get(
+        "secret", ""
+    )
+    if not hmac.compare_digest(provided, CRON_SECRET):
+        raise HTTPException(status_code=403, detail="Invalid cron secret")
+    result = await run_reminder_tick(db)
+    return result
+
+
+def _scheduler_loop():
+    """Background thread that periodically runs the reminder tick while the
+    process is alive. On a paid/always-on Render plan this is enough by
+    itself. On the free tier the process sleeps when idle, so this thread
+    sleeps too — that's why /api/cron/tick also exists for an external
+    cron to hit."""
+    import asyncio
+
+    logger.info(
+        "[SCHEDULER] In-process reminder scheduler started | interval=%ss",
+        SCHEDULER_INTERVAL_SECONDS,
+    )
+    while True:
+        time_module.sleep(SCHEDULER_INTERVAL_SECONDS)
+        db = SessionLocal()
+        try:
+            asyncio.run(run_reminder_tick(db))
+        except Exception as e:
+            logger.error("[SCHEDULER] Reminder tick failed: %s", e)
+        finally:
+            db.close()
+
+
+@app.post("/api/projects/{project_id}/remind")
+async def send_manual_reminder(
+    project_id: int,
+    user: User = Depends(require_role(["ADMIN", "MANAGER"])),
+    db: Session = Depends(get_db),
+):
+    """Manager/admin-triggered 'Send Reminder' button — always asks about
+    whatever the project's *current* stage is in the database right now."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
+        raise HTTPException(
+            status_code=403, detail="You can only remind on your own projects"
+        )
+    if not project.slack_channel_id:
+        raise HTTPException(
+            status_code=400,
+            detail="This project has no Slack channel yet.",
+        )
+    ok = await send_stage_update_reminder(db, project_id, kind="manual")
+    if not ok:
+        raise HTTPException(
+            status_code=400, detail="Slack is not configured or not reachable."
+        )
+    return {"message": "Reminder sent", "stage": _get_current_stage_name(project.stage_index)}
+
+
+# ---------- Admin Data Export ----------
+
+
+def _parse_export_range(from_param, to_param):
+    """Parse optional from/to query params (date or datetime strings) into
+    datetimes. Returns (None, None) when both are absent, meaning 'whole
+    data, no filter'."""
+    def _parse(value, end_of_day=False):
+        if not value:
+            return None
+        try:
+            if "T" in value or " " in value:
+                return datetime.fromisoformat(value.replace("Z", ""))
+            dt = datetime.strptime(value, "%Y-%m-%d")
+            if end_of_day:
+                dt = dt.replace(hour=23, minute=59, second=59)
+            return dt
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid date/time value: {value}. Use YYYY-MM-DD or ISO 8601.",
+            )
+
+    return _parse(from_param), _parse(to_param, end_of_day=True)
+
+
+def _rows_to_csv_bytes(fieldnames, rows):
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(row)
+    return buf.getvalue().encode("utf-8")
+
+
+def _sheets_to_xlsx_bytes(sheets):
+    """sheets: dict of {sheet_name: (fieldnames, rows)}"""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    for sheet_name, (fieldnames, rows) in sheets.items():
+        ws = wb.create_sheet(title=sheet_name[:31])
+        ws.append(fieldnames)
+        for row in rows:
+            ws.append([row.get(f, "") for f in fieldnames])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.read()
+
+
+def _users_rows(db, roles, dt_from, dt_to):
+    q = db.query(User)
+    if roles:
+        q = q.filter(User.role.in_(roles))
+    if dt_from:
+        q = q.filter(User.created_at >= dt_from)
+    if dt_to:
+        q = q.filter(User.created_at <= dt_to)
+    fieldnames = [
+        "id", "name", "email", "role", "specialty", "slack_user_id",
+        "created_at", "updated_at",
+    ]
+    rows = [
+        {
+            "id": u.id, "name": u.name, "email": u.email, "role": u.role,
+            "specialty": u.specialty, "slack_user_id": u.slack_user_id or "",
+            "created_at": u.created_at.isoformat() if u.created_at else "",
+            "updated_at": u.updated_at.isoformat() if u.updated_at else "",
+        }
+        for u in q.all()
+    ]
+    return fieldnames, rows
+
+
+def _projects_rows(db, dt_from, dt_to):
+    q = db.query(Project)
+    if dt_from:
+        q = q.filter(Project.created_at >= dt_from)
+    if dt_to:
+        q = q.filter(Project.created_at <= dt_to)
+    projects = q.all()
+    fieldnames = [
+        "id", "name", "description", "assigned_designer", "created_by",
+        "stage_index", "current_stage", "progress", "status", "priority",
+        "start_date", "deadline", "slack_channel_name", "created_at", "updated_at",
+    ]
+    rows = []
+    for p in projects:
+        designer = db.query(User).filter(User.id == p.assigned_designer_id).first()
+        creator = db.query(User).filter(User.id == p.created_by_user_id).first()
+        rows.append({
+            "id": p.id, "name": p.name, "description": p.description,
+            "assigned_designer": designer.name if designer else "",
+            "created_by": creator.name if creator else "",
+            "stage_index": p.stage_index,
+            "current_stage": _get_current_stage_name(p.stage_index),
+            "progress": p.progress, "status": p.status, "priority": p.priority,
+            "start_date": p.start_date, "deadline": p.deadline,
+            "slack_channel_name": p.slack_channel_name,
+            "created_at": p.created_at.isoformat() if p.created_at else "",
+            "updated_at": p.updated_at.isoformat() if p.updated_at else "",
+        })
+    fieldnames_phase = [
+        "project_id", "project_name", "stage_index", "stage_name", "deadline",
+        "designer_update", "delay_reason", "completed_at",
+    ]
+    rows_phase = []
+    for p in projects:
+        for ph in sorted(p.phases, key=lambda x: x.stage_index):
+            rows_phase.append({
+                "project_id": p.id, "project_name": p.name,
+                "stage_index": ph.stage_index,
+                "stage_name": _get_current_stage_name(ph.stage_index),
+                "deadline": ph.deadline, "designer_update": ph.designer_update,
+                "delay_reason": ph.delay_reason,
+                "completed_at": ph.completed_at or "",
+            })
+    return (fieldnames, rows), (fieldnames_phase, rows_phase)
+
+
+@app.get("/api/admin/export/{entity}")
+def export_data(
+    entity: str,
+    format: str = "csv",
+    from_: Optional[str] = Query(default=None, alias="from"),
+    to: Optional[str] = None,
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin-only data export. entity: designers | managers | projects | all.
+    format: csv | xlsx. If from/to are omitted, exports the whole dataset."""
+    if format not in ("csv", "xlsx"):
+        raise HTTPException(status_code=400, detail="format must be csv or xlsx")
+    dt_from, dt_to = _parse_export_range(from_, to)
+    stamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+
+    if entity == "designers":
+        fieldnames, rows = _users_rows(db, ["DESIGNER"], dt_from, dt_to)
+        sheets = {"Designers": (fieldnames, rows)}
+        filename = f"designers-{stamp}"
+    elif entity == "managers":
+        fieldnames, rows = _users_rows(db, ["ADMIN", "MANAGER"], dt_from, dt_to)
+        sheets = {"Managers": (fieldnames, rows)}
+        filename = f"managers-{stamp}"
+    elif entity == "projects":
+        (pf, pr), (phf, phr) = _projects_rows(db, dt_from, dt_to)
+        sheets = {"Projects": (pf, pr), "Phases": (phf, phr)}
+        filename = f"projects-{stamp}"
+    elif entity == "all":
+        df, dr = _users_rows(db, ["DESIGNER"], dt_from, dt_to)
+        mf, mr = _users_rows(db, ["ADMIN", "MANAGER"], dt_from, dt_to)
+        (pf, pr), (phf, phr) = _projects_rows(db, dt_from, dt_to)
+        sheets = {
+            "Designers": (df, dr), "Managers": (mf, mr),
+            "Projects": (pf, pr), "Phases": (phf, phr),
+        }
+        filename = f"smartivity-all-data-{stamp}"
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail="Unknown entity. Use designers, managers, projects, or all.",
+        )
+
+    if format == "xlsx":
+        content = _sheets_to_xlsx_bytes(sheets)
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        filename += ".xlsx"
+    else:
+        if len(sheets) == 1:
+            fieldnames, rows = next(iter(sheets.values()))
+            content = _rows_to_csv_bytes(fieldnames, rows)
+        else:
+            # Multiple tables requested as CSV: zip them together.
+            import zipfile
+
+            zbuf = io.BytesIO()
+            with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as zf:
+                for sheet_name, (fieldnames, rows) in sheets.items():
+                    zf.writestr(f"{sheet_name}.csv", _rows_to_csv_bytes(fieldnames, rows))
+            content = zbuf.getvalue()
+            media_type = "application/zip"
+            filename += ".zip"
+            return StreamingResponse(
+                io.BytesIO(content),
+                media_type=media_type,
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+        media_type = "text/csv"
+        filename += ".csv"
+
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 # ---------- Startup ----------
 
 
 @app.on_event("startup")
 def startup():
-    pass
+    if CRON_SECRET:
+        scheduler_thread = threading.Thread(target=_scheduler_loop, daemon=True)
+        scheduler_thread.start()
+    else:
+        logger.warning(
+            "[SCHEDULER] CRON_SECRET not set — reminder scheduler disabled. "
+            "Set CRON_SECRET and (optionally) point an external cron at "
+            "POST /api/cron/tick to enable daily/deadline Slack reminders."
+        )
 
 
 # ---------- Serve Frontend ----------

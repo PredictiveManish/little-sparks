@@ -95,4 +95,34 @@ const api = {
     getSlackChannelHistory: (projectId) => apiFetch(`/projects/${projectId}/slack-channel-history`),
     getSlackChannelStatus: (autoCorrect) => apiFetch(`/projects/slack-channel-status?auto_correct=${autoCorrect || false}`),
     assignStageDesigners: (projectId, stageIndex, designerIds) => apiFetch(`/projects/${projectId}/phases/${stageIndex}/assign-designers`, { method: 'POST', body: { designer_ids: designerIds } }),
+
+    // Reminders
+    sendReminder: (projectId) => apiFetch(`/projects/${projectId}/remind`, { method: 'POST' }),
+
+    // Admin data export — triggers a browser download (needs the session cookie,
+    // so it's done via fetch+blob rather than a plain link).
+    exportData: async (entity, format, fromDate, toDate) => {
+        const params = new URLSearchParams({ format });
+        if (fromDate) params.set('from', fromDate);
+        if (toDate) params.set('to', toDate);
+        const url = `${API_BASE}/admin/export/${entity}?${params.toString()}`;
+        console.log(`[API] Export request: ${url}`);
+        const response = await fetch(url, { credentials: 'include' });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ detail: 'Export failed' }));
+            throw new Error(err.detail || 'Export failed');
+        }
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        const filename = match ? match[1] : `${entity}-export.${format}`;
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(blobUrl);
+    },
 };

@@ -106,6 +106,47 @@ def _migrate_slack_config_columns():
         logger.warning("SlackConfig migration encountered issue (likely no-op): %s", e)
 
 
+def _add_column_if_missing(table_name, column_name, column_ddl):
+    """Add a column to a table if it doesn't already exist. Works for both
+    SQLite and Postgres using SQLAlchemy's inspector, so it's safe to call
+    on every startup regardless of backend."""
+    try:
+        from sqlalchemy import inspect
+
+        inspector = inspect(engine)
+        existing_columns = {c["name"] for c in inspector.get_columns(table_name)}
+        if column_name in existing_columns:
+            return
+        logger.info("Adding column %s.%s", table_name, column_name)
+        with engine.connect() as conn:
+            conn.execute(
+                text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_ddl}")
+            )
+            conn.commit()
+    except Exception as e:
+        logger.warning(
+            "Migration check for %s.%s encountered an issue (likely already applied): %s",
+            table_name,
+            column_name,
+            e,
+        )
+
+
+def _migrate_reminder_columns():
+    """Add the columns needed for daily/deadline reminder tracking if they're
+    missing. Safe to run on every startup — no-op if already present."""
+    is_sqlite = "sqlite" in DATABASE_URL
+    text_type = "TEXT" if is_sqlite else "VARCHAR"
+    ts_type = "DATETIME" if is_sqlite else "TIMESTAMP"
+    _add_column_if_missing(
+        "projects", "last_daily_reminder_date", f"{text_type} DEFAULT ''"
+    )
+    _add_column_if_missing("projects", "last_reminder_sent_at", ts_type)
+    _add_column_if_missing(
+        "phases", "deadline_reminder_sent", "BOOLEAN DEFAULT FALSE"
+    )
+
+
 def init_db():
     """Initialize database tables, run migrations, and WAL mode."""
     try:
@@ -115,4 +156,5 @@ def init_db():
         logger.error("Failed to initialize database tables: %s", e)
         raise
     _migrate_slack_config_columns()
+    _migrate_reminder_columns()
     init_wal_mode()

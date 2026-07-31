@@ -24,6 +24,7 @@ async function checkAuth() {
             CURRENT_USER = user;
             USER_ROLE = user.role;
             updateSidebarUser(user);
+            applyRoleBasedNavVisibility();
             if (user.role === 'PENDING') {
                 console.log('[APP] checkAuth: User role is PENDING, showing pending page');
                 showPage('pendingPage');
@@ -358,6 +359,7 @@ function navigateTo(view, projectId = null) {
         'settings': 'page-settings',
         'slack-messages': 'page-slack-messages',
         'slack-settings': 'page-slack-settings',
+        'data-export': 'page-data-export',
     };
     const targetId = pageMap[view];
     if (targetId) {
@@ -378,6 +380,7 @@ function navigateTo(view, projectId = null) {
         'designers': 'designers',
         'slack-messages': 'slack-messages',
         'slack-settings': 'slack-settings',
+        'data-export': 'data-export',
     };
     const navKey = navMap[view];
     if (navKey) {
@@ -396,6 +399,7 @@ function navigateTo(view, projectId = null) {
     if (view === 'dashboard') loadDashboard();
     if (view === 'slack-messages') loadSlackMessages();
     if (view === 'slack-messages') loadSlackSettings();
+    if (view === 'data-export') resetExportForm();
 
     // Attach date change listeners for phase deadlines
     const startDateInputs = document.querySelectorAll('#page-create-project form input[type="date"]');
@@ -763,6 +767,74 @@ async function populateProjectDetails() {
     } catch (err) {
         console.error('[APP] populateProjectDetails: Failed to load project details:', err.message);
         showToast('Failed to load project details: ' + err.message);
+    }
+}
+
+// ============================================
+// SEND REMINDER (manager/admin manual trigger)
+// ============================================
+async function sendProjectReminder() {
+    if (!selectedProjectId) return;
+    const btn = document.getElementById('sendReminderBtn');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = 'Sending…';
+    }
+    try {
+        const result = await api.sendReminder(selectedProjectId);
+        showToast(`Reminder sent to Slack — asking about "${result.stage}"`);
+    } catch (err) {
+        console.error('[APP] sendProjectReminder: failed:', err.message);
+        showToast('Failed to send reminder: ' + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
+}
+
+// ============================================
+// ADMIN DATA EXPORT
+// ============================================
+function resetExportForm() {
+    const checkbox = document.getElementById('exportUseRange');
+    const inputs = document.getElementById('exportRangeInputs');
+    if (checkbox) checkbox.checked = false;
+    if (inputs) inputs.classList.add('hidden');
+    const from = document.getElementById('exportFrom');
+    const to = document.getElementById('exportTo');
+    if (from) from.value = '';
+    if (to) to.value = '';
+}
+
+function toggleExportRangeInputs() {
+    const checkbox = document.getElementById('exportUseRange');
+    const inputs = document.getElementById('exportRangeInputs');
+    if (!checkbox || !inputs) return;
+    inputs.classList.toggle('hidden', !checkbox.checked);
+}
+
+async function runExport(entity, format) {
+    const useRange = document.getElementById('exportUseRange')?.checked;
+    let fromDate = '';
+    let toDate = '';
+    if (useRange) {
+        fromDate = document.getElementById('exportFrom')?.value || '';
+        toDate = document.getElementById('exportTo')?.value || '';
+        if (!fromDate && !toDate) {
+            showToast('Pick at least a From or To date, or uncheck the custom range.');
+            return;
+        }
+    }
+    try {
+        showToast(`Preparing ${entity} export…`);
+        await api.exportData(entity, format, fromDate, toDate);
+        showToast(`${entity.charAt(0).toUpperCase() + entity.slice(1)} export downloaded.`);
+    } catch (err) {
+        console.error('[APP] runExport: failed:', err.message);
+        showToast('Export failed: ' + err.message);
     }
 }
 
