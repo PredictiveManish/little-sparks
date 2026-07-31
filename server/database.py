@@ -81,16 +81,24 @@ def _migrate_slack_config_columns():
             )
             row = result.fetchone()
             if not row or not row[0]:
-                logger.warning("slack_config table not found; will be created by create_all")
+                logger.warning(
+                    "slack_config table not found; will be created by create_all"
+                )
                 return
             create_sql = row[0]
             if "refresh_token" not in create_sql:
                 logger.info("Adding refresh_token column to slack_config")
-                conn.execute(text("ALTER TABLE slack_config ADD COLUMN refresh_token TEXT"))
+                conn.execute(
+                    text("ALTER TABLE slack_config ADD COLUMN refresh_token TEXT")
+                )
                 conn.commit()
             if "token_expires_at" not in create_sql:
                 logger.info("Adding token_expires_at column to slack_config")
-                conn.execute(text("ALTER TABLE slack_config ADD COLUMN token_expires_at DATETIME"))
+                conn.execute(
+                    text(
+                        "ALTER TABLE slack_config ADD COLUMN token_expires_at DATETIME"
+                    )
+                )
                 conn.commit()
         logger.info("SlackConfig migration check completed successfully")
     except Exception as e:

@@ -335,7 +335,7 @@ def require_role(required: List[str]):
 
 def get_user_owned_project_query(db, user):
     """Return a Project query filtered to user's own projects if manager.
-    
+
     Admins get all projects. Managers get only projects they created.
     """
     q = db.query(Project)
@@ -349,10 +349,11 @@ def filter_user_projects(db, user, project_ids):
     if user.role.upper() == "ADMIN":
         return project_ids
     # Manager: only their own projects
-    owned = db.query(Project.id).filter(
-        Project.created_by_user_id == user.id,
-        Project.id.in_(project_ids)
-    ).all()
+    owned = (
+        db.query(Project.id)
+        .filter(Project.created_by_user_id == user.id, Project.id.in_(project_ids))
+        .all()
+    )
     return [p[0] for p in owned]
 
 
@@ -383,6 +384,7 @@ def clear_session_cookie(response: Response):
 
 _slack_api_lock = threading.Lock()
 
+
 def encrypt_token(plaintext: str) -> str:
     return fernet.encrypt(plaintext.encode()).decode()
 
@@ -408,7 +410,10 @@ async def refresh_slack_token(db):
     if not config:
         return False, "No Slack configuration found"
     if not config.refresh_token:
-        return False, "No refresh_token stored — token rotation may not be enabled on your Slack app"
+        return (
+            False,
+            "No refresh_token stored — token rotation may not be enabled on your Slack app",
+        )
     try:
         decrypted_refresh = decrypt_token(config.refresh_token)
         if not decrypted_refresh:
@@ -446,7 +451,9 @@ async def refresh_slack_token(db):
             if new_refresh_token:
                 config.refresh_token = encrypt_token(new_refresh_token)
             if expires_in:
-                config.token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+                config.token_expires_at = datetime.utcnow() + timedelta(
+                    seconds=expires_in
+                )
             db.commit()
         logger.info(
             "[SLACK REFRESH] Token refreshed successfully | team_id=%s | new_token=%s... | expires_in=%ss",
@@ -456,7 +463,9 @@ async def refresh_slack_token(db):
         )
         return True, None
     except Exception as e:
-        logger.error("[SLACK REFRESH] Unexpected error during token refresh | error=%s", e)
+        logger.error(
+            "[SLACK REFRESH] Unexpected error during token refresh | error=%s", e
+        )
         return False, str(e)
 
 
@@ -1104,7 +1113,12 @@ def dashboard_stats(
 def recent_projects(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    projects = get_user_owned_project_query(db, user).order_by(Project.created_at.desc()).limit(5).all()
+    projects = (
+        get_user_owned_project_query(db, user)
+        .order_by(Project.created_at.desc())
+        .limit(5)
+        .all()
+    )
     result = []
     for p in projects:
         designer = db.query(User).filter(User.id == p.assigned_designer_id).first()
@@ -1196,7 +1210,9 @@ def get_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
-        raise HTTPException(status_code=403, detail="You can only access your own projects")
+        raise HTTPException(
+            status_code=403, detail="You can only access your own projects"
+        )
     phases = (
         db.query(Phase)
         .filter(Phase.project_id == project_id)
@@ -1291,7 +1307,9 @@ async def create_project(
     async def _notify():
         with SessionLocal() as bg_db:
             try:
-                await notify_project_created(bg_db, project.id, user.slack_user_id, user.role.upper())
+                await notify_project_created(
+                    bg_db, project.id, user.slack_user_id, user.role.upper()
+                )
             except Exception:
                 pass
 
@@ -1327,7 +1345,9 @@ async def update_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
-        raise HTTPException(status_code=403, detail="You can only modify your own projects")
+        raise HTTPException(
+            status_code=403, detail="You can only modify your own projects"
+        )
 
     changes = []
     if data.name is not None and data.name != project.name:
@@ -1345,10 +1365,16 @@ async def update_project(
     if data.manager_notes is not None and data.manager_notes != project.manager_notes:
         changes.append(f"Manager notes updated")
         project.manager_notes = data.manager_notes
-    if data.slack_channel_id is not None and data.slack_channel_id != project.slack_channel_id:
+    if (
+        data.slack_channel_id is not None
+        and data.slack_channel_id != project.slack_channel_id
+    ):
         changes.append(f"Slack channel ID updated")
         project.slack_channel_id = data.slack_channel_id
-    if data.slack_channel_name is not None and data.slack_channel_name != project.slack_channel_name:
+    if (
+        data.slack_channel_name is not None
+        and data.slack_channel_name != project.slack_channel_name
+    ):
         changes.append(f"Slack channel name updated")
         project.slack_channel_name = data.slack_channel_name
 
@@ -1412,7 +1438,9 @@ async def complete_stage(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
-        raise HTTPException(status_code=403, detail="You can only modify your own projects")
+        raise HTTPException(
+            status_code=403, detail="You can only modify your own projects"
+        )
 
     phases = (
         db.query(Phase)
@@ -1587,7 +1615,9 @@ async def assign_designers_to_phase(
         async def _notify_assign():
             with SessionLocal() as bg_db:
                 try:
-                    await notify_designers_assigned(bg_db, project_id, stage_index, designer_ids)
+                    await notify_designers_assigned(
+                        bg_db, project_id, stage_index, designer_ids
+                    )
                 except Exception:
                     pass
 
@@ -1653,14 +1683,16 @@ def delete_designer(
     db: Session = Depends(get_db),
 ):
     if user.role.upper() == "DESIGNER":
-        raise HTTPException(status_code=403, detail="Designers cannot delete other designers")
+        raise HTTPException(
+            status_code=403, detail="Designers cannot delete other designers"
+        )
     designer = db.query(User).filter(User.id == designer_id).first()
     if not designer:
         raise HTTPException(status_code=404, detail="Designer not found")
 
-    projects = db.query(Project).filter(
-        Project.assigned_designer_id == designer_id
-    ).all()
+    projects = (
+        db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
+    )
     if projects:
         project_names = [p.name for p in projects]
         raise HTTPException(
@@ -1671,7 +1703,6 @@ def delete_designer(
     db.delete(designer)
     db.commit()
     return {"message": "Designer removed"}
-
 
 
 # ---------- Slack Integration ----------
@@ -1753,9 +1784,7 @@ async def slack_api_call(db, endpoint, data=None):
 
     # Proactively refresh if token is expiring soon
     if _should_proactively_refresh(config):
-        logger.info(
-            "[SLACK API] Proactively refreshing token before %s call", endpoint
-        )
+        logger.info("[SLACK API] Proactively refreshing token before %s call", endpoint)
         success, err = await refresh_slack_token(db)
         if not success:
             logger.warning(
@@ -1816,7 +1845,11 @@ async def slack_api_call(db, endpoint, data=None):
                     success, err = await refresh_slack_token(db)
                     if success:
                         # Retry with new token
-                        new_token = decrypt_token(config.bot_token) if config.encrypted else config.bot_token
+                        new_token = (
+                            decrypt_token(config.bot_token)
+                            if config.encrypted
+                            else config.bot_token
+                        )
                         if new_token:
                             headers["Authorization"] = f"Bearer {new_token}"
                             async with httpx.AsyncClient() as retry_client:
@@ -1891,10 +1924,9 @@ async def invite_users_to_channel(db, channel_id, slack_user_ids):
             slack_user_ids,
         )
         return
-    result = await slack_api_call(db, "conversations.invite", {
-        "channel": channel_id,
-        "users": ",".join(valid)
-    })
+    result = await slack_api_call(
+        db, "conversations.invite", {"channel": channel_id, "users": ",".join(valid)}
+    )
     if result is None:
         logger.error(
             "[SLACK INVITE] slack_api_call returned None | channel=%s | users=%s",
@@ -1918,30 +1950,42 @@ async def invite_users_to_channel(db, channel_id, slack_user_ids):
 
 async def verify_channel(db, channel_id):
     """Verify a Slack channel still exists and is not archived.
-    
+
     Returns a dict with:
         status: 'connected' | 'archived' | 'not_found' | 'unknown'
         channel_name: str | None
         error: str | None
     """
     if not channel_id:
-        return {"status": "not_found", "channel_name": None, "error": "No channel_id provided"}
-    
+        return {
+            "status": "not_found",
+            "channel_name": None,
+            "error": "No channel_id provided",
+        }
+
     result = await slack_api_call(db, "conversations.info", {"channel": channel_id})
-    
+
     if result is None:
-        return {"status": "unknown", "channel_name": None, "error": "Slack API unreachable"}
-    
+        return {
+            "status": "unknown",
+            "channel_name": None,
+            "error": "Slack API unreachable",
+        }
+
     if not result.get("ok"):
         error_code = result.get("error", "")
         if error_code in ("channel_not_found", "invalid_channel_id", "not_in_channel"):
             return {"status": "not_found", "channel_name": None, "error": error_code}
         return {"status": "unknown", "channel_name": None, "error": error_code}
-    
+
     channel = result.get("channel", {})
     if channel.get("is_archived"):
-        return {"status": "archived", "channel_name": channel.get("name"), "error": "Channel is archived"}
-    
+        return {
+            "status": "archived",
+            "channel_name": channel.get("name"),
+            "error": "Channel is archived",
+        }
+
     return {"status": "connected", "channel_name": channel.get("name"), "error": None}
 
 
@@ -1971,7 +2015,9 @@ async def send_slack_notification(db, project_id, text, blocks=None, channel_id=
         db.commit()
 
 
-async def notify_project_created(db, project_id, manager_slack_user_id="", user_role=""):
+async def notify_project_created(
+    db, project_id, manager_slack_user_id="", user_role=""
+):
     project, designer, phases = _get_project_details(db, project_id)
     if not project:
         return
@@ -1989,12 +2035,20 @@ async def notify_project_created(db, project_id, manager_slack_user_id="", user_
             db.commit()
             db.refresh(project)
             if user_role == "ADMIN":
-                await invite_users_to_channel(db, result["channel"]["id"], [manager_slack_user_id])
+                await invite_users_to_channel(
+                    db, result["channel"]["id"], [manager_slack_user_id]
+                )
             else:
                 designer_slack_id = designer.slack_user_id if designer else ""
                 if not designer_slack_id and designer:
-                    designer_slack_id = await resolve_slack_user_id_by_email(db, designer.email)
-                await invite_users_to_channel(db, result["channel"]["id"], [manager_slack_user_id, designer_slack_id])
+                    designer_slack_id = await resolve_slack_user_id_by_email(
+                        db, designer.email
+                    )
+                await invite_users_to_channel(
+                    db,
+                    result["channel"]["id"],
+                    [manager_slack_user_id, designer_slack_id],
+                )
         else:
             return
     channel_id = project.slack_channel_id
@@ -2005,11 +2059,16 @@ async def notify_project_created(db, project_id, manager_slack_user_id="", user_
     stage_list = ""
     for i, phase in enumerate(phases):
         stage_list += f"  {i + 1}. *{phase.deadline}*\n"
-    description_text = project.description if project.description else "No description provided."
+    description_text = (
+        project.description if project.description else "No description provided."
+    )
     blocks = [
         {
             "type": "header",
-            "text": {"type": "plain_text", "text": f"📦 New Project Created: {project.name}"},
+            "text": {
+                "type": "plain_text",
+                "text": f"📦 New Project Created: {project.name}",
+            },
         },
         {
             "type": "section",
@@ -2401,7 +2460,9 @@ def get_slack_config_endpoint(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     if user.role.upper() == "DESIGNER":
-        raise HTTPException(status_code=403, detail="Designers cannot access Slack configuration")
+        raise HTTPException(
+            status_code=403, detail="Designers cannot access Slack configuration"
+        )
     config = get_slack_config(db)
     if not config:
         raise HTTPException(status_code=404, detail="Slack not configured")
@@ -2574,14 +2635,10 @@ async def slack_install_callback(
         config.encrypted = True
         if refresh_token:
             config.refresh_token = encrypt_token(refresh_token)
-            logger.info(
-                "[SLACK INSTALL] Stored refresh_token (token rotation enabled)"
-            )
+            logger.info("[SLACK INSTALL] Stored refresh_token (token rotation enabled)")
         if expires_in:
             config.token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
-            logger.info(
-                "[SLACK INSTALL] Token expires at: %s", config.token_expires_at
-            )
+            logger.info("[SLACK INSTALL] Token expires at: %s", config.token_expires_at)
         # Signing secret is app-level (from Basic Information), not returned by oauth.v2.access.
         # Only set it if it hasn't been configured yet and we have one from env.
         if not config.signing_secret and SLACK_SIGNING_SECRET:
@@ -2604,14 +2661,10 @@ async def slack_install_callback(
         )
         if refresh_token:
             config.refresh_token = encrypt_token(refresh_token)
-            logger.info(
-                "[SLACK INSTALL] Stored refresh_token (token rotation enabled)"
-            )
+            logger.info("[SLACK INSTALL] Stored refresh_token (token rotation enabled)")
         if expires_in:
             config.token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
-            logger.info(
-                "[SLACK INSTALL] Token expires at: %s", config.token_expires_at
-            )
+            logger.info("[SLACK INSTALL] Token expires at: %s", config.token_expires_at)
         db.add(config)
         db.commit()
         db.refresh(config)
@@ -2673,8 +2726,12 @@ def get_slack_connection_status(
         channel_name="",
         bot_token_set=bot_token_set,
         refresh_token_set=refresh_token_set,
-        token_expires_at=token_expires_at.strftime("%Y-%m-%d %H:%M:%S") if token_expires_at else None,
-        token_expiring_soon=_is_token_expiring_soon(token_expires_at) if token_expires_at else False,
+        token_expires_at=token_expires_at.strftime("%Y-%m-%d %H:%M:%S")
+        if token_expires_at
+        else None,
+        token_expiring_soon=_is_token_expiring_soon(token_expires_at)
+        if token_expires_at
+        else False,
         connection_health=health,
     )
 
@@ -2752,7 +2809,11 @@ async def get_slack_channel_history(
         return {"messages": [], "channel_id": "", "has_channel": False}
     config = get_slack_config(db)
     if not config:
-        return {"messages": [], "channel_id": project.slack_channel_id, "has_channel": True}
+        return {
+            "messages": [],
+            "channel_id": project.slack_channel_id,
+            "has_channel": True,
+        }
 
     result = await slack_api_call(
         db, "conversations.history", {"channel": project.slack_channel_id, "limit": 100}
@@ -3494,11 +3555,17 @@ async def create_slack_channel(
         )
     if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
         return SlackChannelCreateResponse(
-            channel_id="", channel_name="", success=False, message="You can only manage Slack channels for your own projects"
+            channel_id="",
+            channel_name="",
+            success=False,
+            message="You can only manage Slack channels for your own projects",
         )
     if user.role.upper() == "DESIGNER":
         return SlackChannelCreateResponse(
-            channel_id="", channel_name="", success=False, message="Designers cannot manage Slack channels"
+            channel_id="",
+            channel_name="",
+            success=False,
+            message="Designers cannot manage Slack channels",
         )
     config = get_slack_config(db)
     if not config:
@@ -3533,21 +3600,26 @@ async def create_slack_channel(
             break
         logger.info(
             "[SLACK CHANNEL] Channel name taken, trying next | project=%s | attempt=%s",
-            project.name, attempt,
+            project.name,
+            attempt,
         )
     if result and result.get("ok"):
         channel_id = result["channel"]["id"]
         project.slack_channel_id = channel_id
         project.slack_channel_name = channel_name
         db.commit()
-        designer = db.query(User).filter(User.id == project.assigned_designer_id).first()
+        designer = (
+            db.query(User).filter(User.id == project.assigned_designer_id).first()
+        )
         designer_slack_id = designer.slack_user_id if designer else ""
         if not designer_slack_id and designer:
             designer_slack_id = await resolve_slack_user_id_by_email(db, designer.email)
         if user.role.upper() == "ADMIN":
             await invite_users_to_channel(db, channel_id, [user.slack_user_id])
         else:
-            await invite_users_to_channel(db, channel_id, [user.slack_user_id, designer_slack_id])
+            await invite_users_to_channel(
+                db, channel_id, [user.slack_user_id, designer_slack_id]
+            )
         logger.info(
             "[SLACK CHANNEL] Channel created successfully | project=%s | channel_id=%s | channel_name=%s",
             project.name,
@@ -3588,9 +3660,14 @@ def get_slack_activity(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
-        raise HTTPException(status_code=403, detail="You can only view Slack activity for your own projects")
+        raise HTTPException(
+            status_code=403,
+            detail="You can only view Slack activity for your own projects",
+        )
     if user.role.upper() == "DESIGNER":
-        raise HTTPException(status_code=403, detail="Designers cannot view Slack activity via dashboard")
+        raise HTTPException(
+            status_code=403, detail="Designers cannot view Slack activity via dashboard"
+        )
     activities = (
         db.query(SlackActivity)
         .filter(SlackActivity.project_id == project_id)
@@ -3599,8 +3676,6 @@ def get_slack_activity(
         .all()
     )
     return [SlackActivityResponse.model_validate(a) for a in activities]
-
-
 
 
 # ---------- Slack Channel Status ----------
@@ -3635,9 +3710,7 @@ async def get_slack_channel_status(
     Slack reports the channel is missing or archived.
     """
     config = get_slack_config(db)
-    projects = db.query(Project).filter(
-        Project.slack_channel_id != ""
-    ).all()
+    projects = db.query(Project).filter(Project.slack_channel_id != "").all()
 
     statuses = []
     corrected = []
@@ -3663,6 +3736,7 @@ async def get_slack_channel_status(
         db.commit()
 
     return SlackChannelStatusBatchResponse(statuses=statuses, corrected=corrected)
+
 
 # ---------- Startup ----------
 
