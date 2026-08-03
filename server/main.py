@@ -3803,6 +3803,19 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         "response_action": "errors",
                         "errors": [{"field": "project", "text": "Project not found"}],
                     }
+                designer = (
+                    db.query(User)
+                    .filter(User.id == project.assigned_designer_id)
+                    .first()
+                    if project.assigned_designer_id
+                    else None
+                )
+                phases = (
+                    db.query(Phase)
+                    .filter(Phase.project_id == project_id)
+                    .order_by(Phase.stage_index)
+                    .all()
+                )
                 state = payload.get("view", {}).get("state", {}).get("values", {})
                 rating_map = [
                     ("report_costing", "rating_costing", "costing"),
@@ -3831,6 +3844,24 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 slack_user_name = payload.get("user", {}).get("name", "")
                 channel_id = payload.get("channel", {}).get("id", "")
                 stage_name = _get_current_stage_name(stage_index)
+                
+                # Calculate deadline and delay
+                current_phase = phases[stage_index] if stage_index < len(phases) else None
+                deadline = current_phase.deadline if current_phase else "N/A"
+                today_str = datetime.utcnow().strftime("%Y-%m-%d")
+                actual_completion = today_str
+                delay_days = 0
+                if deadline != "N/A":
+                    try:
+                        deadline_date = datetime.strptime(deadline, "%Y-%m-%d").date()
+                        today_date = datetime.strptime(today_str, "%Y-%m-%d").date()
+                        delta = (today_date - deadline_date).days
+                        if delta > 0:
+                            delay_days = delta
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Save report
                 report = StageReport(
                     project_id=project_id,
                     stage_index=stage_index,
@@ -3848,38 +3879,99 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     aesthetics=ratings.get("aesthetics"),
                     easy_to_store=ratings.get("easy_to_store"),
                     notes=notes_val,
+                    actual_completion_date=actual_completion,
+                    delay_days=delay_days,
+                    stage_completed=True,
                 )
                 db.add(report)
+                
+                # Auto-complete stage and advance project
+                if current_phase:
+                    current_phase.completed_at = actual_completion
+                    current_phase.designer_update = notes_val or "Report submitted via Slack"
+                    current_phase.delay_reason = f"{delay_days} day(s) delay" if delay_days > 0 else "On time"
+                
+                # Advance to next stage
+                total_phases = len(phases)
+                completed_stages = sum(1 for p in phases if p.completed_at)
+                new_stage_index = min(stage_index + 1, total_phases - 1)
+                project.stage_index = new_stage_index
+                project.progress = round(((completed_stages + 1) / total_phases) * 100)
+                project.updated_at = datetime.utcnow()
+                
+                if project.progress == 100:
+                    project.status = "COMPLETED"
+                elif today_str > project.deadline:
+                    project.status = "DELAYED"
+                else:
+                    project.status = "ON_TRACK"
+                
                 db.commit()
                 logger.info(
-                    "[SLACK WEBHOOK] Report saved | report_id=%s | project=%s | stage=%s",
+                    "[SLACK WEBHOOK] Report saved & stage advanced | report_id=%s | project=%s | stage=%s → %s | delay=%d days",
                     report.id,
                     project.name,
-                    stage_name,
+                    stage_index,
+                    new_stage_index,
+                    delay_days,
                 )
+                
+                # Build timeline of completed stages
+                timeline_lines = []
+                for i, phase in enumerate(phases):
+                    check = "✅" if phase.completed_at else "⬜"
+                    marker = " ➜" if i == new_stage_index else ""
+                    phase_name = _get_current_stage_name(i)
+                    timeline_lines.append(f"{check} {i + 1}. {phase_name}{marker}")
+                timeline_text = "\n".join(timeline_lines)
+                
                 rating_lines = []
                 for block_id, action_id, field_name in rating_map:
                     val = ratings.get(field_name)
                     if val is not None:
                         emoji = "⭐" if val >= 4 else "🔸" if val >= 3 else "⚠️"
                         rating_lines.append(f"{emoji} {field_name.replace('_', ' ').title()}: {val}/5")
-                rating_text = "\n".join(rating_lines)
+                rating_text = "\n".join(rating_lines) if rating_lines else "*No ratings submitted*"
+                
+                delay_text = ""
+                if delay_days > 0:
+                    delay_text = f"\n⚠️ *Delay:* {delay_days} day(s) past deadline ({deadline})"
+                else:
+                    delay_text = f"\n✅ *On Time:* Completed before deadline ({deadline})"
+                
+                next_stage_text = ""
+                if new_stage_index < total_phases:
+                    next_stage = _get_current_stage_name(new_stage_index)
+                    next_phase = phases[new_stage_index] if new_stage_index < len(phases) else None
+                    next_deadline = next_phase.deadline if next_phase else "TBD"
+                    next_stage_text = f"\n🔄 *Next Stage:* {next_stage}\n📅 *New Deadline:* {next_deadline}"
+                else:
+                    next_stage_text = f"\n🎉 *All stages completed!*"
+                
                 confirmation_blocks = [
                     {
                         "type": "header",
-                        "text": {"type": "plain_text", "text": "✅ Report Submitted Successfully"},
+                        "text": {"type": "plain_text", "text": "✅ Stage Complete — Report Submitted"},
                     },
                     {
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": f"📦 *{project.name}*\n🔄 Stage: {stage_name} (Stage {stage_index + 1}/9)\n👤 Submitted by: {slack_user_name}\n📅 {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                            "text": f"📦 *{project.name}*\n📊 Progress: {project.progress}%\n👤 {designer.name if designer else 'Unassigned'}{delay_text}{next_stage_text}",
                         },
                     },
                     {"type": "divider"},
                     {
                         "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"*Evaluations:*\n{rating_text}" if rating_text else "*No ratings submitted*"},
+                        "text": {"type": "mrkdwn", "text": f"*Evaluations:*\n{rating_text}"},
+                    },
+                    {"type": "divider"},
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Stage Progression:*\n<pre>{timeline_text}</pre>",
+                        },
                     },
                 ]
                 if notes_val:
@@ -3931,7 +4023,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             "type": "section",
                             "text": {
                                 "type": "mrkdwn",
-                                "text": f"📦 *{project.name}*\n🔄 Stage: {stage_name}\n✅ Report logged successfully",
+                                "text": f"📦 *{project.name}*\n🔄 Stage: {stage_name} → {new_stage_index + 1}/9\n✅ Report logged, stage advanced",
                             },
                         },
                     ]
@@ -4507,6 +4599,19 @@ async def create_stage_report(
     if user.role.upper() not in ("ADMIN", "MANAGER"):
         if str(user.id) != report.submitted_by_user_id:
             raise HTTPException(status_code=403, detail="Not authorized to submit this report")
+    designer = (
+        db.query(User)
+        .filter(User.id == project.assigned_designer_id)
+        .first()
+        if project.assigned_designer_id
+        else None
+    )
+    phases = (
+        db.query(Phase)
+        .filter(Phase.project_id == report.project_id)
+        .order_by(Phase.stage_index)
+        .all()
+    )
     existing = (
         db.query(StageReport)
         .filter(
@@ -4515,6 +4620,22 @@ async def create_stage_report(
         )
         .first()
     )
+    now_str = datetime.utcnow().strftime("%Y-%m-%d")
+    
+    # Calculate deadline and delay
+    current_phase = phases[report.stage_index] if report.stage_index < len(phases) else None
+    deadline = current_phase.deadline if current_phase else "N/A"
+    delay_days = 0
+    if deadline != "N/A":
+        try:
+            deadline_date = datetime.strptime(deadline, "%Y-%m-%d").date()
+            today_date = datetime.strptime(now_str, "%Y-%m-%d").date()
+            delta = (today_date - deadline_date).days
+            if delta > 0:
+                delay_days = delta
+        except (ValueError, TypeError):
+            pass
+    
     if existing:
         existing.costing = report.costing
         existing.willingness_to_buy = report.willingness_to_buy
@@ -4527,9 +4648,37 @@ async def create_stage_report(
         existing.notes = report.notes or ""
         existing.submitted_by_name = report.submitted_by_name
         existing.submitted_at = datetime.utcnow()
+        existing.actual_completion_date = report.actual_completion_date or now_str
+        existing.delay_days = delay_days
+        existing.stage_completed = True
+        # Update phase
+        if current_phase:
+            current_phase.completed_at = report.actual_completion_date or now_str
+            current_phase.designer_update = report.notes or "Report submitted via web"
+            current_phase.delay_reason = f"{delay_days} day(s) delay" if delay_days > 0 else "On time"
+        # Advance project
+        total_phases = len(phases)
+        completed_stages = sum(1 for p in phases if p.completed_at)
+        new_stage_index = min(report.stage_index + 1, total_phases - 1)
+        project.stage_index = new_stage_index
+        project.progress = round(((completed_stages + 1) / total_phases) * 100)
+        project.updated_at = datetime.utcnow()
+        if project.progress == 100:
+            project.status = "COMPLETED"
+        elif now_str > project.deadline:
+            project.status = "DELAYED"
+        else:
+            project.status = "ON_TRACK"
         db.commit()
         db.refresh(existing)
-        logger.info("[REPORTS] Report updated | report_id=%s", existing.id)
+        logger.info(
+            "[REPORTS] Report updated & stage advanced | report_id=%s | project=%s | stage=%s → %s | delay=%d days",
+            existing.id,
+            project.name,
+            report.stage_index,
+            new_stage_index,
+            delay_days,
+        )
         return existing
     new_report = StageReport(
         project_id=report.project_id,
@@ -4548,11 +4697,38 @@ async def create_stage_report(
         aesthetics=report.aesthetics,
         easy_to_store=report.easy_to_store,
         notes=report.notes or "",
+        actual_completion_date=report.actual_completion_date or now_str,
+        delay_days=delay_days,
+        stage_completed=True,
     )
     db.add(new_report)
+    # Complete phase and advance project
+    if current_phase:
+        current_phase.completed_at = report.actual_completion_date or now_str
+        current_phase.designer_update = report.notes or "Report submitted via web"
+        current_phase.delay_reason = f"{delay_days} day(s) delay" if delay_days > 0 else "On time"
+    total_phases = len(phases)
+    completed_stages = sum(1 for p in phases if p.completed_at)
+    new_stage_index = min(report.stage_index + 1, total_phases - 1)
+    project.stage_index = new_stage_index
+    project.progress = round(((completed_stages + 1) / total_phases) * 100)
+    project.updated_at = datetime.utcnow()
+    if project.progress == 100:
+        project.status = "COMPLETED"
+    elif now_str > project.deadline:
+        project.status = "DELAYED"
+    else:
+        project.status = "ON_TRACK"
     db.commit()
     db.refresh(new_report)
-    logger.info("[REPORTS] Report created | report_id=%s | project=%s", new_report.id, project.name)
+    logger.info(
+        "[REPORTS] Report created & stage advanced | report_id=%s | project=%s | stage=%s → %s | delay=%d days",
+        new_report.id,
+        project.name,
+        report.stage_index,
+        new_stage_index,
+        delay_days,
+    )
     return new_report
 
 

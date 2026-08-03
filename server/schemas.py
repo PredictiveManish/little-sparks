@@ -259,6 +259,9 @@ class StageReportCreate(BaseModel):
     aesthetics: Optional[int] = None
     easy_to_store: Optional[int] = None
     notes: Optional[str] = ""
+    actual_completion_date: Optional[str] = None
+    delay_days: Optional[int] = 0
+    stage_completed: Optional[bool] = False
 
 
 class StageReportResponse(BaseModel):

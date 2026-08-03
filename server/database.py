@@ -166,6 +166,35 @@ def _migrate_stage_reports_table():
         )
 
 
+def _migrate_stage_report_completion_columns():
+    """Add actual_completion_date, delay_days, stage_completed columns to stage_reports if missing."""
+    try:
+        from sqlalchemy import inspect
+
+        inspector = inspect(engine)
+        existing_columns = {c["name"] for c in inspector.get_columns("stage_reports")}
+        if "actual_completion_date" not in existing_columns:
+            logger.info("Adding actual_completion_date column to stage_reports")
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE stage_reports ADD COLUMN actual_completion_date TEXT"))
+                conn.commit()
+        if "delay_days" not in existing_columns:
+            logger.info("Adding delay_days column to stage_reports")
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE stage_reports ADD COLUMN delay_days INTEGER DEFAULT 0"))
+                conn.commit()
+        if "stage_completed" not in existing_columns:
+            logger.info("Adding stage_completed column to stage_reports")
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE stage_reports ADD COLUMN stage_completed BOOLEAN DEFAULT FALSE"))
+                conn.commit()
+    except Exception as e:
+        logger.warning(
+            "Migration check for stage_report completion columns encountered an issue (likely already applied): %s",
+            e,
+        )
+
+
 def init_db():
     """Initialize database tables, run migrations, and WAL mode."""
     try:
@@ -177,4 +206,5 @@ def init_db():
     _migrate_slack_config_columns()
     _migrate_reminder_columns()
     _migrate_stage_reports_table()
+    _migrate_stage_report_completion_columns()
     init_wal_mode()

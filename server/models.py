@@ -169,6 +169,9 @@ class StageReport(Base):
     aesthetics = Column(Integer, nullable=True)
     easy_to_store = Column(Integer, nullable=True)
     notes = Column(Text, default="")
+    actual_completion_date = Column(String, default=None, nullable=True)
+    delay_days = Column(Integer, default=0)
+    stage_completed = Column(Boolean, default=False)
     submitted_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     project = relationship("Project", back_populates="stage_reports")
