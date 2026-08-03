@@ -353,7 +353,7 @@ class WeeklyReportResponse(BaseModel):
     """Weekly report: designer/project activity for a given week."""
     week_start: str
     week_end: str
-    reports: List[WeeklyReportItem] = []
+    reports: List["WeeklyReportItem"] = []
 
 
 class WeeklyReportItem(BaseModel):
@@ -374,7 +374,7 @@ class MonthlyReportResponse(BaseModel):
     """Monthly report: designer/project activity for a given month."""
     month: str
     year: int
-    reports: List[MonthlyReportItem] = []
+    reports: List["MonthlyReportItem"] = []
 
 
 class MonthlyReportItem(BaseModel):
@@ -396,7 +396,7 @@ class DesignerPerformanceResponse(BaseModel):
     designer_name: str
     period_start: str
     period_end: str
-    projects: List[DesignerProjectItem] = []
+    projects: List["DesignerProjectItem"] = []
     total_updates: int = 0
     total_delays: int = 0
     total_stages_completed: int = 0
