@@ -333,7 +333,7 @@ class ProjectReportResponse(BaseModel):
     status: str
     progress: int
     stage_index: int
-    phases: List[PhaseReportItem] = []
+    phases: List["PhaseReportItem"] = []
     stage_reports: List[StageReportResponse] = []
     manager_notes: str = ""
     generated_at: Optional[str] = None
