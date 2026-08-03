@@ -1770,38 +1770,49 @@ def get_slack_config(db):
 
 
 def verify_slack_signature(timestamp, signature, body, signing_secret):
-    if abs(datetime.utcnow().timestamp() - int(timestamp)) > 60 * 5:
+    if not signing_secret or not signature or not timestamp:
         logger.warning(
-            "[SLACK WEBHOOK] Request timestamp expired | timestamp=%s | current=%s | diff=%ss",
-            timestamp,
-            int(datetime.utcnow().timestamp()),
-            abs(datetime.utcnow().timestamp() - int(timestamp)),
+            "[SLACK WEBHOOK] Missing signing_secret, signature, or timestamp for verification"
         )
         return False
-    sig_b64 = (
-        "v0="
-        + hmac.new(
-            signing_secret.encode(),
-            f"v0:{timestamp}:{body}".encode(),
-            hashlib_lib.sha256,
-        ).hexdigest()
-    )
-    match = hmac.compare_digest(sig_b64, signature)
-    if not match:
-        logger.error(
-            "[SLACK WEBHOOK] Signature verification failed | timestamp=%s | signature=%s... | expected=%s...",
-            timestamp,
-            signature[:20] if signature else "None",
-            sig_b64[:20],
+    try:
+        ts_int = int(timestamp)
+        current_ts = int(datetime.utcnow().timestamp())
+        diff = abs(current_ts - ts_int)
+        if diff > 60 * 5:
+            logger.warning(
+                "[SLACK WEBHOOK] Request timestamp expired | diff=%ss",
+                diff,
+            )
+            return False
+        sig_b64 = (
+            "v0="
+            + hmac.new(
+                signing_secret.encode(),
+                f"v0:{timestamp}:{body}".encode(),
+                hashlib_lib.sha256,
+            ).hexdigest()
         )
-    return match
+        match = hmac.compare_digest(sig_b64, signature)
+        if not match:
+            logger.error(
+                "[SLACK WEBHOOK] Signature verification failed | expected=%s... | got=%s...",
+                sig_b64[:20],
+                signature[:20] if signature else "None",
+            )
+        return match
+    except Exception as e:
+        logger.error(
+            "[SLACK WEBHOOK] Error during signature verification: %s", e
+        )
+        return False
 
 
 async def slack_api_call(db, endpoint, data=None):
     config = get_slack_config(db)
     if not config:
         logger.warning("[SLACK API] No Slack config found | endpoint=%s", endpoint)
-        return None
+        raise RuntimeError(f"Slack not configured: no config found for {endpoint}")
 
     # Proactively refresh if token is expiring soon
     if _should_proactively_refresh(config):
@@ -1823,7 +1834,7 @@ async def slack_api_call(db, endpoint, data=None):
             config.encrypted,
             endpoint,
         )
-        return None
+        raise RuntimeError(f"Slack token unavailable for {endpoint}")
     headers = {
         "Authorization": f"Bearer {bot_token}",
         "Content-Type": "application/json",
@@ -1892,12 +1903,16 @@ async def slack_api_call(db, endpoint, data=None):
                                         "[SLACK API] Retry still failed after token refresh | error=%s",
                                         retry_result.get("error"),
                                     )
+                                    raise RuntimeError(
+                                        f"Slack API error after retry: {retry_result.get('error')}"
+                                    )
                     else:
                         logger.error(
                             "[SLACK API] Token refresh failed: %s | cannot retry",
                             err,
                         )
-                return result
+                        raise RuntimeError(f"Slack API error: {error_code}")
+                raise RuntimeError(f"Slack API error: {error_code}")
             return result
     except httpx.HTTPStatusError as e:
         logger.error(
@@ -1907,10 +1922,10 @@ async def slack_api_call(db, endpoint, data=None):
             e.response.text[:300],
             e,
         )
-        return None
+        raise
     except Exception as e:
         logger.error("[SLACK API] %s unexpected error | error=%s", endpoint, e)
-        return None
+        raise
 
 
 async def resolve_slack_user_id_by_email(db, email):
@@ -3606,6 +3621,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     traceback.format_exc(),
                 )
                 db.rollback()
+                return {
+                    "response_action": "errors",
+                    "errors": [{"field": "action", "text": "An error occurred. Please check the logs."}],
+                }
             db.commit()
             return {"response_action": "updated"}
         elif payload["type"] == "view_submission":
