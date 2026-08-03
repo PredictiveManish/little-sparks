@@ -5310,6 +5310,7 @@ async def get_project_weekly_report(
             stage_name=_get_current_stage_name(ph.stage_index),
             status=project.status,
             progress=project.progress,
+            deadline=ph.deadline,
             designer_update=ph.designer_update or "",
             delay_reason=ph.delay_reason or "",
             completed_at=ph.completed_at,
@@ -5395,13 +5396,14 @@ async def get_project_monthly_report(
             stage_name=_get_current_stage_name(idx),
             status=project.status,
             progress=project.progress,
+            deadline=ph.deadline,
             designer_updates=updates_by_phase.get(idx, []),
             delays=delays_by_phase.get(idx, []),
             stage_reports=reports_by_phase.get(idx, []),
         ))
     
     return MonthlyReportResponse(
-        month=month,
+        month=f"{month:02d}",
         year=year,
         reports=items,
     )

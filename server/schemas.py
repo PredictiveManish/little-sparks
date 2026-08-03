@@ -364,6 +364,7 @@ class WeeklyReportItem(BaseModel):
     stage_name: str
     status: str
     progress: int
+    deadline: str = ""
     designer_update: str = ""
     delay_reason: str = ""
     completed_at: Optional[str] = None
@@ -385,6 +386,9 @@ class MonthlyReportItem(BaseModel):
     stage_name: str
     status: str
     progress: int
+    deadline: str = ""
+    completed_at: Optional[str] = None
+    delay_days: Optional[int] = 0
     designer_updates: List[str] = []
     delays: List[str] = []
     stage_reports: List[StageReportResponse] = []

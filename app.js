@@ -2062,6 +2062,24 @@ async function populateReportsPage() {
             projectSelect.innerHTML = html;
         }
         
+        const weeklyProjectSelect = document.getElementById('weeklyProjectSelect');
+        if (weeklyProjectSelect) {
+            let html = '<option value="">Select project...</option>';
+            projects.forEach(p => {
+                html += `<option value="${p.id}">${p.name}</option>`;
+            });
+            weeklyProjectSelect.innerHTML = html;
+        }
+        
+        const monthlyProjectSelect = document.getElementById('monthlyProjectSelect');
+        if (monthlyProjectSelect) {
+            let html = '<option value="">Select project...</option>';
+            projects.forEach(p => {
+                html += `<option value="${p.id}">${p.name}</option>`;
+            });
+            monthlyProjectSelect.innerHTML = html;
+        }
+        
         const designerSelect = document.getElementById('designerPerfSelect');
         if (designerSelect) {
             let html = '<option value="">Select designer...</option>';
@@ -2200,12 +2218,29 @@ async function loadProjectReport() {
                         <tbody>
         `;
         
-        report.phases.forEach(p => {
+        const completedPhases = report.phases.filter(p => p.completed_at);
+        const latestPhase = report.phases
+            .filter(p => !p.completed_at)
+            .sort((a, b) => b.stage_index - a.stage_index)[0];
+        
+        const visiblePhases = [
+            ...completedPhases,
+            ...(latestPhase ? [latestPhase] : [])
+        ].sort((a, b) => a.stage_index - b.stage_index);
+        
+        visiblePhases.forEach(p => {
+            const delayDays = p.completed_at ? (p.delay_days || 0) : calculateDelayDays(p.deadline);
+            const statusBadge = p.completed_at
+                ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">Completed</span>`
+                : delayDays > 0
+                    ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed (${delayDays}d)</span>`
+                    : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-700">On Track</span>`;
             html += `
                 <tr class="border-b border-gray-100">
                     <td class="px-4 py-3 font-medium">${p.stage_name}</td>
                     <td class="px-4 py-3 text-gray-600">${formatDate(p.deadline)}</td>
                     <td class="px-4 py-3">${p.completed_at ? '✅ ' + formatDateTime(p.completed_at) : '—'}</td>
+                    <td class="px-4 py-3">${statusBadge}</td>
                     <td class="px-4 py-3 text-gray-500 max-w-xs truncate">${p.designer_update || '—'}</td>
                     <td class="px-4 py-3 text-gray-500 max-w-xs truncate">${p.delay_reason || '—'}</td>
                 </tr>
@@ -2284,7 +2319,7 @@ async function loadProjectReport() {
 }
 
 async function loadWeeklyReport() {
-    const projectId = document.getElementById('reportProjectSelect').value;
+    const projectId = document.getElementById('weeklyProjectSelect').value;
     if (!projectId) {
         showToast('Please select a project');
         return;
@@ -2315,11 +2350,17 @@ async function loadWeeklyReport() {
             html += '<p class="text-sm text-gray-400 text-center py-4">No reports for this week.</p>';
         } else {
             report.reports.forEach(item => {
+                const delayDays = item.completed_at ? (item.delay_days || 0) : calculateDelayDays(item.deadline || '');
+                const statusBadge = item.completed_at
+                    ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">Completed</span>`
+                    : delayDays > 0
+                        ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed (${delayDays}d)</span>`
+                        : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-700">On Track</span>`;
                 html += `
                     <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         <div class="flex items-center justify-between mb-2">
                             <h4 class="font-semibold text-gray-900">${item.stage_name}</h4>
-                            <span class="text-xs font-medium px-2 py-1 rounded-full ${item.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : item.status === 'DELAYED' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${item.status.replace('_', ' ')}</span>
+                            ${statusBadge}
                         </div>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                             <div>
@@ -2353,7 +2394,7 @@ async function loadWeeklyReport() {
 }
 
 async function loadMonthlyReport() {
-    const projectId = document.getElementById('reportProjectSelect').value;
+    const projectId = document.getElementById('monthlyProjectSelect').value;
     if (!projectId) {
         showToast('Please select a project');
         return;
@@ -2386,13 +2427,19 @@ async function loadMonthlyReport() {
             html += '<p class="text-sm text-gray-400 text-center py-4">No reports for this month.</p>';
         } else {
             report.reports.forEach(item => {
+                const delayDays = item.completed_at ? (item.delay_days || 0) : calculateDelayDays(item.deadline);
+                const statusBadge = item.completed_at
+                    ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">Completed</span>`
+                    : delayDays > 0
+                        ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed (${delayDays}d)</span>`
+                        : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-700">On Track</span>`;
                 const updates = item.designer_updates && item.designer_updates.length > 0 ? item.designer_updates.join('<br>') : '<span class="text-gray-400">—</span>';
                 const delays = item.delays && item.delays.length > 0 ? item.delays.join('<br>') : '<span class="text-gray-400">—</span>';
                 html += `
                     <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         <div class="flex items-center justify-between mb-2">
                             <h4 class="font-semibold text-gray-900">${item.stage_name}</h4>
-                            <span class="text-xs font-medium px-2 py-1 rounded-full ${item.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : item.status === 'DELAYED' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${item.status.replace('_', ' ')}</span>
+                            ${statusBadge}
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                             <div>
@@ -2541,4 +2588,13 @@ function downloadReportExcel() {
     api.downloadReportExcel(currentReportEndpoint + '&format=xlsx')
         .then(() => showToast('Excel downloaded successfully'))
         .catch(err => showToast('Download failed: ' + err.message));
+}
+
+function calculateDelayDays(deadline) {
+    if (!deadline) return 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const deadlineDate = new Date(deadline + 'T00:00:00');
+    const diffMs = today - deadlineDate;
+    return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 }

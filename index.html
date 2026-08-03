@@ -1002,6 +1002,12 @@
         <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Project</label>
+                    <select id="weeklyProjectSelect" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white">
+                        <option value="">Select project...</option>
+                    </select>
+                </div>
+                <div>
                     <label class="block text-xs font-medium text-gray-500 mb-1">Week Start</label>
                     <input type="date" id="weeklyWeekStart" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
                 </div>
@@ -1009,13 +1015,13 @@
                     <label class="block text-xs font-medium text-gray-500 mb-1">Week End</label>
                     <input type="date" id="weeklyWeekEnd" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
                 </div>
-                <div class="flex items-end">
-                    <button onclick="loadWeeklyReport()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors w-full">Generate Report</button>
-                </div>
+            </div>
+            <div class="mt-4">
+                <button onclick="loadWeeklyReport()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors w-full">Generate Report</button>
             </div>
         </div>
         <div id="weeklyReportContent" class="space-y-4">
-            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">Select a week to generate a report.</div>
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">Select a project and week to generate a report.</div>
         </div>
     </div>
 
@@ -1023,6 +1029,12 @@
     <div id="reportSectionMonthly" class="hidden">
         <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Project</label>
+                    <select id="monthlyProjectSelect" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white">
+                        <option value="">Select project...</option>
+                    </select>
+                </div>
                 <div>
                     <label class="block text-xs font-medium text-gray-500 mb-1">Month</label>
                     <select id="monthlyMonth" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white">
@@ -1044,13 +1056,13 @@
                     <label class="block text-xs font-medium text-gray-500 mb-1">Year</label>
                     <input type="number" id="monthlyYear" min="2020" max="2030" value="2025" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
                 </div>
-                <div class="flex items-end">
-                    <button onclick="loadMonthlyReport()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors w-full">Generate Report</button>
-                </div>
+            </div>
+            <div class="mt-4">
+                <button onclick="loadMonthlyReport()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors w-full">Generate Report</button>
             </div>
         </div>
         <div id="monthlyReportContent" class="space-y-4">
-            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">Select a month to generate a report.</div>
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">Select a project and month to generate a report.</div>
         </div>
     </div>
 
