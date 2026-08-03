@@ -56,6 +56,7 @@ from .models import (
     SlackConfig,
     SlackActivity,
     SlackMessage,
+    StageReport,
     Session as SessionModel,
 )
 from .schemas import (
@@ -78,6 +79,9 @@ from .schemas import (
     PendingUserResponse,
     ApproveUserRequest,
     SlackMessageResponse,
+    StageReportCreate,
+    StageReportResponse,
+    StageReportSummary,
 )
 
 # ---------- Init ----------
@@ -2207,10 +2211,16 @@ async def send_stage_update_reminder(db, project_id, kind="manual", phase=None):
             "elements": [
                 {
                     "type": "button",
+                    "text": {"type": "plain_text", "text": "📊 Submit Report"},
+                    "action_id": "submit_report",
+                    "value": str(project.id),
+                    "style": "primary",
+                },
+                {
+                    "type": "button",
                     "text": {"type": "plain_text", "text": "📝 Post Update"},
                     "action_id": "update_notes",
                     "value": str(project.id),
-                    "style": "primary",
                 },
                 {
                     "type": "button",
@@ -3245,6 +3255,155 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                     "blocks": blocks,
                                 },
                             )
+                elif action_id == "submit_report":
+                    current_stage = _get_current_stage_name(project.stage_index)
+                    report_blocks = [
+                        {
+                            "type": "header",
+                            "text": {"type": "plain_text", "text": "📊 Stage Evaluation Report"},
+                        },
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f"📦 *{project.name}*\n🔄 Stage: {current_stage} (Stage {project.stage_index + 1}/9)",
+                            },
+                        },
+                        {"type": "divider"},
+                        {
+                            "type": "input",
+                            "block_id": "report_costing",
+                            "element": {
+                                "type": "number_input",
+                                "action_id": "rating_costing",
+                                "min_value": "1",
+                                "max_value": "5",
+                                "is_decimal_allowed": False,
+                            },
+                            "label": {"type": "plain_text", "text": "1️⃣ Costing of the product (1-5)"},
+                            "optional": True,
+                        },
+                        {
+                            "type": "input",
+                            "block_id": "report_willingness",
+                            "element": {
+                                "type": "number_input",
+                                "action_id": "rating_willingness_to_buy",
+                                "min_value": "1",
+                                "max_value": "5",
+                                "is_decimal_allowed": False,
+                            },
+                            "label": {"type": "plain_text", "text": "2️⃣ Willingness to buy (1-5)"},
+                            "optional": True,
+                        },
+                        {
+                            "type": "input",
+                            "block_id": "report_engagement",
+                            "element": {
+                                "type": "number_input",
+                                "action_id": "rating_engagement_life",
+                                "min_value": "1",
+                                "max_value": "5",
+                                "is_decimal_allowed": False,
+                            },
+                            "label": {"type": "plain_text", "text": "3️⃣ Engagement life (1-5)"},
+                            "optional": True,
+                        },
+                        {
+                            "type": "input",
+                            "block_id": "report_durability",
+                            "element": {
+                                "type": "number_input",
+                                "action_id": "rating_durability",
+                                "min_value": "1",
+                                "max_value": "5",
+                                "is_decimal_allowed": False,
+                            },
+                            "label": {"type": "plain_text", "text": "4️⃣ Durability (1-5)"},
+                            "optional": True,
+                        },
+                        {
+                            "type": "input",
+                            "block_id": "report_age",
+                            "element": {
+                                "type": "number_input",
+                                "action_id": "rating_age_appropriateness",
+                                "min_value": "1",
+                                "max_value": "5",
+                                "is_decimal_allowed": False,
+                            },
+                            "label": {"type": "plain_text", "text": "5️⃣ Age Appropriateness (1-5)"},
+                            "optional": True,
+                        },
+                        {
+                            "type": "input",
+                            "block_id": "report_ease",
+                            "element": {
+                                "type": "number_input",
+                                "action_id": "rating_ease_of_use",
+                                "min_value": "1",
+                                "max_value": "5",
+                                "is_decimal_allowed": False,
+                            },
+                            "label": {"type": "plain_text", "text": "6️⃣ Ease of use (1-5)"},
+                            "optional": True,
+                        },
+                        {
+                            "type": "input",
+                            "block_id": "report_aesthetics",
+                            "element": {
+                                "type": "number_input",
+                                "action_id": "rating_aesthetics",
+                                "min_value": "1",
+                                "max_value": "5",
+                                "is_decimal_allowed": False,
+                            },
+                            "label": {"type": "plain_text", "text": "7️⃣ Aesthetics of the Products (1-5)"},
+                            "optional": True,
+                        },
+                        {
+                            "type": "input",
+                            "block_id": "report_store",
+                            "element": {
+                                "type": "number_input",
+                                "action_id": "rating_easy_to_store",
+                                "min_value": "1",
+                                "max_value": "5",
+                                "is_decimal_allowed": False,
+                            },
+                            "label": {"type": "plain_text", "text": "8️⃣ Easy to store / Travel Friendliness (1-5)"},
+                            "optional": True,
+                        },
+                        {"type": "divider"},
+                        {
+                            "type": "input",
+                            "block_id": "report_notes",
+                            "element": {
+                                "type": "plain_text_input",
+                                "action_id": "report_notes",
+                                "multi_line": True,
+                            },
+                            "label": {"type": "plain_text", "text": "💬 Additional notes / observations"},
+                            "optional": True,
+                        },
+                    ]
+                    if project.slack_channel_id:
+                        await slack_api_call(
+                            db,
+                            "views.open",
+                            {
+                                "trigger_id": payload.get("trigger_id"),
+                                "view": {
+                                    "type": "modal",
+                                    "callback_id": f"stage_report_form_{project_id}_{project.stage_index}",
+                                    "title": {"type": "plain_text", "text": "📊 Stage Evaluation Report"},
+                                    "submit": {"type": "plain_text", "text": "Submit Report"},
+                                    "close": {"type": "plain_text", "text": "Cancel"},
+                                    "blocks": report_blocks,
+                                    "clear_on_close": True,
+                                },
+                            },
+                        )
                 elif action_id == "report_delay":
                     blocks = [
                         {
@@ -3625,6 +3784,167 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "blocks": blocks,
                             },
                         )
+            elif "stage_report_form_" in callback_id:
+                parts = callback_id.split("_")
+                project_id = int(parts[-2])
+                stage_index = int(parts[-1])
+                logger.info(
+                    "[SLACK WEBHOOK] Stage report submitted | project_id=%s | stage_index=%s",
+                    project_id,
+                    stage_index,
+                )
+                project = db.query(Project).filter(Project.id == project_id).first()
+                if not project:
+                    logger.warning(
+                        "[SLACK WEBHOOK] Project not found for report | project_id=%s",
+                        project_id,
+                    )
+                    return {
+                        "response_action": "errors",
+                        "errors": [{"field": "project", "text": "Project not found"}],
+                    }
+                state = payload.get("view", {}).get("state", {}).get("values", {})
+                rating_map = [
+                    ("report_costing", "rating_costing", "costing"),
+                    ("report_willingness", "rating_willingness_to_buy", "willingness_to_buy"),
+                    ("report_engagement", "rating_engagement_life", "engagement_life"),
+                    ("report_durability", "rating_durability", "durability"),
+                    ("report_age", "rating_age_appropriateness", "age_appropriateness"),
+                    ("report_ease", "rating_ease_of_use", "ease_of_use"),
+                    ("report_aesthetics", "rating_aesthetics", "aesthetics"),
+                    ("report_store", "rating_easy_to_store", "easy_to_store"),
+                ]
+                ratings = {}
+                for block_id, action_id, field_name in rating_map:
+                    val = (
+                        state.get(block_id, {})
+                        .get(action_id, {})
+                        .get("value")
+                    )
+                    ratings[field_name] = int(val) if val is not None else None
+                notes_val = (
+                    state.get("report_notes", {})
+                    .get("report_notes", {})
+                    .get("value", "")
+                )
+                slack_user_id = payload.get("user", {}).get("id", "")
+                slack_user_name = payload.get("user", {}).get("name", "")
+                channel_id = payload.get("channel", {}).get("id", "")
+                stage_name = _get_current_stage_name(stage_index)
+                report = StageReport(
+                    project_id=project_id,
+                    stage_index=stage_index,
+                    stage_name=stage_name,
+                    submitted_by_user_id=slack_user_id,
+                    submitted_by_name=slack_user_name,
+                    submitted_by_role="DESIGNER",
+                    slack_user_id=slack_user_id,
+                    costing=ratings.get("costing"),
+                    willingness_to_buy=ratings.get("willingness_to_buy"),
+                    engagement_life=ratings.get("engagement_life"),
+                    durability=ratings.get("durability"),
+                    age_appropriateness=ratings.get("age_appropriateness"),
+                    ease_of_use=ratings.get("ease_of_use"),
+                    aesthetics=ratings.get("aesthetics"),
+                    easy_to_store=ratings.get("easy_to_store"),
+                    notes=notes_val,
+                )
+                db.add(report)
+                db.commit()
+                logger.info(
+                    "[SLACK WEBHOOK] Report saved | report_id=%s | project=%s | stage=%s",
+                    report.id,
+                    project.name,
+                    stage_name,
+                )
+                rating_lines = []
+                for block_id, action_id, field_name in rating_map:
+                    val = ratings.get(field_name)
+                    if val is not None:
+                        emoji = "⭐" if val >= 4 else "🔸" if val >= 3 else "⚠️"
+                        rating_lines.append(f"{emoji} {field_name.replace('_', ' ').title()}: {val}/5")
+                rating_text = "\n".join(rating_lines)
+                confirmation_blocks = [
+                    {
+                        "type": "header",
+                        "text": {"type": "plain_text", "text": "✅ Report Submitted Successfully"},
+                    },
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"📦 *{project.name}*\n🔄 Stage: {stage_name} (Stage {stage_index + 1}/9)\n👤 Submitted by: {slack_user_name}\n📅 {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+                        },
+                    },
+                    {"type": "divider"},
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": f"*Evaluations:*\n{rating_text}" if rating_text else "*No ratings submitted*"},
+                    },
+                ]
+                if notes_val:
+                    confirmation_blocks.append(
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f"*Notes:*\n{notes_val}",
+                            },
+                        }
+                    )
+                confirmation_blocks.append(
+                    {
+                        "type": "actions",
+                        "elements": [
+                            {
+                                "type": "button",
+                                "text": {"type": "plain_text", "text": "📊 View Project"},
+                                "action_id": "view_project",
+                                "value": str(project_id),
+                            },
+                            {
+                                "type": "button",
+                                "text": {"type": "plain_text", "text": "📈 Progress"},
+                                "action_id": "view_progress",
+                                "value": str(project_id),
+                            },
+                        ],
+                    }
+                )
+                if project.slack_channel_id:
+                    await slack_api_call(
+                        db,
+                        "chat.postMessage",
+                        {
+                            "channel": project.slack_channel_id,
+                            "blocks": confirmation_blocks,
+                        },
+                    )
+                view_ts = payload.get("view", {}).get("latest", {}).get("ts")
+                if view_ts:
+                    updated_blocks = [
+                        {
+                            "type": "header",
+                            "text": {"type": "plain_text", "text": "✅ Report Submitted"},
+                        },
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": f"📦 *{project.name}*\n🔄 Stage: {stage_name}\n✅ Report logged successfully",
+                            },
+                        },
+                    ]
+                    await slack_api_call(
+                        db,
+                        "chat.update",
+                        {
+                            "channel": project.slack_channel_id,
+                            "ts": view_ts,
+                            "blocks": updated_blocks,
+                        },
+                    )
+                return {}
             return {}
     return {"message": "OK"}
 
@@ -4164,6 +4484,192 @@ def export_data(
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ---------- Stage Reports ----------
+
+
+@app.post("/api/reports", response_model=StageReportResponse)
+async def create_stage_report(
+    report: StageReportCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    logger.info(
+        "[REPORTS] Report submission requested | project_id=%s | stage=%s | user=%s",
+        report.project_id,
+        report.stage_index,
+        user.name,
+    )
+    project = db.query(Project).filter(Project.id == report.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() not in ("ADMIN", "MANAGER"):
+        if str(user.id) != report.submitted_by_user_id:
+            raise HTTPException(status_code=403, detail="Not authorized to submit this report")
+    existing = (
+        db.query(StageReport)
+        .filter(
+            StageReport.project_id == report.project_id,
+            StageReport.stage_index == report.stage_index,
+        )
+        .first()
+    )
+    if existing:
+        existing.costing = report.costing
+        existing.willingness_to_buy = report.willingness_to_buy
+        existing.engagement_life = report.engagement_life
+        existing.durability = report.durability
+        existing.age_appropriateness = report.age_appropriateness
+        existing.ease_of_use = report.ease_of_use
+        existing.aesthetics = report.aesthetics
+        existing.easy_to_store = report.easy_to_store
+        existing.notes = report.notes or ""
+        existing.submitted_by_name = report.submitted_by_name
+        existing.submitted_at = datetime.utcnow()
+        db.commit()
+        db.refresh(existing)
+        logger.info("[REPORTS] Report updated | report_id=%s", existing.id)
+        return existing
+    new_report = StageReport(
+        project_id=report.project_id,
+        stage_index=report.stage_index,
+        stage_name=report.stage_name,
+        submitted_by_user_id=report.submitted_by_user_id,
+        submitted_by_name=report.submitted_by_name,
+        submitted_by_role=report.submitted_by_role,
+        slack_user_id=report.slack_user_id,
+        costing=report.costing,
+        willingness_to_buy=report.willingness_to_buy,
+        engagement_life=report.engagement_life,
+        durability=report.durability,
+        age_appropriateness=report.age_appropriateness,
+        ease_of_use=report.ease_of_use,
+        aesthetics=report.aesthetics,
+        easy_to_store=report.easy_to_store,
+        notes=report.notes or "",
+    )
+    db.add(new_report)
+    db.commit()
+    db.refresh(new_report)
+    logger.info("[REPORTS] Report created | report_id=%s | project=%s", new_report.id, project.name)
+    return new_report
+
+
+@app.get("/api/projects/{project_id}/reports", response_model=List[StageReportResponse])
+async def get_project_reports(
+    project_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    reports = (
+        db.query(StageReport)
+        .filter(StageReport.project_id == project_id)
+        .order_by(StageReport.submitted_at.desc())
+        .all()
+    )
+    logger.info("[REPORTS] Project reports fetched | project_id=%s | count=%s", project_id, len(reports))
+    return reports
+
+
+@app.get("/api/designers/{designer_id}/reports", response_model=List[StageReportResponse])
+async def get_designer_reports(
+    designer_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    designer = db.query(User).filter(User.id == designer_id).first()
+    if not designer:
+        raise HTTPException(status_code=404, detail="Designer not found")
+    reports = (
+        db.query(StageReport)
+        .filter(StageReport.submitted_by_user_id == str(designer_id))
+        .order_by(StageReport.submitted_at.desc())
+        .all()
+    )
+    logger.info("[REPORTS] Designer reports fetched | designer_id=%s | count=%s", designer_id, len(reports))
+    return reports
+
+
+@app.get("/api/reports/summary", response_model=List[StageReportSummary])
+async def get_report_summary(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    projects = db.query(Project).all()
+    summaries = []
+    for project in projects:
+        phases = (
+            db.query(Phase)
+            .filter(Phase.project_id == project.id)
+            .order_by(Phase.stage_index)
+            .all()
+        )
+        for phase in phases:
+            reports = (
+                db.query(StageReport)
+                .filter(
+                    StageReport.project_id == project.id,
+                    StageReport.stage_index == phase.stage_index,
+                )
+                .all()
+            )
+            if not reports:
+                continue
+            total = len(reports)
+            valid_fields = [
+                ("costing", "avg_costing"),
+                ("willingness_to_buy", "avg_willingness_to_buy"),
+                ("engagement_life", "avg_engagement_life"),
+                ("durability", "avg_durability"),
+                ("age_appropriateness", "avg_age_appropriateness"),
+                ("ease_of_use", "avg_ease_of_use"),
+                ("aesthetics", "avg_aesthetics"),
+                ("easy_to_store", "avg_easy_to_store"),
+            ]
+            summary_dict = {
+                "project_id": project.id,
+                "project_name": project.name,
+                "assigned_designer": designer.name if (designer := db.query(User).filter(User.id == project.assigned_designer_id).first()) else "Unassigned",
+                "stage_index": phase.stage_index,
+                "stage_name": _get_current_stage_name(phase.stage_index),
+                "total_reports": total,
+            }
+            for field, avg_key in valid_fields:
+                vals = [getattr(r, field) for r in reports if getattr(r, field) is not None]
+                summary_dict[avg_key] = round(sum(vals) / len(vals), 1) if vals else None
+            latest = max(reports, key=lambda r: r.submitted_at)
+            summary_dict["latest_report_id"] = latest.id
+            summary_dict["latest_submitted_at"] = latest.submitted_at
+            summaries.append(StageReportSummary(**summary_dict))
+    summaries.sort(key=lambda s: (s.project_id, s.stage_index))
+    logger.info("[REPORTS] Summary fetched | total summaries=%s", len(summaries))
+    return summaries
+
+
+@app.get("/api/reports/project/{project_id}/designer/{designer_id}", response_model=List[StageReportResponse])
+async def get_project_designer_reports(
+    project_id: int,
+    designer_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    reports = (
+        db.query(StageReport)
+        .filter(
+            StageReport.project_id == project_id,
+            StageReport.submitted_by_user_id == str(designer_id),
+        )
+        .order_by(StageReport.stage_index, StageReport.submitted_at.desc())
+        .all()
+    )
+    return reports
 
 
 # ---------- Startup ----------

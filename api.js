@@ -99,6 +99,13 @@ const api = {
     // Reminders
     sendReminder: (projectId) => apiFetch(`/projects/${projectId}/remind`, { method: 'POST' }),
 
+    // Stage Reports
+    getProjectReports: (projectId) => apiFetch(`/projects/${projectId}/reports`),
+    getDesignerReports: (designerId) => apiFetch(`/designers/${designerId}/reports`),
+    getReportSummary: () => apiFetch('/reports/summary'),
+    submitReport: (data) => apiFetch('/reports', { method: 'POST', body: data }),
+    getProjectDesignerReports: (projectId, designerId) => apiFetch(`/reports/project/${projectId}/designer/${designerId}`),
+
     // Admin data export — triggers a browser download (needs the session cookie,
     // so it's done via fetch+blob rather than a plain link).
     exportData: async (entity, format, fromDate, toDate) => {

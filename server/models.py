@@ -76,6 +76,9 @@ class Project(Base):
     slack_messages = relationship(
         "SlackMessage", back_populates="project", cascade="all, delete-orphan"
     )
+    stage_reports = relationship(
+        "StageReport", back_populates="project", cascade="all, delete-orphan"
+    )
 
 
 class Phase(Base):
@@ -144,6 +147,31 @@ class SlackMessage(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     project = relationship("Project", back_populates="slack_messages")
+
+
+class StageReport(Base):
+    __tablename__ = "stage_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    stage_index = Column(Integer, nullable=False)
+    stage_name = Column(String, nullable=False)
+    submitted_by_user_id = Column(String, default="")
+    submitted_by_name = Column(String, default="")
+    submitted_by_role = Column(String, default="")
+    slack_user_id = Column(String, default="")
+    costing = Column(Integer, nullable=True)
+    willingness_to_buy = Column(Integer, nullable=True)
+    engagement_life = Column(Integer, nullable=True)
+    durability = Column(Integer, nullable=True)
+    age_appropriateness = Column(Integer, nullable=True)
+    ease_of_use = Column(Integer, nullable=True)
+    aesthetics = Column(Integer, nullable=True)
+    easy_to_store = Column(Integer, nullable=True)
+    notes = Column(Text, default="")
+    submitted_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    project = relationship("Project", back_populates="stage_reports")
 
 
 class Session(Base):

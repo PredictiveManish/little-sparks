@@ -1638,3 +1638,313 @@ function applyRoleBasedNavVisibility() {
         }
     });
 }
+
+function setExportSubTab(tab) {
+    const exportSection = document.getElementById('exportDataSection');
+    const reportsSection = document.getElementById('stageReportsSection');
+    const btnExport = document.getElementById('exportSubTabExport');
+    const btnReports = document.getElementById('exportSubTabReports');
+    
+    if (tab === 'export') {
+        exportSection.classList.remove('hidden');
+        reportsSection.classList.add('hidden');
+        btnExport.classList.add('border-brand-500', 'text-brand-600');
+        btnExport.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700');
+        btnReports.classList.remove('border-brand-500', 'text-brand-600');
+        btnReports.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700');
+    } else {
+        exportSection.classList.add('hidden');
+        reportsSection.classList.remove('hidden');
+        btnReports.classList.add('border-brand-500', 'text-brand-600');
+        btnReports.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700');
+        btnExport.classList.remove('border-brand-500', 'text-brand-600');
+        btnExport.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700');
+        loadReports();
+    }
+}
+
+// ============================================
+// REPORTS
+// ============================================
+let reportViewMode = 'table';
+let allReports = [];
+let allSummaries = [];
+
+async function loadReports() {
+    console.log('[APP] loadReports: Loading reports');
+    try {
+        DESIGNERS = await api.getDesigners();
+        const projects = await api.getProjects();
+        populateReportFilters(projects, DESIGNERS);
+        
+        const projectFilter = document.getElementById('reportProjectFilter').value;
+        const designerFilter = document.getElementById('reportDesignerFilter').value;
+        const stageFilter = document.getElementById('reportStageFilter').value;
+        const dateFrom = document.getElementById('reportDateFrom').value;
+        const dateTo = document.getElementById('reportDateTo').value;
+        
+        let reports;
+        if (projectFilter && designerFilter) {
+            reports = await api.getProjectDesignerReports(parseInt(projectFilter), parseInt(designerFilter));
+        } else if (projectFilter) {
+            reports = await api.getProjectReports(parseInt(projectFilter));
+        } else if (designerFilter) {
+            reports = await api.getDesignerReports(parseInt(designerFilter));
+        } else {
+            const summary = await api.getReportSummary();
+            allSummaries = summary;
+            if (reportViewMode === 'summary') {
+                renderReportSummary();
+            }
+            reports = [];
+            for (const s of summary) {
+                const projReports = await api.getProjectReports(s.project_id);
+                reports.push(...projReports.filter(r => r.stage_index === s.stage_index));
+            }
+        }
+        
+        allReports = reports;
+        
+        if (dateFrom) {
+            reports = reports.filter(r => r.submitted_at && r.submitted_at.split('T')[0] >= dateFrom);
+        }
+        if (dateTo) {
+            reports = reports.filter(r => r.submitted_at && r.submitted_at.split('T')[0] <= dateTo);
+        }
+        if (stageFilter !== '') {
+            reports = reports.filter(r => r.stage_index === parseInt(stageFilter));
+        }
+        
+        document.getElementById('reportCountLabel').textContent = reports.length + ' reports';
+        
+        if (reportViewMode === 'table') {
+            renderReportsTable(reports);
+        } else {
+            if (allSummaries.length === 0) {
+                const summary = await api.getReportSummary();
+                allSummaries = summary;
+            }
+            renderReportSummary(allSummaries);
+        }
+    } catch (err) {
+        console.error('[APP] loadReports: Failed to load reports:', err.message);
+        showToast('Failed to load reports: ' + err.message);
+    }
+}
+
+function populateReportFilters(projects, designers) {
+    const projectSelect = document.getElementById('reportProjectFilter');
+    const currentProjectVal = projectSelect.value;
+    let projectHTML = '<option value="">All Projects</option>';
+    projects.forEach(p => {
+        projectHTML += `<option value="${p.id}" ${p.id == currentProjectVal ? 'selected' : ''}>${p.name}</option>`;
+    });
+    projectSelect.innerHTML = projectHTML;
+    
+    const designerSelect = document.getElementById('reportDesignerFilter');
+    const currentDesignerVal = designerSelect.value;
+    let designerHTML = '<option value="">All Designers</option>';
+    designers.forEach(d => {
+        designerHTML += `<option value="${d.id}" ${d.id == currentDesignerVal ? 'selected' : ''}>${d.name}</option>`;
+    });
+    designerSelect.innerHTML = designerHTML;
+}
+
+function renderReportsTable(reports) {
+    const tbody = document.getElementById('reportsTableBody');
+    if (!reports || reports.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="13" class="px-4 py-12 text-center text-gray-400">No reports to display. Use filters or submit a new report.</td></tr>';
+        return;
+    }
+    let html = '';
+    reports.forEach(r => {
+        const ratingCell = (val) => {
+            if (val === null || val === undefined) return '<span class="text-gray-300">—</span>';
+            const color = val >= 4 ? 'text-green-600' : val >= 3 ? 'text-amber-600' : 'text-red-600';
+            return `<span class="font-semibold ${color}">${val}/5</span>`;
+        };
+        html += `
+            <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">${r.project_id || '—'}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${r.stage_name || 'Stage ' + (r.stage_index + 1)}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${r.submitted_by_name || '—'}</td>
+                <td class="px-4 py-3 text-sm text-gray-600">${formatDate(r.submitted_at?.split('T')[0] || '')}</td>
+                <td class="px-4 py-3 text-center">${ratingCell(r.costing)}</td>
+                <td class="px-4 py-3 text-center">${ratingCell(r.willingness_to_buy)}</td>
+                <td class="px-4 py-3 text-center">${ratingCell(r.engagement_life)}</td>
+                <td class="px-4 py-3 text-center">${ratingCell(r.durability)}</td>
+                <td class="px-4 py-3 text-center">${ratingCell(r.age_appropriateness)}</td>
+                <td class="px-4 py-3 text-center">${ratingCell(r.ease_of_use)}</td>
+                <td class="px-4 py-3 text-center">${ratingCell(r.aesthetics)}</td>
+                <td class="px-4 py-3 text-center">${ratingCell(r.easy_to_store)}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">${r.notes || '—'}</td>
+            </tr>
+        `;
+    });
+    tbody.innerHTML = html;
+}
+
+function renderReportSummary(summaries) {
+    const container = document.getElementById('reportSummaryCards');
+    if (!summaries || summaries.length === 0) {
+        container.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400 col-span-full">No summary data available.</div>';
+        return;
+    }
+    let html = '';
+    summaries.forEach(s => {
+        const avg = (val) => val !== null && val !== undefined ? val : '—';
+        html += `
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <h4 class="font-semibold text-gray-900 text-sm">${s.project_name}</h4>
+                    <span class="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-600">${s.stage_name}</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                        <p class="text-xs text-gray-500">Costing</p>
+                        <p class="font-semibold ${parseFloat(avg(s.avg_costing)) >= 4 ? 'text-green-600' : parseFloat(avg(s.avg_costing)) < 3 ? 'text-red-600' : 'text-amber-600'}">${avg(s.avg_costing)}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500">Willingness</p>
+                        <p class="font-semibold ${parseFloat(avg(s.avg_willingness_to_buy)) >= 4 ? 'text-green-600' : parseFloat(avg(s.avg_willingness_to_buy)) < 3 ? 'text-red-600' : 'text-amber-600'}">${avg(s.avg_willingness_to_buy)}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500">Engagement</p>
+                        <p class="font-semibold ${parseFloat(avg(s.avg_engagement_life)) >= 4 ? 'text-green-600' : parseFloat(avg(s.avg_engagement_life)) < 3 ? 'text-red-600' : 'text-amber-600'}">${avg(s.avg_engagement_life)}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500">Durability</p>
+                        <p class="font-semibold ${parseFloat(avg(s.avg_durability)) >= 4 ? 'text-green-600' : parseFloat(avg(s.avg_durability)) < 3 ? 'text-red-600' : 'text-amber-600'}">${avg(s.avg_durability)}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500">Age Appr.</p>
+                        <p class="font-semibold ${parseFloat(avg(s.avg_age_appropriateness)) >= 4 ? 'text-green-600' : parseFloat(avg(s.avg_age_appropriateness)) < 3 ? 'text-red-600' : 'text-amber-600'}">${avg(s.avg_age_appropriateness)}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500">Ease</p>
+                        <p class="font-semibold ${parseFloat(avg(s.avg_ease_of_use)) >= 4 ? 'text-green-600' : parseFloat(avg(s.avg_ease_of_use)) < 3 ? 'text-red-600' : 'text-amber-600'}">${avg(s.avg_ease_of_use)}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500">Aesthetics</p>
+                        <p class="font-semibold ${parseFloat(avg(s.avg_aesthetics)) >= 4 ? 'text-green-600' : parseFloat(avg(s.avg_aesthetics)) < 3 ? 'text-red-600' : 'text-amber-600'}">${avg(s.avg_aesthetics)}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500">Store</p>
+                        <p class="font-semibold ${parseFloat(avg(s.avg_easy_to_store)) >= 4 ? 'text-green-600' : parseFloat(avg(s.avg_easy_to_store)) < 3 ? 'text-red-600' : 'text-amber-600'}">${avg(s.avg_easy_to_store)}</p>
+                    </div>
+                </div>
+                <div class="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                    <span>${s.total_reports} report(s)</span>
+                    <span>${s.assigned_designer}</span>
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+function setReportView(mode) {
+    reportViewMode = mode;
+    const tableView = document.getElementById('reportTableView');
+    const summaryView = document.getElementById('reportSummaryView');
+    const btnTable = document.getElementById('reportViewTable');
+    const btnSummary = document.getElementById('reportViewSummary');
+    
+    if (mode === 'table') {
+        tableView.classList.remove('hidden');
+        summaryView.classList.add('hidden');
+        btnTable.classList.add('bg-white', 'text-gray-900', 'shadow-sm');
+        btnTable.classList.remove('text-gray-600', 'hover:text-gray-900');
+        btnSummary.classList.remove('bg-white', 'text-gray-900', 'shadow-sm');
+        btnSummary.classList.add('text-gray-600', 'hover:text-gray-900');
+        renderReportsTable(allReports);
+    } else {
+        tableView.classList.add('hidden');
+        summaryView.classList.remove('hidden');
+        btnSummary.classList.add('bg-white', 'text-gray-900', 'shadow-sm');
+        btnSummary.classList.remove('text-gray-600', 'hover:text-gray-900');
+        btnTable.classList.remove('bg-white', 'text-gray-900', 'shadow-sm');
+        btnTable.classList.add('text-gray-600', 'hover:text-gray-900');
+        renderReportSummary(allSummaries);
+    }
+}
+
+function resetReportFilters() {
+    document.getElementById('reportProjectFilter').value = '';
+    document.getElementById('reportDesignerFilter').value = '';
+    document.getElementById('reportStageFilter').value = '';
+    document.getElementById('reportDateFrom').value = '';
+    document.getElementById('reportDateTo').value = '';
+    loadReports();
+}
+
+function openSubmitReportModalFromTable() {
+    const modal = document.getElementById('submitReportModal');
+    modal.classList.remove('hidden');
+    
+    const projectSelect = document.getElementById('reportModalProject');
+    api.getProjects().then(projects => {
+        let html = '<option value="">Select project...</option>';
+        projects.forEach(p => {
+            html += `<option value="${p.id}">${p.name}</option>`;
+        });
+        projectSelect.innerHTML = html;
+    });
+    
+    document.getElementById('reportModalStage').value = '';
+    document.getElementById('reportNotes').value = '';
+    ['reportRatingCosting', 'reportRatingWillingness', 'reportRatingEngagement', 'reportRatingDurability', 'reportRatingAge', 'reportRatingEase', 'reportRatingAesthetics', 'reportRatingStore'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+}
+
+function closeSubmitReportModal() {
+    document.getElementById('submitReportModal').classList.add('hidden');
+}
+
+async function submitReportFromWeb() {
+    const projectId = document.getElementById('reportModalProject').value;
+    const stageIndex = document.getElementById('reportModalStage').value;
+    const notes = document.getElementById('reportNotes').value;
+    
+    if (!projectId || stageIndex === '') {
+        showToast('Please select a project and stage');
+        return;
+    }
+    
+    const ratingMap = {
+        costing: document.getElementById('reportRatingCosting').value,
+        willingness_to_buy: document.getElementById('reportRatingWillingness').value,
+        engagement_life: document.getElementById('reportRatingEngagement').value,
+        durability: document.getElementById('reportRatingDurability').value,
+        age_appropriateness: document.getElementById('reportRatingAge').value,
+        ease_of_use: document.getElementById('reportRatingEase').value,
+        aesthetics: document.getElementById('reportRatingAesthetics').value,
+        easy_to_store: document.getElementById('reportRatingStore').value,
+    };
+    
+    const reportData = {
+        project_id: parseInt(projectId),
+        stage_index: parseInt(stageIndex),
+        stage_name: WORKFLOW_STAGES[parseInt(stageIndex)] || 'Stage ' + (parseInt(stageIndex) + 1),
+        submitted_by_user_id: String(CURRENT_USER?.id || ''),
+        submitted_by_name: CURRENT_USER?.name || 'Unknown',
+        submitted_by_role: CURRENT_USER?.role || 'USER',
+        slack_user_id: CURRENT_USER?.slack_user_id || '',
+        notes: notes,
+    };
+    
+    for (const [key, val] of Object.entries(ratingMap)) {
+        reportData[key] = val ? parseInt(val) : null;
+    }
+    
+    try {
+        await api.submitReport(reportData);
+        showToast('Report submitted successfully!');
+        closeSubmitReportModal();
+        loadReports();
+    } catch (err) {
+        console.error('[APP] submitReportFromWeb: Failed:', err.message);
+        showToast('Failed to submit report: ' + err.message);
+    }
+}

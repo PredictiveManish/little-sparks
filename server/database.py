@@ -147,6 +147,25 @@ def _migrate_reminder_columns():
     )
 
 
+def _migrate_stage_reports_table():
+    """Add stage_reports table if it doesn't exist.
+    Safe to run on every startup — no-op if already present."""
+    try:
+        from sqlalchemy import inspect
+
+        inspector = inspect(engine)
+        existing_tables = {t["name"] for t in inspector.get_tables()}
+        if "stage_reports" in existing_tables:
+            return
+        logger.info("Adding stage_reports table")
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        logger.warning(
+            "Migration check for stage_reports encountered an issue (likely already applied): %s",
+            e,
+        )
+
+
 def init_db():
     """Initialize database tables, run migrations, and WAL mode."""
     try:
@@ -157,4 +176,5 @@ def init_db():
         raise
     _migrate_slack_config_columns()
     _migrate_reminder_columns()
+    _migrate_stage_reports_table()
     init_wal_mode()

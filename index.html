@@ -247,7 +247,7 @@
             <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v16h16M8 16v-4m4 4V8m4 8v-6"/>
             </svg>
-            Data
+            Data & Reports
         </a>
     </nav>
 
@@ -753,7 +753,20 @@
 <!-- ============================================ -->
 <section id="page-data-export" class="page-section hidden">
     <div class="mb-6">
-        <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Data</h1>
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Data & Reports</h1>
+        <p class="text-sm text-gray-500 mt-1">Export data and view stage evaluation reports.</p>
+    </div>
+
+    <!-- Sub-tabs -->
+    <div class="flex items-center gap-4 mb-6 border-b border-gray-200">
+        <button onclick="setExportSubTab('export')" id="exportSubTabExport" class="px-4 py-2 text-sm font-medium border-b-2 border-brand-500 text-brand-600">Export Data</button>
+        <button onclick="setExportSubTab('reports')" id="exportSubTabReports" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">Stage Reports</button>
+    </div>
+
+    <!-- Export Data Section -->
+    <div id="exportDataSection">
+    <div class="mb-6">
+        <h2 class="text-lg font-semibold text-gray-900">Export Data</h2>
         <p class="text-sm text-gray-500 mt-1">Export designers, managers, and project data. Downloads the entire dataset by default — use the custom range below to narrow it down.</p>
     </div>
 
@@ -810,6 +823,107 @@
                 <button onclick="runExport('all','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-400 bg-brand-500 text-white hover:bg-brand-600">Excel</button>
             </div>
         </div>
+    </div>
+    </div>
+
+    <!-- Stage Reports Section -->
+    <div id="stageReportsSection" class="hidden">
+    <div class="mb-6">
+        <h2 class="text-lg font-semibold text-gray-900">Stage Evaluation Reports</h2>
+        <p class="text-sm text-gray-500 mt-1">Track designer evaluations across all project stages.</p>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Project</label>
+                <select id="reportProjectFilter" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                    <option value="">All Projects</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Designer</label>
+                <select id="reportDesignerFilter" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                    <option value="">All Designers</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Stage</label>
+                <select id="reportStageFilter" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                    <option value="">All Stages</option>
+                    <option value="0">Stage 1 — Lock Concept</option>
+                    <option value="1">Stage 2 — Lock UX features</option>
+                    <option value="2">Stage 3 — Lock MRP</option>
+                    <option value="3">Stage 4 — Lock graphics theme</option>
+                    <option value="4">Stage 5 — Lock Production feasibility</option>
+                    <option value="5">Stage 6 — Lock Procurement</option>
+                    <option value="6">Stage 7 — Lock IM</option>
+                    <option value="7">Stage 8 — Lock CCP</option>
+                    <option value="8">Stage 9 — Final Handover</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">From Date</label>
+                <input type="date" id="reportDateFrom" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">To Date</label>
+                <input type="date" id="reportDateTo" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+            </div>
+        </div>
+        <div class="flex items-center gap-3 mt-4">
+            <button onclick="loadReports()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors">Apply Filters</button>
+            <button onclick="resetReportFilters()" class="px-4 py-2 bg-white text-gray-600 rounded-lg text-sm font-medium border border-gray-300 hover:bg-gray-50 transition-colors">Reset</button>
+            <div class="ml-auto flex items-center gap-2">
+                <button onclick="openSubmitReportModalFromTable()" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">+ Submit Report</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View Toggle -->
+    <div class="flex items-center gap-4 mb-4">
+        <div class="flex items-center bg-gray-100 rounded-lg p-1">
+            <button onclick="setReportView('table')" id="reportViewTable" class="px-4 py-1.5 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm transition-colors">Table View</button>
+            <button onclick="setReportView('summary')" id="reportViewSummary" class="px-4 py-1.5 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Summary View</button>
+        </div>
+        <span class="text-xs text-gray-400" id="reportCountLabel">0 reports</span>
+    </div>
+
+    <!-- Table View -->
+    <div id="reportTableView" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200">
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Project</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Stage</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Submitted By</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Costing</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Willingness</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Engagement</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Durability</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Age Appr.</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Ease</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Aesthetics</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Store</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
+                    </tr>
+                </thead>
+                <tbody id="reportsTableBody">
+                    <tr><td colspan="13" class="px-4 py-12 text-center text-gray-400">No reports to display. Use filters or submit a new report.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Summary View -->
+    <div id="reportSummaryView" class="hidden space-y-6">
+        <div id="reportSummaryCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">No summary data available.</div>
+        </div>
+    </div>
     </div>
 </section>
 
@@ -983,6 +1097,89 @@
     </div>
     </div>
     <!-- END MAIN APP -->
+
+<!-- ============================================ -->
+<!-- SUBMIT REPORT MODAL -->
+<!-- ============================================ -->
+<div id="submitReportModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40" onclick="closeSubmitReportModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg z-10 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-5">
+            <h3 class="text-lg font-semibold text-gray-900">📊 Submit Stage Evaluation Report</h3>
+            <button onclick="closeSubmitReportModal()" class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="mb-4">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Project</label>
+            <select id="reportModalProject" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                <option value="">Select project...</option>
+            </select>
+        </div>
+        <div class="mb-4">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Stage</label>
+            <select id="reportModalStage" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                <option value="">Select stage...</option>
+                <option value="0">Stage 1 — Lock Concept</option>
+                <option value="1">Stage 2 — Lock UX features</option>
+                <option value="2">Stage 3 — Lock MRP</option>
+                <option value="3">Stage 4 — Lock graphics theme</option>
+                <option value="4">Stage 5 — Lock Production feasibility</option>
+                <option value="5">Stage 6 — Lock Procurement</option>
+                <option value="6">Stage 7 — Lock IM</option>
+                <option value="7">Stage 8 — Lock CCP</option>
+                <option value="8">Stage 9 — Final Handover</option>
+            </select>
+        </div>
+        <div class="space-y-3 mb-4">
+            <p class="text-xs font-semibold text-gray-700">Ratings (1-5 scale)</p>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">1. Costing</label>
+                    <input type="number" id="reportRatingCosting" min="1" max="5" placeholder="1-5" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">2. Willingness to Buy</label>
+                    <input type="number" id="reportRatingWillingness" min="1" max="5" placeholder="1-5" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">3. Engagement Life</label>
+                    <input type="number" id="reportRatingEngagement" min="1" max="5" placeholder="1-5" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">4. Durability</label>
+                    <input type="number" id="reportRatingDurability" min="1" max="5" placeholder="1-5" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">5. Age Appropriateness</label>
+                    <input type="number" id="reportRatingAge" min="1" max="5" placeholder="1-5" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">6. Ease of Use</label>
+                    <input type="number" id="reportRatingEase" min="1" max="5" placeholder="1-5" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">7. Aesthetics</label>
+                    <input type="number" id="reportRatingAesthetics" min="1" max="5" placeholder="1-5" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">8. Easy to Store</label>
+                    <input type="number" id="reportRatingStore" min="1" max="5" placeholder="1-5" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                </div>
+            </div>
+        </div>
+        <div class="mb-5">
+            <label class="block text-xs font-medium text-gray-500 mb-1">Additional Notes</label>
+            <textarea id="reportNotes" rows="3" placeholder="Any additional observations..." class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none resize-none"></textarea>
+        </div>
+        <div class="flex gap-3">
+            <button onclick="submitReportFromWeb()" class="flex-1 px-4 py-2.5 bg-brand-500 text-white rounded-lg font-medium text-sm hover:bg-brand-600 transition-colors">Submit Report</button>
+            <button onclick="closeSubmitReportModal()" class="px-4 py-2.5 bg-white text-gray-600 rounded-lg font-medium text-sm border border-gray-300 hover:bg-gray-50 transition-colors">Cancel</button>
+        </div>
+    </div>
+</div>
 
 <!-- ============================================ -->
 <!-- DESIGNER ASSIGNMENT MODAL -->

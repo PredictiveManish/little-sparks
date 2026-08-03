@@ -237,3 +237,68 @@ class SlackMessageResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ---------- Stage Reports ----------
+
+
+class StageReportCreate(BaseModel):
+    project_id: int
+    stage_index: int
+    stage_name: str
+    submitted_by_user_id: str
+    submitted_by_name: str
+    submitted_by_role: str
+    slack_user_id: str
+    costing: Optional[int] = None
+    willingness_to_buy: Optional[int] = None
+    engagement_life: Optional[int] = None
+    durability: Optional[int] = None
+    age_appropriateness: Optional[int] = None
+    ease_of_use: Optional[int] = None
+    aesthetics: Optional[int] = None
+    easy_to_store: Optional[int] = None
+    notes: Optional[str] = ""
+
+
+class StageReportResponse(BaseModel):
+    id: int
+    project_id: int
+    stage_index: int
+    stage_name: str
+    submitted_by_user_id: str
+    submitted_by_name: str
+    submitted_by_role: str
+    slack_user_id: str
+    costing: Optional[int] = None
+    willingness_to_buy: Optional[int] = None
+    engagement_life: Optional[int] = None
+    durability: Optional[int] = None
+    age_appropriateness: Optional[int] = None
+    ease_of_use: Optional[int] = None
+    aesthetics: Optional[int] = None
+    easy_to_store: Optional[int] = None
+    notes: Optional[str] = ""
+    submitted_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class StageReportSummary(BaseModel):
+    project_id: int
+    project_name: str
+    assigned_designer: str
+    stage_index: int
+    stage_name: str
+    total_reports: int
+    avg_costing: Optional[float] = None
+    avg_willingness_to_buy: Optional[float] = None
+    avg_engagement_life: Optional[float] = None
+    avg_durability: Optional[float] = None
+    avg_age_appropriateness: Optional[float] = None
+    avg_ease_of_use: Optional[float] = None
+    avg_aesthetics: Optional[float] = None
+    avg_easy_to_store: Optional[float] = None
+    latest_report_id: Optional[int] = None
+    latest_submitted_at: Optional[datetime] = None
