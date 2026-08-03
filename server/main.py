@@ -2959,9 +2959,18 @@ async def get_slack_channel_history(
             "has_channel": True,
         }
 
-    result = await slack_api_call(
-        db, "conversations.history", {"channel": project.slack_channel_id, "limit": 100}
-    )
+    try:
+        result = await slack_api_call(
+            db, "conversations.history", {"channel": project.slack_channel_id, "limit": 100}
+        )
+    except RuntimeError as e:
+        logger.warning("[SLACK HISTORY] Slack API error | error=%s", str(e))
+        return {
+            "messages": [],
+            "channel_id": project.slack_channel_id,
+            "has_channel": True,
+            "error": str(e),
+        }
     if result is None:
         return {
             "messages": [],
@@ -2987,7 +2996,11 @@ async def get_slack_channel_history(
     for msg in raw_messages:
         user_name = ""
         if msg.get("user") and msg["user"] not in user_cache:
-            user_result = await slack_api_call(db, "users.info", {"user": msg["user"]})
+            try:
+                user_result = await slack_api_call(db, "users.info", {"user": msg["user"]})
+            except RuntimeError:
+                user_cache[msg["user"]] = "Unknown"
+                continue
             if user_result and user_result.get("ok"):
                 user_cache[msg["user"]] = user_result["user"]["profile"].get(
                     "real_name", "Unknown"
