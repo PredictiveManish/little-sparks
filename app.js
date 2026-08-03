@@ -1402,7 +1402,9 @@ async function populateSlackChannels() {
                    </button>`;
             } else if (statusInfo && statusInfo.status === 'connected') {
                 statusBadge = `<span class="text-green-600">✅ Connected to #${p.slack_channel_name || statusInfo.slack_channel_name || 'channel'}</span>`;
-                actionButton = `<button onclick="disconnectSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors ml-3 border border-red-200">
+                actionButton = `<button onclick="addBotToChannel(${p.id}, this)" class="px-3 py-1.5 bg-green-50 text-green-600 rounded-lg text-xs font-medium hover:bg-green-100 transition-colors ml-3 border border-green-200" id="addBotBtn_${p.id}">
+                    🤖 Add Bot
+                   </button> <button onclick="disconnectSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors ml-3 border border-red-200">
                     Disconnect
                    </button>`;
             } else if (statusInfo && (statusInfo.status === 'not_found' || statusInfo.status === 'archived')) {
@@ -1418,7 +1420,9 @@ async function populateSlackChannels() {
                    </button>`;
             } else {
                 statusBadge = `<span class="text-green-600">✅ Connected to #${p.slack_channel_name || 'channel'}</span>`;
-                actionButton = `<button onclick="disconnectSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors ml-3 border border-red-200">
+                actionButton = `<button onclick="addBotToChannel(${p.id}, this)" class="px-3 py-1.5 bg-green-50 text-green-600 rounded-lg text-xs font-medium hover:bg-green-100 transition-colors ml-3 border border-green-200" id="addBotBtn_${p.id}">
+                    🤖 Add Bot
+                   </button> <button onclick="disconnectSlackChannel(${p.id}, this)" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors ml-3 border border-red-200">
                     Disconnect
                    </button>`;
             }
@@ -1491,6 +1495,28 @@ async function reconnectSlackChannel(projectId, btn) {
     }
     btn.disabled = false;
     btn.textContent = 'Recreate Channel';
+}
+
+async function addBotToChannel(projectId, btn) {
+    if (!slackConfigured) {
+        showToast('Please configure Slack credentials first');
+        return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+    try {
+        const result = await api.addBotToChannel(projectId);
+        if (result.success) {
+            showToast(result.message || 'Bot added to channel!');
+            await populateSlackChannels();
+        } else {
+            showToast('Failed: ' + result.message);
+        }
+    } catch (err) {
+        showToast('Failed: ' + err.message);
+    }
+    btn.disabled = false;
+    btn.textContent = '🤖 Add Bot';
 }
 
 function copyWebhookUrl() {

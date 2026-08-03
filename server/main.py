@@ -4301,6 +4301,76 @@ async def get_slack_channel_status(
     return SlackChannelStatusBatchResponse(statuses=statuses, corrected=corrected)
 
 
+# ---------- Add Bot to Channel ----------
+
+
+class BotChannelActionResponse(BaseModel):
+    success: bool
+    message: str = ""
+
+
+@app.post(
+    "/api/projects/{project_id}/bot/add-to-channel",
+    response_model=BotChannelActionResponse,
+)
+async def add_bot_to_channel(
+    project_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Invite the Slack bot to the project's Slack channel."""
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        return BotChannelActionResponse(success=False, message="Project not found")
+    if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
+        return BotChannelActionResponse(
+            success=False, message="You can only manage the bot for your own projects"
+        )
+    if user.role.upper() == "DESIGNER":
+        return BotChannelActionResponse(
+            success=False, message="Designers cannot manage bot access"
+        )
+    config = get_slack_config(db)
+    if not config:
+        return BotChannelActionResponse(success=False, message="Slack not configured")
+    if not project.slack_channel_id:
+        return BotChannelActionResponse(
+            success=False, message="No Slack channel connected to this project"
+        )
+    result = await slack_api_call(
+        db,
+        "conversations.join",
+        {"channel": project.slack_channel_id},
+    )
+    if result is None:
+        return BotChannelActionResponse(
+            success=False, message="Slack API unreachable"
+        )
+    if not result.get("ok"):
+        error_code = result.get("error", "")
+        if error_code == "already_in_channel":
+            return BotChannelActionResponse(
+                success=True, message="Bot is already in this channel"
+            )
+        logger.error(
+            "[BOT JOIN] Failed to add bot to channel | project=%s | channel=%s | error=%s",
+            project.name,
+            project.slack_channel_id,
+            error_code,
+        )
+        return BotChannelActionResponse(
+            success=False, message=f"Failed to add bot: {error_code}"
+        )
+    logger.info(
+        "[BOT JOIN] Bot added to channel successfully | project=%s | channel=%s",
+        project.name,
+        project.slack_channel_id,
+    )
+    return BotChannelActionResponse(
+        success=True, message="Bot added to channel successfully"
+    )
+
+
 # ---------- Reminder Scheduler ----------
 
 

@@ -94,6 +94,7 @@ const api = {
     getSlackMessages: (projectId) => apiFetch(`/projects/${projectId}/slack-messages`),
     getSlackChannelHistory: (projectId) => apiFetch(`/projects/${projectId}/slack-channel-history`),
     getSlackChannelStatus: (autoCorrect) => apiFetch(`/projects/slack-channel-status?auto_correct=${autoCorrect || false}`),
+    addBotToChannel: (projectId) => apiFetch(`/projects/${projectId}/bot/add-to-channel`, { method: 'POST' }),
     assignStageDesigners: (projectId, stageIndex, designerIds) => apiFetch(`/projects/${projectId}/phases/${stageIndex}/assign-designers`, { method: 'POST', body: { designer_ids: designerIds } }),
 
     // Reminders
