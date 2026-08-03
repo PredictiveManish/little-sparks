@@ -138,7 +138,7 @@
                     <button onclick="continueWithSlack()" id="continueWithSlackBtn"
                         class="w-full flex items-center justify-center gap-3 px-6 py-3.5 bg-[#4A1547] hover:bg-[#3a1138] text-white rounded-xl font-medium transition-colors shadow-sm">
                         <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M5.042 15.165a2.528 2.528 0 1 0 0 5.056 2.528 2.528 0 0 0-2.528-2.528zM12.23 5.042a2.528 2.528 0 1 0 0 5.057 2.528 2.528 0 0 0-2.528-2.528zM16.808 10.07a2.528 2.528 0 1 0 0 5.057 2.528 2.528 0 0 0-2.528-2.528zM10.072 16.808a2.528 2.528 0 1 0 0 5.056 2.528 2.528 0 0 0-2.528-2.528z"/>
+                            <path d="M5.042 15.165a2.528 2.528 0 1 0 0 5.056 2.528 2.528 0 0 0-2.528-2.528zM12.23 5.042a2.528 2.528 0 1 0 0 5.057 2.528 2.528 0 0 0-2.528-2.528zM16.808 10.07a2.528 2.528 0 1 0 0 5.057 2.528 2.528 2.528 0 0 0-2.528-2.528zM10.072 16.808a2.528 2.528 0 1 0 0 5.056 2.528 2.528 2.528 0 0 0-2.528-2.528z"/>
                         </svg>
                         Continue with Slack
                     </button>
@@ -146,6 +146,45 @@
             </div>
             
             <p class="text-xs text-gray-400">All the best — keep working hard and building a better future! 🚀</p>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- DESIGNER RESTRICTED PAGE -->
+    <!-- ============================================ -->
+    <div id="designerRestrictedPage" class="hidden min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+        <div class="w-full max-w-lg text-center">
+            <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-8">
+                <svg class="w-10 h-10 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-900 mb-2">Designer Access</h1>
+            <p class="text-gray-500 mb-8">Welcome, <span id="restrictedDesignerName"></span>! Your project management is handled through Slack.</p>
+            
+            <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 mb-8 text-left">
+                <h3 class="font-semibold text-gray-900 mb-4">How it works:</h3>
+                <ul class="space-y-3 text-sm text-gray-600">
+                    <li class="flex items-start gap-3">
+                        <span class="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 text-blue-600 font-bold text-xs mt-0.5">1</span>
+                        <span>Your manager will assign you to projects and share project details via Slack</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 text-blue-600 font-bold text-xs mt-0.5">2</span>
+                        <span>You'll receive updates, reminders, and stage notifications in your Slack workspace</span>
+                    </li>
+                    <li class="flex items-start gap-3">
+                        <span class="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 text-blue-600 font-bold text-xs mt-0.5">3</span>
+                        <span>Use the Slack buttons to update progress, report delays, or submit stage evaluations</span>
+                    </li>
+                </ul>
+            </div>
+            
+            <p class="text-sm text-gray-400 mb-4">Need access to the web dashboard? Contact your admin.</p>
+            <button onclick="logout()"
+                class="px-6 py-3 bg-white border border-gray-300 text-gray-600 rounded-xl font-medium hover:bg-gray-50 transition-colors">
+                Sign Out
+            </button>
         </div>
     </div>
 
@@ -199,7 +238,7 @@
 
     <!-- Navigation -->
     <nav class="flex-1 px-4 py-6 space-y-1.5">
-        <a href="#" onclick="event.preventDefault(); navigateTo('dashboard')" data-nav="dashboard"
+        <a href="#" onclick="event.preventDefault(); navigateTo('dashboard')" data-nav="dashboard" data-roles="ADMIN,MANAGER"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150 active">
             <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <rect x="3" y="3" width="7" height="9" rx="2" stroke-width="1.8"/>
@@ -209,7 +248,7 @@
             </svg>
             Dashboard
         </a>
-        <a href="#" onclick="event.preventDefault(); navigateTo('projects')" data-nav="projects"
+        <a href="#" onclick="event.preventDefault(); navigateTo('projects')" data-nav="projects" data-roles="ADMIN,MANAGER"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150">
             <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
@@ -218,21 +257,21 @@
             </svg>
             Projects
         </a>
-        <a href="#" onclick="event.preventDefault(); navigateTo('slack-messages')" data-nav="slack-messages"
+        <a href="#" onclick="event.preventDefault(); navigateTo('slack-messages')" data-nav="slack-messages" data-roles="ADMIN,MANAGER"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150">
             <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
             </svg>
             Slack Messages
         </a>
-        <a href="#" onclick="event.preventDefault(); navigateTo('slack-settings')" data-nav="slack-settings"
+        <a href="#" onclick="event.preventDefault(); navigateTo('slack-settings')" data-nav="slack-settings" data-roles="ADMIN,MANAGER"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150">
             <svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M10.14,1.16a11,11,0,0,0-9,8.92A1.59,1.59,0,0,0,2.46,12,1.52,1.52,0,0,0,4.11,10.77a8.06,8.06,0,0,1,6.76-4.4,1,1,0,0,1,.85.16,9.43,9.43,0,0,0,4.5,5.39,1,1,0,0,1,.36,1.23A7.6,7.6,0,0,1,11.75,20a1,1,0,0,1-1-.75A1,1,0,0,1,11,18.26a5.61,5.61,0,0,0,3.44-4.86,1,1,0,0,1,.48-1.13,8.26,8.26,0,0,0,3.36-6.87A1,1,0,0,1,18.17,4.3A10,10,0,0,1,10.14,1.16Z"/>
             </svg>
             Slack Settings
         </a>
-        <a href="#" onclick="event.preventDefault(); navigateTo('designers')" data-nav="designers"
+        <a href="#" onclick="event.preventDefault(); navigateTo('designers')" data-nav="designers" data-roles="ADMIN,MANAGER"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150">
             <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <circle cx="10" cy="8" r="4" stroke-width="1.8"/>

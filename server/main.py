@@ -358,8 +358,11 @@ def get_user_owned_project_query(db, user):
     """Return a Project query filtered to user's own projects if manager.
 
     Admins get all projects. Managers get only projects they created.
+    Designers get no projects (they have no project access).
     """
     q = db.query(Project)
+    if user.role.upper() == "DESIGNER":
+        return q.filter(Project.id == -1)  # return empty
     if user.role.upper() == "MANAGER":
         q = q.filter(Project.created_by_user_id == user.id)
     return q
@@ -1230,6 +1233,8 @@ def get_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot access projects")
     if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
         raise HTTPException(
             status_code=403, detail="You can only access your own projects"
@@ -1265,6 +1270,9 @@ async def create_project(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot create projects")
+
     if datetime.strptime(data.deadline, "%Y-%m-%d") < datetime.strptime(
         data.start_date, "%Y-%m-%d"
     ):
@@ -1365,6 +1373,8 @@ async def update_project(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot modify projects")
     if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
         raise HTTPException(
             status_code=403, detail="You can only modify your own projects"
@@ -1458,6 +1468,8 @@ async def complete_stage(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot complete stages")
     if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
         raise HTTPException(
             status_code=403, detail="You can only modify your own projects"
@@ -1546,6 +1558,9 @@ async def unmark_stage(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot unmark stages")
+
     phases = (
         db.query(Phase)
         .filter(Phase.project_id == project_id)
@@ -1610,6 +1625,9 @@ async def assign_designers_to_phase(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot assign designers")
 
     phases = (
         db.query(Phase)
@@ -1903,16 +1921,12 @@ async def slack_api_call(db, endpoint, data=None):
                                         "[SLACK API] Retry still failed after token refresh | error=%s",
                                         retry_result.get("error"),
                                     )
-                                    raise RuntimeError(
-                                        f"Slack API error after retry: {retry_result.get('error')}"
-                                    )
                     else:
                         logger.error(
                             "[SLACK API] Token refresh failed: %s | cannot retry",
                             err,
                         )
-                        raise RuntimeError(f"Slack API error: {error_code}")
-                raise RuntimeError(f"Slack API error: {error_code}")
+                return result
             return result
     except httpx.HTTPStatusError as e:
         logger.error(
@@ -1922,10 +1936,10 @@ async def slack_api_call(db, endpoint, data=None):
             e.response.text[:300],
             e,
         )
-        raise
+        return None
     except Exception as e:
         logger.error("[SLACK API] %s unexpected error | error=%s", endpoint, e)
-        raise
+        return None
 
 
 async def resolve_slack_user_id_by_email(db, email):
@@ -2908,6 +2922,8 @@ def get_slack_messages(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot access Slack messages")
     messages = (
         db.query(SlackMessage)
         .filter(SlackMessage.project_id == project_id)
@@ -2929,6 +2945,10 @@ async def get_slack_channel_history(
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot access Slack messages")
+
     if not project.slack_channel_id:
         return {"messages": [], "channel_id": "", "has_channel": False}
     config = get_slack_config(db)

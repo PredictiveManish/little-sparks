@@ -34,9 +34,9 @@ async function checkAuth() {
                 showPage('mainApp');
                 navigateTo('dashboard');
             } else if (user.role === 'DESIGNER') {
-                console.log('[APP] checkAuth: User role is DESIGNER, showing designer landing page');
-                showPage('designerLandingPage');
-                showDesignerLanding(user);
+                console.log('[APP] checkAuth: User role is DESIGNER, showing restricted page');
+                showPage('designerRestrictedPage');
+                showDesignerRestricted(user);
             } else {
                 console.log('[APP] checkAuth: User authenticated, showing main app');
                 showPage('mainApp');
@@ -53,7 +53,7 @@ async function checkAuth() {
 }
 
 function showPage(pageId, { updateUrl = true } = {}) {
-    ['loginPage', 'pendingPage', 'designerLandingPage', 'adminPage', 'mainApp'].forEach(id => {
+    ['loginPage', 'pendingPage', 'designerLandingPage', 'designerRestrictedPage', 'adminPage', 'mainApp'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             if (id === pageId) {
@@ -1561,6 +1561,13 @@ function showDesignerLanding(user) {
         const quote = DESIGNER_QUOTES[Math.floor(Math.random() * DESIGNER_QUOTES.length)];
         quoteTextEl.textContent = `"${quote.text}"`;
         quoteAuthorEl.textContent = quote.author;
+    }
+}
+
+function showDesignerRestricted(user) {
+    const nameEl = document.getElementById('restrictedDesignerName');
+    if (nameEl) {
+        nameEl.textContent = user.name || 'Designer';
     }
 }
 
