@@ -10,6 +10,8 @@ let tempDesignerSelections = [];
 let DESIGNERS = [];
 let CURRENT_USER = null;
 let USER_ROLE = null;
+let tempManagerSelections = [];
+let MANAGERS = [];
 
 // ============================================
 // AUTH
@@ -360,6 +362,7 @@ function navigateTo(view, projectId = null) {
         'slack-messages': 'page-slack-messages',
         'slack-settings': 'page-slack-settings',
         'data-export': 'page-data-export',
+        'reports': 'page-reports',
     };
     const targetId = pageMap[view];
     if (targetId) {
@@ -400,6 +403,7 @@ function navigateTo(view, projectId = null) {
     if (view === 'slack-messages') loadSlackMessages();
     if (view === 'slack-messages') loadSlackSettings();
     if (view === 'data-export') resetExportForm();
+    if (view === 'reports') populateReportsPage();
 
     // Attach date change listeners for phase deadlines
     const startDateInputs = document.querySelectorAll('#page-create-project form input[type="date"]');
@@ -1101,9 +1105,9 @@ async function handleCreateProject(event) {
             assigned_designer_id: designerId,
             start_date: startDate,
             deadline: deadline,
-            priority: form.querySelector('select').value,
             manager_notes: '',
-            phases: phases
+            phases: phases,
+            manager_ids: tempManagerSelections
         });
         const successMsg = document.getElementById('createSuccessMessage');
         form.classList.add('hidden');
@@ -1120,13 +1124,16 @@ function resetCreateProjectForm() {
     if (form) form.classList.remove('hidden');
     if (successMsg) successMsg.classList.add('hidden');
     if (form) form.reset();
+    tempManagerSelections = [];
     populateCreateDesignerSelect();
+    populateCreateManagerSelect();
     renderPhaseDeadlines();
 }
 
 async function populateCreateDesignerSelect() {
     try {
         DESIGNERS = await api.getDesigners();
+        MANAGERS = await api.getManagers();
         const select = document.getElementById('createDesignerSelect');
         if (!select) return;
         let html = '<option value="">Select a designer</option>';
@@ -1137,6 +1144,58 @@ async function populateCreateDesignerSelect() {
     } catch (err) {
         showToast('Failed to load designers: ' + err.message);
     }
+}
+
+async function populateCreateManagerSelect() {
+    try {
+        MANAGERS = await api.getManagers();
+        const container = document.getElementById('managerSelectContainer');
+        if (!container) return;
+        let html = '';
+        MANAGERS.forEach(m => {
+            const checked = m.id === CURRENT_USER?.id ? 'checked' : '';
+            html += `
+                <label class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                    <input type="checkbox" value="${m.id}" ${checked ? 'checked' : ''} onchange="toggleManagerSelection(${m.id}, this.checked)" class="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-400">
+                    <div class="w-7 h-7 rounded-full ${m.color} flex items-center justify-center text-white font-bold text-xs flex-shrink-0">${m.initials}</div>
+                    <span class="text-sm font-medium text-gray-700">${m.name}</span>
+                    <span class="text-xs text-gray-400 ml-auto">${m.role}</span>
+                </label>
+            `;
+        });
+        html += `
+            <div class="flex gap-2 mt-2 pt-2 border-t border-gray-100">
+                <button onclick="selectAllManagers()" class="text-xs text-brand-600 hover:text-brand-700 font-medium">Select All</button>
+                <button onclick="deselectAllManagers()" class="text-xs text-gray-500 hover:text-gray-700 font-medium">Deselect All</button>
+            </div>
+        `;
+        container.innerHTML = html;
+        if (!tempManagerSelections.includes(CURRENT_USER?.id)) {
+            tempManagerSelections = [CURRENT_USER?.id];
+        }
+    } catch (err) {
+        showToast('Failed to load managers: ' + err.message);
+    }
+}
+
+function toggleManagerSelection(managerId, isChecked) {
+    if (isChecked) {
+        if (!tempManagerSelections.includes(managerId)) tempManagerSelections.push(managerId);
+    } else {
+        tempManagerSelections = tempManagerSelections.filter(id => id !== managerId);
+    }
+}
+
+function selectAllManagers() {
+    tempManagerSelections = MANAGERS.map(m => m.id);
+    document.querySelectorAll('#managerSelectContainer input[type="checkbox"]').forEach(cb => cb.checked = true);
+}
+
+function deselectAllManagers() {
+    tempManagerSelections = [CURRENT_USER?.id];
+    document.querySelectorAll('#managerSelectContainer input[type="checkbox"]').forEach(cb => {
+        cb.checked = cb.value == CURRENT_USER?.id;
+    });
 }
 
 // ============================================
@@ -1980,4 +2039,506 @@ async function submitReportFromWeb() {
         console.error('[APP] submitReportFromWeb: Failed:', err.message);
         showToast('Failed to submit report: ' + err.message);
     }
+}
+
+// ============================================
+// REPORTS PAGE
+// ============================================
+let currentReportTab = 'project';
+let currentReportData = null;
+let currentReportEndpoint = '';
+
+async function populateReportsPage() {
+    try {
+        const projects = await api.getProjects();
+        const designers = await api.getDesigners();
+        
+        const projectSelect = document.getElementById('reportProjectSelect');
+        if (projectSelect) {
+            let html = '<option value="">Select project...</option>';
+            projects.forEach(p => {
+                html += `<option value="${p.id}">${p.name}</option>`;
+            });
+            projectSelect.innerHTML = html;
+        }
+        
+        const designerSelect = document.getElementById('designerPerfSelect');
+        if (designerSelect) {
+            let html = '<option value="">Select designer...</option>';
+            designers.forEach(d => {
+                html += `<option value="${d.id}">${d.name}</option>`;
+            });
+            designerSelect.innerHTML = html;
+        }
+        
+        const weeklyStart = document.getElementById('weeklyWeekStart');
+        const weeklyEnd = document.getElementById('weeklyWeekEnd');
+        if (weeklyStart) {
+            const today = new Date();
+            const day = today.getDay() || 7;
+            const monday = new Date(today);
+            monday.setDate(today.getDate() - day + 1);
+            weeklyStart.value = monday.toISOString().split('T')[0];
+            weeklyEnd.value = today.toISOString().split('T')[0];
+        }
+        if (weeklyEnd) {
+            const today = new Date();
+            const day = today.getDay() || 7;
+            const monday = new Date(today);
+            monday.setDate(today.getDate() - day + 1);
+            weeklyEnd.value = today.toISOString().split('T')[0];
+        }
+        
+        const monthlyMonth = document.getElementById('monthlyMonth');
+        const monthlyYear = document.getElementById('monthlyYear');
+        if (monthlyMonth) monthlyMonth.value = new Date().getMonth() + 1;
+        if (monthlyYear) monthlyYear.value = new Date().getFullYear();
+    } catch (err) {
+        console.error('[APP] populateReportsPage: Failed:', err.message);
+        showToast('Failed to load reports page: ' + err.message);
+    }
+}
+
+function setReportTab(tab) {
+    currentReportTab = tab;
+    
+    const sections = {
+        project: 'reportSectionProject',
+        weekly: 'reportSectionWeekly',
+        monthly: 'reportSectionMonthly',
+        designer: 'reportSectionDesigner',
+    };
+    
+    Object.values(sections).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+    
+    const targetSection = sections[tab];
+    if (targetSection) {
+        const el = document.getElementById(targetSection);
+        if (el) el.classList.remove('hidden');
+    }
+    
+    const tabs = {
+        project: 'reportTabProject',
+        weekly: 'reportTabWeekly',
+        monthly: 'reportTabMonthly',
+        designer: 'reportTabDesigner',
+    };
+    
+    Object.entries(tabs).forEach(([key, id]) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        if (key === tab) {
+            btn.classList.add('border-brand-500', 'text-brand-600');
+            btn.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700');
+        } else {
+            btn.classList.remove('border-brand-500', 'text-brand-600');
+            btn.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700');
+        }
+    });
+    
+    document.getElementById('reportDownloadActions').classList.add('hidden');
+    currentReportData = null;
+    currentReportEndpoint = '';
+}
+
+function showReportDownloadActions(endpoint) {
+    currentReportEndpoint = endpoint;
+    document.getElementById('reportDownloadActions').classList.remove('hidden');
+}
+
+async function loadProjectReport() {
+    const projectId = document.getElementById('reportProjectSelect').value;
+    if (!projectId) {
+        showToast('Please select a project');
+        return;
+    }
+    
+    const content = document.getElementById('projectReportContent');
+    content.innerHTML = '<div class="text-center text-gray-400 py-8">Loading report...</div>';
+    
+    try {
+        const report = await api.getProjectReport(parseInt(projectId));
+        currentReportData = report;
+        showReportDownloadActions(`/reports/project/${report.project_id}/download`);
+        
+        let html = `
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div>
+                        <p class="text-xs text-gray-500 uppercase tracking-wider">Project</p>
+                        <p class="font-semibold text-gray-900">${report.project_name}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500 uppercase tracking-wider">Designer</p>
+                        <p class="font-semibold text-gray-900">${report.assigned_designer}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500 uppercase tracking-wider">Status</p>
+                        <p class="font-semibold ${report.status === 'COMPLETED' ? 'text-green-600' : report.status === 'DELAYED' ? 'text-red-600' : 'text-amber-600'}">${report.status.replace('_', ' ')}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500 uppercase tracking-wider">Progress</p>
+                        <p class="font-semibold text-gray-900">${report.progress}%</p>
+                    </div>
+                </div>
+                
+                <h3 class="text-sm font-semibold text-gray-700 mb-3">Phase Summary</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50 border-b border-gray-200">
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Stage</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Deadline</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Completed</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Designer Update</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Delay Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+        
+        report.phases.forEach(p => {
+            html += `
+                <tr class="border-b border-gray-100">
+                    <td class="px-4 py-3 font-medium">${p.stage_name}</td>
+                    <td class="px-4 py-3 text-gray-600">${formatDate(p.deadline)}</td>
+                    <td class="px-4 py-3">${p.completed_at ? '✅ ' + formatDateTime(p.completed_at) : '—'}</td>
+                    <td class="px-4 py-3 text-gray-500 max-w-xs truncate">${p.designer_update || '—'}</td>
+                    <td class="px-4 py-3 text-gray-500 max-w-xs truncate">${p.delay_reason || '—'}</td>
+                </tr>
+            `;
+        });
+        
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        
+        if (report.stage_reports && report.stage_reports.length > 0) {
+            html += `
+                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-3">Stage Evaluation Reports</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="bg-gray-50 border-b border-gray-200">
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Stage</th>
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Submitted By</th>
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Date</th>
+                                    <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase">Costing</th>
+                                    <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase">Willingness</th>
+                                    <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase">Engagement</th>
+                                    <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase">Durability</th>
+                                    <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase">Age</th>
+                                    <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase">Ease</th>
+                                    <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase">Aesthetic</th>
+                                    <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase">Store</th>
+                                    <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+            `;
+            
+            report.stage_reports.forEach(r => {
+                const ratingCell = (val) => {
+                    if (val === null || val === undefined) return '<span class="text-gray-300">—</span>';
+                    const color = val >= 4 ? 'text-green-600' : val >= 3 ? 'text-amber-600' : 'text-red-600';
+                    return `<span class="font-semibold ${color}">${val}/5</span>`;
+                };
+                html += `
+                    <tr class="border-b border-gray-100">
+                        <td class="px-3 py-2 text-sm font-medium">${r.stage_name}</td>
+                        <td class="px-3 py-2 text-sm text-gray-600">${r.submitted_by_name}</td>
+                        <td class="px-3 py-2 text-sm text-gray-600">${formatDate(r.submitted_at?.split('T')[0] || '')}</td>
+                        <td class="px-3 py-2 text-center">${ratingCell(r.costing)}</td>
+                        <td class="px-3 py-2 text-center">${ratingCell(r.willingness_to_buy)}</td>
+                        <td class="px-3 py-2 text-center">${ratingCell(r.engagement_life)}</td>
+                        <td class="px-3 py-2 text-center">${ratingCell(r.durability)}</td>
+                        <td class="px-3 py-2 text-center">${ratingCell(r.age_appropriateness)}</td>
+                        <td class="px-3 py-2 text-center">${ratingCell(r.ease_of_use)}</td>
+                        <td class="px-3 py-2 text-center">${ratingCell(r.aesthetics)}</td>
+                        <td class="px-3 py-2 text-center">${ratingCell(r.easy_to_store)}</td>
+                        <td class="px-3 py-2 text-sm text-gray-500 max-w-xs truncate">${r.notes || '—'}</td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+        
+        content.innerHTML = html;
+    } catch (err) {
+        console.error('[APP] loadProjectReport: Failed:', err.message);
+        content.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-red-500">Failed to load report: ' + err.message + '</div>';
+    }
+}
+
+async function loadWeeklyReport() {
+    const projectId = document.getElementById('reportProjectSelect').value;
+    if (!projectId) {
+        showToast('Please select a project');
+        return;
+    }
+    
+    const weekStart = document.getElementById('weeklyWeekStart').value;
+    const weekEnd = document.getElementById('weeklyWeekEnd').value;
+    if (!weekStart || !weekEnd) {
+        showToast('Please select week dates');
+        return;
+    }
+    
+    const content = document.getElementById('weeklyReportContent');
+    content.innerHTML = '<div class="text-center text-gray-400 py-8">Loading report...</div>';
+    
+    try {
+        const report = await api.getWeeklyReport(parseInt(projectId), weekStart, weekEnd);
+        currentReportData = report;
+        showReportDownloadActions(`/reports/weekly/${report.reports.length > 0 ? report.reports[0].project_id : projectId}/download?week_start=${weekStart}&week_end=${weekEnd}`);
+        
+        let html = `
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                <p class="text-sm text-gray-500 mb-4">Week: ${formatDate(weekStart)} — ${formatDate(weekEnd)}</p>
+                <div class="space-y-3">
+        `;
+        
+        if (report.reports.length === 0) {
+            html += '<p class="text-sm text-gray-400 text-center py-4">No reports for this week.</p>';
+        } else {
+            report.reports.forEach(item => {
+                html += `
+                    <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-semibold text-gray-900">${item.stage_name}</h4>
+                            <span class="text-xs font-medium px-2 py-1 rounded-full ${item.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : item.status === 'DELAYED' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${item.status.replace('_', ' ')}</span>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                            <div>
+                                <p class="text-xs text-gray-500">Designer</p>
+                                <p class="font-medium">${item.assigned_designer}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">Progress</p>
+                                <p class="font-medium">${item.progress}%</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">Update</p>
+                                <p class="text-gray-600 truncate">${item.designer_update || '—'}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">Delay</p>
+                                <p class="text-gray-600 truncate">${item.delay_reason || '—'}</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        html += '</div></div>';
+        content.innerHTML = html;
+    } catch (err) {
+        console.error('[APP] loadWeeklyReport: Failed:', err.message);
+        content.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-red-500">Failed to load report: ' + err.message + '</div>';
+    }
+}
+
+async function loadMonthlyReport() {
+    const projectId = document.getElementById('reportProjectSelect').value;
+    if (!projectId) {
+        showToast('Please select a project');
+        return;
+    }
+    
+    const month = document.getElementById('monthlyMonth').value;
+    const year = document.getElementById('monthlyYear').value;
+    if (!month || !year) {
+        showToast('Please select month and year');
+        return;
+    }
+    
+    const content = document.getElementById('monthlyReportContent');
+    content.innerHTML = '<div class="text-center text-gray-400 py-8">Loading report...</div>';
+    
+    try {
+        const report = await api.getMonthlyReport(parseInt(projectId), parseInt(month), parseInt(year));
+        currentReportData = report;
+        showReportDownloadActions(`/reports/monthly/${report.reports.length > 0 ? report.reports[0].project_id : projectId}/download?month=${month}&year=${year}`);
+        
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        let html = `
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                <p class="text-sm text-gray-500 mb-4">Month: ${monthNames[parseInt(month) - 1]} ${year}</p>
+                <div class="space-y-3">
+        `;
+        
+        if (report.reports.length === 0) {
+            html += '<p class="text-sm text-gray-400 text-center py-4">No reports for this month.</p>';
+        } else {
+            report.reports.forEach(item => {
+                const updates = item.designer_updates && item.designer_updates.length > 0 ? item.designer_updates.join('<br>') : '<span class="text-gray-400">—</span>';
+                const delays = item.delays && item.delays.length > 0 ? item.delays.join('<br>') : '<span class="text-gray-400">—</span>';
+                html += `
+                    <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-semibold text-gray-900">${item.stage_name}</h4>
+                            <span class="text-xs font-medium px-2 py-1 rounded-full ${item.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : item.status === 'DELAYED' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${item.status.replace('_', ' ')}</span>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                            <div>
+                                <p class="text-xs text-gray-500">Designer</p>
+                                <p class="font-medium">${item.assigned_designer}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">Progress</p>
+                                <p class="font-medium">${item.progress}%</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">Updates</p>
+                                <p class="text-gray-600">${updates}</p>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-sm">
+                            <p class="text-xs text-gray-500">Delays</p>
+                            <p class="text-gray-600">${delays}</p>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        html += '</div></div>';
+        content.innerHTML = html;
+    } catch (err) {
+        console.error('[APP] loadMonthlyReport: Failed:', err.message);
+        content.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-red-500">Failed to load report: ' + err.message + '</div>';
+    }
+}
+
+async function loadDesignerPerformance() {
+    const designerId = document.getElementById('designerPerfSelect').value;
+    if (!designerId) {
+        showToast('Please select a designer');
+        return;
+    }
+    
+    const period = document.getElementById('designerPerfPeriod').value;
+    const content = document.getElementById('designerPerfContent');
+    content.innerHTML = '<div class="text-center text-gray-400 py-8">Loading report...</div>';
+    
+    try {
+        let report;
+        let endpoint;
+        
+        if (period === 'weekly') {
+            const weekStart = document.getElementById('weeklyWeekStart').value || new Date().toISOString().split('T')[0];
+            const weekEnd = document.getElementById('weeklyWeekEnd').value || new Date().toISOString().split('T')[0];
+            report = await api.getDesignerWeeklyPerformance(parseInt(designerId), weekStart, weekEnd);
+            endpoint = `/reports/designer/${designerId}/performance/download?period=weekly&week_start=${weekStart}&week_end=${weekEnd}`;
+        } else {
+            const month = document.getElementById('monthlyMonth').value;
+            const year = document.getElementById('monthlyYear').value;
+            report = await api.getDesignerMonthlyPerformance(parseInt(designerId), parseInt(month), parseInt(year));
+            endpoint = `/reports/designer/${designerId}/performance/download?period=monthly&month=${month}&year=${year}`;
+        }
+        
+        currentReportData = report;
+        showReportDownloadActions(endpoint);
+        
+        let html = `
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                <div class="grid grid-cols-3 gap-4 mb-6">
+                    <div class="text-center p-4 bg-brand-50 rounded-lg">
+                        <p class="text-2xl font-bold text-brand-600">${report.total_updates}</p>
+                        <p class="text-xs text-gray-500 mt-1">Total Updates</p>
+                    </div>
+                    <div class="text-center p-4 bg-red-50 rounded-lg">
+                        <p class="text-2xl font-bold text-red-600">${report.total_delays}</p>
+                        <p class="text-xs text-gray-500 mt-1">Total Delays</p>
+                    </div>
+                    <div class="text-center p-4 bg-green-50 rounded-lg">
+                        <p class="text-2xl font-bold text-green-600">${report.total_stages_completed}</p>
+                        <p class="text-xs text-gray-500 mt-1">Stages Completed</p>
+                    </div>
+                </div>
+                
+                <h3 class="text-sm font-semibold text-gray-700 mb-3">Project Activity</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50 border-b border-gray-200">
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Project</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Stage</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Progress</th>
+                                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Updates</th>
+                                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Delays</th>
+                                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Reports</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+        
+        if (report.projects.length === 0) {
+            html += '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">No activity for this period.</td></tr>';
+        } else {
+            report.projects.forEach(item => {
+                html += `
+                    <tr class="border-b border-gray-100">
+                        <td class="px-4 py-3 font-medium">${item.project_name}</td>
+                        <td class="px-4 py-3 text-gray-600">${item.stage_name}</td>
+                        <td class="px-4 py-3">
+                            <span class="text-xs font-medium px-2 py-1 rounded-full ${item.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : item.status === 'DELAYED' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${item.status.replace('_', ' ')}</span>
+                        </td>
+                        <td class="px-4 py-3 text-center font-medium">${item.progress}%</td>
+                        <td class="px-4 py-3 text-center">${item.updates_count}</td>
+                        <td class="px-4 py-3 text-center ${item.delays_count > 0 ? 'text-red-600 font-semibold' : 'text-gray-600'}">${item.delays_count}</td>
+                        <td class="px-4 py-3 text-center">${item.reports_submitted}</td>
+                    </tr>
+                `;
+            });
+        }
+        
+        html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        
+        content.innerHTML = html;
+    } catch (err) {
+        console.error('[APP] loadDesignerPerformance: Failed:', err.message);
+        content.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-red-500">Failed to load report: ' + err.message + '</div>';
+    }
+}
+
+function downloadReportCSV() {
+    if (!currentReportEndpoint) {
+        showToast('No report loaded to download');
+        return;
+    }
+    api.downloadReportCSV(currentReportEndpoint + '&format=csv')
+        .then(() => showToast('CSV downloaded successfully'))
+        .catch(err => showToast('Download failed: ' + err.message));
+}
+
+function downloadReportExcel() {
+    if (!currentReportEndpoint) {
+        showToast('No report loaded to download');
+        return;
+    }
+    api.downloadReportExcel(currentReportEndpoint + '&format=xlsx')
+        .then(() => showToast('Excel downloaded successfully'))
+        .catch(err => showToast('Download failed: ' + err.message));
 }

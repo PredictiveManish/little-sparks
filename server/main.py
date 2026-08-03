@@ -27,6 +27,7 @@ import threading
 import time as time_module
 import csv
 import io
+import re
 from zoneinfo import ZoneInfo
 
 # ---------- Structured logging setup ----------
@@ -58,6 +59,7 @@ from .models import (
     SlackMessage,
     StageReport,
     Session as SessionModel,
+    ProjectManager,
 )
 from .schemas import (
     LoginRequest,
@@ -82,6 +84,15 @@ from .schemas import (
     StageReportCreate,
     StageReportResponse,
     StageReportSummary,
+    ProjectReportResponse,
+    PhaseReportItem,
+    WeeklyReportResponse,
+    WeeklyReportItem,
+    MonthlyReportResponse,
+    MonthlyReportItem,
+    DesignerPerformanceResponse,
+    DesignerProjectItem,
+    ProjectManagerResponse,
 )
 
 # ---------- Init ----------
@@ -357,14 +368,23 @@ def require_role(required: List[str]):
 def get_user_owned_project_query(db, user):
     """Return a Project query filtered to user's own projects if manager.
 
-    Admins get all projects. Managers get only projects they created.
+    Admins get all projects. Managers get only projects they created OR are assigned to.
     Designers get no projects (they have no project access).
     """
     q = db.query(Project)
     if user.role.upper() == "DESIGNER":
         return q.filter(Project.id == -1)  # return empty
     if user.role.upper() == "MANAGER":
-        q = q.filter(Project.created_by_user_id == user.id)
+        q = q.filter(
+            db.or_(
+                Project.created_by_user_id == user.id,
+                Project.id.in_(
+                    db.query(ProjectManager.project_id).filter(
+                        ProjectManager.manager_id == user.id
+                    )
+                ),
+            )
+        )
     return q
 
 
@@ -372,13 +392,23 @@ def filter_user_projects(db, user, project_ids):
     """Filter a list of project IDs to only those the user is allowed to see."""
     if user.role.upper() == "ADMIN":
         return project_ids
-    # Manager: only their own projects
-    owned = (
-        db.query(Project.id)
-        .filter(Project.created_by_user_id == user.id, Project.id.in_(project_ids))
-        .all()
-    )
-    return [p[0] for p in owned]
+    if user.role.upper() == "MANAGER":
+        owned = (
+            db.query(Project.id)
+            .filter(
+                db.or_(
+                    Project.created_by_user_id == user.id,
+                    Project.id.in_(
+                        db.query(ProjectManager.project_id).filter(
+                            ProjectManager.manager_id == user.id
+                        )
+                    ),
+                ),
+                Project.id.in_(project_ids),
+            )
+            .all()
+        )
+        return [p[0] for p in owned]
 
 
 # ---------- Cookie helpers ----------
@@ -1202,6 +1232,12 @@ def get_projects(user: User = Depends(get_current_user), db: Session = Depends(g
             .order_by(Phase.stage_index)
             .all()
         )
+        managers = (
+            db.query(User)
+            .join(ProjectManager)
+            .filter(ProjectManager.project_id == p.id)
+            .all()
+        )
         result.append(
             ProjectResponse(
                 id=p.id,
@@ -1213,12 +1249,12 @@ def get_projects(user: User = Depends(get_current_user), db: Session = Depends(g
                 deadline=p.deadline,
                 start_date=p.start_date,
                 status=p.status,
-                priority=p.priority,
                 manager_notes=p.manager_notes,
                 slack_channel_id=p.slack_channel_id or "",
                 slack_channel_name=p.slack_channel_name or "",
                 created_by_user_id=p.created_by_user_id,
                 phases=[PhaseResponse.model_validate(ph) for ph in phases],
+                managers=[ProjectManagerResponse.model_validate(u) for u in managers],
             )
         )
     return result
@@ -1235,14 +1271,31 @@ def get_project(
         raise HTTPException(status_code=404, detail="Project not found")
     if user.role.upper() == "DESIGNER":
         raise HTTPException(status_code=403, detail="Designers cannot access projects")
-    if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
-        raise HTTPException(
-            status_code=403, detail="You can only access your own projects"
+    if user.role.upper() == "MANAGER":
+        is_creator = project.created_by_user_id == user.id
+        is_assigned = (
+            db.query(ProjectManager)
+            .filter(
+                ProjectManager.project_id == project_id,
+                ProjectManager.manager_id == user.id,
+            )
+            .first()
+            is not None
         )
+        if not is_creator and not is_assigned:
+            raise HTTPException(
+                status_code=403, detail="You can only access your own projects"
+            )
     phases = (
         db.query(Phase)
         .filter(Phase.project_id == project_id)
         .order_by(Phase.stage_index)
+        .all()
+    )
+    managers = (
+        db.query(User)
+        .join(ProjectManager)
+        .filter(ProjectManager.project_id == project_id)
         .all()
     )
     return ProjectResponse(
@@ -1256,11 +1309,11 @@ def get_project(
         deadline=project.deadline,
         start_date=project.start_date,
         status=project.status,
-        priority=project.priority,
         manager_notes=project.manager_notes,
         slack_channel_id=project.slack_channel_id or "",
         slack_channel_name=project.slack_channel_name or "",
         phases=[PhaseResponse.model_validate(ph) for ph in phases],
+        managers=[ProjectManagerResponse.model_validate(u) for u in managers],
     )
 
 
@@ -1307,11 +1360,18 @@ async def create_project(
         created_by_user_id=user.id,
         start_date=data.start_date,
         deadline=data.deadline,
-        priority=data.priority,
         manager_notes=data.manager_notes,
     )
     db.add(project)
     db.flush()
+
+    # Add managers to project
+    manager_ids = data.manager_ids or []
+    if user.id not in manager_ids:
+        manager_ids.append(user.id)
+    for mid in manager_ids:
+        pm = ProjectManager(project_id=project.id, manager_id=mid)
+        db.add(pm)
 
     for phase_data in phase_list:
         phase = Phase(
@@ -1344,6 +1404,13 @@ async def create_project(
 
     await _notify()
 
+    managers = (
+        db.query(User)
+        .join(ProjectManager)
+        .filter(ProjectManager.project_id == project.id)
+        .all()
+    )
+
     return ProjectResponse(
         id=project.id,
         name=project.name,
@@ -1355,11 +1422,11 @@ async def create_project(
         deadline=project.deadline,
         start_date=project.start_date,
         status=project.status,
-        priority=project.priority,
         manager_notes=project.manager_notes,
         slack_channel_id=project.slack_channel_id or "",
         slack_channel_name=project.slack_channel_name or "",
         phases=[PhaseResponse.model_validate(ph) for ph in phases],
+        managers=[ProjectManagerResponse.model_validate(u) for u in managers],
     )
 
 
@@ -1375,7 +1442,18 @@ async def update_project(
         raise HTTPException(status_code=404, detail="Project not found")
     if user.role.upper() == "DESIGNER":
         raise HTTPException(status_code=403, detail="Designers cannot modify projects")
-    if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
+    # Check if user is the creator OR a manager assigned to this project
+    is_creator = project.created_by_user_id == user.id
+    is_manager = (
+        db.query(ProjectManager)
+        .filter(
+            ProjectManager.project_id == project_id,
+            ProjectManager.manager_id == user.id,
+        )
+        .first()
+        is not None
+    )
+    if not is_creator and not is_manager:
         raise HTTPException(
             status_code=403, detail="You can only modify your own projects"
         )
@@ -1387,9 +1465,6 @@ async def update_project(
     if data.description is not None and data.description != project.description:
         changes.append(f"Description updated")
         project.description = data.description
-    if data.priority is not None and data.priority != project.priority:
-        changes.append(f"Priority: {project.priority} → {data.priority}")
-        project.priority = data.priority
     if data.deadline is not None and data.deadline != project.deadline:
         changes.append(f"Deadline: {project.deadline} → {data.deadline}")
         project.deadline = data.deadline
@@ -1408,6 +1483,21 @@ async def update_project(
     ):
         changes.append(f"Slack channel name updated")
         project.slack_channel_name = data.slack_channel_name
+
+    # Handle manager_ids update
+    if data.manager_ids is not None:
+        # Remove existing manager associations
+        db.query(ProjectManager).filter(
+            ProjectManager.project_id == project_id
+        ).delete()
+        # Add new ones
+        if user.id not in data.manager_ids:
+            data.manager_ids.append(user.id)
+        for mid in data.manager_ids:
+            pm = ProjectManager(project_id=project_id, manager_id=mid)
+            db.add(pm)
+        changes.append(f"Manager assignments updated")
+        db.commit()
 
     if changes:
         db.commit()
@@ -1438,6 +1528,12 @@ async def update_project(
         .order_by(Phase.stage_index)
         .all()
     )
+    managers = (
+        db.query(User)
+        .join(ProjectManager)
+        .filter(ProjectManager.project_id == project_id)
+        .all()
+    )
 
     return ProjectResponse(
         id=project.id,
@@ -1449,12 +1545,12 @@ async def update_project(
         deadline=project.deadline,
         start_date=project.start_date,
         status=project.status,
-        priority=project.priority,
         manager_notes=project.manager_notes,
         slack_channel_id=project.slack_channel_id or "",
         slack_channel_name=project.slack_channel_name or "",
         created_by_user_id=project.created_by_user_id,
         phases=[PhaseResponse.model_validate(ph) for ph in phases],
+        managers=[ProjectManagerResponse.model_validate(u) for u in managers],
     )
 
 
@@ -1470,7 +1566,17 @@ async def complete_stage(
         raise HTTPException(status_code=404, detail="Project not found")
     if user.role.upper() == "DESIGNER":
         raise HTTPException(status_code=403, detail="Designers cannot complete stages")
-    if user.role.upper() == "MANAGER" and project.created_by_user_id != user.id:
+    is_creator = project.created_by_user_id == user.id
+    is_assigned = (
+        db.query(ProjectManager)
+        .filter(
+            ProjectManager.project_id == project_id,
+            ProjectManager.manager_id == user.id,
+        )
+        .first()
+        is not None
+    )
+    if not is_creator and not is_assigned:
         raise HTTPException(
             status_code=403, detail="You can only modify your own projects"
         )
@@ -1560,6 +1666,21 @@ async def unmark_stage(
 
     if user.role.upper() == "DESIGNER":
         raise HTTPException(status_code=403, detail="Designers cannot unmark stages")
+
+    is_creator = project.created_by_user_id == user.id
+    is_assigned = (
+        db.query(ProjectManager)
+        .filter(
+            ProjectManager.project_id == project_id,
+            ProjectManager.manager_id == user.id,
+        )
+        .first()
+        is not None
+    )
+    if not is_creator and not is_assigned:
+        raise HTTPException(
+            status_code=403, detail="You can only modify your own projects"
+        )
 
     phases = (
         db.query(Phase)
@@ -1673,6 +1794,14 @@ def get_designers(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     users = db.query(User).filter(User.role == "DESIGNER").all()
+    return [UserResponse.model_validate(u) for u in users]
+
+
+@app.get("/api/managers", response_model=List[UserResponse])
+def get_managers(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    users = db.query(User).filter(User.role.in_(["MANAGER", "ADMIN"])).all()
     return [UserResponse.model_validate(u) for u in users]
 
 
@@ -2134,7 +2263,6 @@ async def notify_project_created(
                     f"👷 *Manager:* {manager_name}\n"
                     f"📅 *Start Date:* {project.start_date}\n"
                     f"📅 *Expected Completion:* {project.deadline}\n"
-                    f"⚡ *Priority:* {project.priority.upper()}\n"
                     f"📊 *Status:* {project.status.replace('_', ' ')}"
                 ),
             },
@@ -2515,7 +2643,6 @@ def _build_project_block(project, designer, phases):
                 f"📊 *Progress:* {project.progress}%\n"
                 f"🔄 *Current Stage:* {current_stage}\n"
                 f"📅 *Deadline:* {project.deadline} ({days_left} days left)\n"
-                f"⚡ *Priority:* {project.priority}\n"
                 f"📌 *Status:* {project.status.replace('_', ' ')}\n"
                 f"✅ *Stages:* {stages_completed}/{total_stages} completed"
             ),
@@ -3108,6 +3235,89 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
         challenge = payload.get("challenge", "")
         logger.info("[SLACK WEBHOOK] URL verification challenge: %s", challenge)
         return {"challenge": challenge}
+
+    # Handle incoming text messages from designers (message.channels event)
+    if payload.get("type") == "message" and payload.get("text"):
+        text = payload.get("text", "")
+        channel_id = payload.get("channel", "")
+        user_id = payload.get("user", "")
+        ts = payload.get("ts", "")
+        logger.info(
+            "[SLACK WEBHOOK] Incoming message | channel=%s | user=%s | ts=%s",
+            channel_id, user_id, ts,
+        )
+        # Find project by channel
+        project = db.query(Project).filter(
+            Project.slack_channel_id == channel_id
+        ).first()
+        if project:
+            # Parse structured info from message
+            status_match = re.search(r'(?:^|\n)Status:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
+            blockers_match = re.search(r'(?:^|\n)Blockers:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
+            update_match = re.search(r'(?:^|\n)Update:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
+            progress_match = re.search(r'(?:^|\n)Progress:\s*(\d+)%?', text, re.IGNORECASE)
+            
+            status_text = status_match.group(1).strip() if status_match else None
+            blockers_text = blockers_match.group(1).strip() if blockers_match else None
+            update_text = update_match.group(1).strip() if update_match else None
+            progress_val = int(progress_match.group(1)) if progress_match else None
+            
+            # Resolve user name
+            user_name = ""
+            try:
+                user_result = await slack_api_call(db, "users.info", {"user": user_id})
+                if user_result and user_result.get("ok"):
+                    user_name = user_result["user"]["profile"].get("real_name", "")
+            except Exception:
+                pass
+            
+            # Log the parsed message
+            parsed_msg = SlackMessage(
+                project_id=project.id,
+                slack_user_id=user_id,
+                slack_user_name=user_name or "Unknown",
+                channel_id=channel_id,
+                text=text,
+                ts=ts,
+                raw_json={"status": status_text, "blockers": blockers_text, "update": update_text, "progress": progress_val, "raw": text},
+            )
+            db.add(parsed_msg)
+            
+            # Update phase if message is from assigned designer
+            if project.assigned_designer_id:
+                phases = (
+                    db.query(Phase)
+                    .filter(Phase.project_id == project.id)
+                    .order_by(Phase.stage_index)
+                    .all()
+                )
+                current_phase = (
+                    phases[project.stage_index]
+                    if project.stage_index < len(phases)
+                    else None
+                )
+                if current_phase:
+                    notes_parts = []
+                    if status_text:
+                        notes_parts.append(f"Status: {status_text}")
+                    if update_text:
+                        notes_parts.append(f"Update: {update_text}")
+                    if blockers_text:
+                        notes_parts.append(f"Blockers: {blockers_text}")
+                    if notes_parts:
+                        current_phase.designer_update = "\n".join(notes_parts)
+                    if progress_val is not None:
+                        project.progress = progress_val
+                        if progress_val == 100:
+                            project.status = "COMPLETED"
+                        elif project.deadline < datetime.utcnow().strftime("%Y-%m-%d"):
+                            project.status = "DELAYED"
+                        else:
+                            project.status = "ON_TRACK"
+            
+            db.commit()
+            db.refresh(parsed_msg)
+            return {"message": "OK"}
 
     if not config:
         logger.warning(
@@ -4586,7 +4796,7 @@ def _projects_rows(db, dt_from, dt_to):
     projects = q.all()
     fieldnames = [
         "id", "name", "description", "assigned_designer", "created_by",
-        "stage_index", "current_stage", "progress", "status", "priority",
+        "stage_index", "current_stage", "progress", "status",
         "start_date", "deadline", "slack_channel_name", "created_at", "updated_at",
     ]
     rows = []
@@ -4599,7 +4809,7 @@ def _projects_rows(db, dt_from, dt_to):
             "created_by": creator.name if creator else "",
             "stage_index": p.stage_index,
             "current_stage": _get_current_stage_name(p.stage_index),
-            "progress": p.progress, "status": p.status, "priority": p.priority,
+            "progress": p.progress, "status": p.status,
             "start_date": p.start_date, "deadline": p.deadline,
             "slack_channel_name": p.slack_channel_name,
             "created_at": p.created_at.isoformat() if p.created_at else "",
@@ -4968,6 +5178,550 @@ async def get_project_designer_reports(
         .all()
     )
     return reports
+
+
+# ---------- Project Reports (phasewise, weekly, monthly) ----------
+
+
+@app.get("/api/projects/{project_id}/report", response_model=ProjectReportResponse)
+async def get_project_report(
+    project_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot access project reports")
+    if user.role.upper() == "MANAGER":
+        is_creator = project.created_by_user_id == user.id
+        is_assigned = bool(
+            db.query(ProjectManager).filter(
+                ProjectManager.project_id == project_id,
+                ProjectManager.manager_id == user.id,
+            ).first()
+        )
+        if not is_creator and not is_assigned:
+            raise HTTPException(status_code=403, detail="You can only access your own projects")
+    
+    phases = (
+        db.query(Phase)
+        .filter(Phase.project_id == project_id)
+        .order_by(Phase.stage_index)
+        .all()
+    )
+    stage_reports = (
+        db.query(StageReport)
+        .filter(StageReport.project_id == project_id)
+        .order_by(StageReport.submitted_at.desc())
+        .all()
+    )
+    designer = (
+        db.query(User).filter(User.id == project.assigned_designer_id).first()
+        if project.assigned_designer_id else None
+    )
+    
+    phase_items = []
+    for ph in phases:
+        phase_items.append(PhaseReportItem(
+            stage_index=ph.stage_index,
+            stage_name=_get_current_stage_name(ph.stage_index),
+            deadline=ph.deadline,
+            completed_at=ph.completed_at,
+            designer_update=ph.designer_update or "",
+            delay_reason=ph.delay_reason or "",
+            assigned_designer_ids=ph.assigned_designer_ids or [],
+        ))
+    
+    return ProjectReportResponse(
+        project_id=project.id,
+        project_name=project.name,
+        assigned_designer=designer.name if designer else "Unassigned",
+        start_date=project.start_date,
+        deadline=project.deadline,
+        status=project.status,
+        progress=project.progress,
+        stage_index=project.stage_index,
+        phases=phase_items,
+        stage_reports=[StageReportResponse.model_validate(r) for r in stage_reports],
+        manager_notes=project.manager_notes or "",
+        generated_at=datetime.utcnow().isoformat(),
+    )
+
+
+@app.get("/api/projects/{project_id}/weekly-report", response_model=WeeklyReportResponse)
+async def get_project_weekly_report(
+    project_id: int,
+    week_start: str = Query(..., description="Week start date (YYYY-MM-DD)"),
+    week_end: str = Query(..., description="Week end date (YYYY-MM-DD)"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot access reports")
+    if user.role.upper() == "MANAGER":
+        is_creator = project.created_by_user_id == user.id
+        is_assigned = bool(
+            db.query(ProjectManager).filter(
+                ProjectManager.project_id == project_id,
+                ProjectManager.manager_id == user.id,
+            ).first()
+        )
+        if not is_creator and not is_assigned:
+            raise HTTPException(status_code=403, detail="You can only access your own projects")
+    
+    phases = (
+        db.query(Phase)
+        .filter(Phase.project_id == project_id)
+        .order_by(Phase.stage_index)
+        .all()
+    )
+    stage_reports = (
+        db.query(StageReport)
+        .filter(
+            StageReport.project_id == project_id,
+            StageReport.submitted_at >= week_start,
+            StageReport.submitted_at <= week_end + "T23:59:59",
+        )
+        .all()
+    )
+    designer = (
+        db.query(User).filter(User.id == project.assigned_designer_id).first()
+        if project.assigned_designer_id else None
+    )
+    
+    # Group reports by stage
+    reports_by_stage = {}
+    for r in stage_reports:
+        reports_by_stage.setdefault(r.stage_index, []).append(StageReportResponse.model_validate(r))
+    
+    items = []
+    for ph in phases:
+        sr_list = reports_by_stage.get(ph.stage_index, [])
+        items.append(WeeklyReportItem(
+            project_id=project.id,
+            project_name=project.name,
+            assigned_designer=designer.name if designer else "Unassigned",
+            stage_index=ph.stage_index,
+            stage_name=_get_current_stage_name(ph.stage_index),
+            status=project.status,
+            progress=project.progress,
+            designer_update=ph.designer_update or "",
+            delay_reason=ph.delay_reason or "",
+            completed_at=ph.completed_at,
+            stage_reports=sr_list,
+        ))
+    
+    return WeeklyReportResponse(
+        week_start=week_start,
+        week_end=week_end,
+        reports=items,
+    )
+
+
+@app.get("/api/projects/{project_id}/monthly-report", response_model=MonthlyReportResponse)
+async def get_project_monthly_report(
+    project_id: int,
+    month: int = Query(..., ge=1, le=12),
+    year: int = Query(..., ge=2020, le=2030),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot access reports")
+    if user.role.upper() == "MANAGER":
+        is_creator = project.created_by_user_id == user.id
+        is_assigned = bool(
+            db.query(ProjectManager).filter(
+                ProjectManager.project_id == project_id,
+                ProjectManager.manager_id == user.id,
+            ).first()
+        )
+        if not is_creator and not is_assigned:
+            raise HTTPException(status_code=403, detail="You can only access your own projects")
+    
+    month_start = f"{year}-{month:02d}-01"
+    if month == 12:
+        month_end = f"{year + 1}-01-01"
+    else:
+        month_end = f"{year}-{month + 1:02d}-01"
+    
+    phases = (
+        db.query(Phase)
+        .filter(Phase.project_id == project_id)
+        .order_by(Phase.stage_index)
+        .all()
+    )
+    stage_reports = (
+        db.query(StageReport)
+        .filter(
+            StageReport.project_id == project_id,
+            StageReport.submitted_at >= month_start,
+            StageReport.submitted_at < month_end,
+        )
+        .all()
+    )
+    designer = (
+        db.query(User).filter(User.id == project.assigned_designer_id).first()
+        if project.assigned_designer_id else None
+    )
+    
+    # Collect updates and delays per phase
+    updates_by_phase = {}
+    delays_by_phase = {}
+    reports_by_phase = {}
+    for r in stage_reports:
+        idx = r.stage_index
+        updates_by_phase.setdefault(idx, []).append(r.notes or "")
+        if r.delay_days and r.delay_days > 0:
+            delays_by_phase.setdefault(idx, []).append(f"{r.delay_days} days delay on {r.stage_name}")
+        reports_by_phase.setdefault(idx, []).append(StageReportResponse.model_validate(r))
+    
+    items = []
+    for ph in phases:
+        idx = ph.stage_index
+        items.append(MonthlyReportItem(
+            project_id=project.id,
+            project_name=project.name,
+            assigned_designer=designer.name if designer else "Unassigned",
+            stage_index=idx,
+            stage_name=_get_current_stage_name(idx),
+            status=project.status,
+            progress=project.progress,
+            designer_updates=updates_by_phase.get(idx, []),
+            delays=delays_by_phase.get(idx, []),
+            stage_reports=reports_by_phase.get(idx, []),
+        ))
+    
+    return MonthlyReportResponse(
+        month=month,
+        year=year,
+        reports=items,
+    )
+
+
+@app.get("/api/designers/{designer_id}/performance/weekly", response_model=DesignerPerformanceResponse)
+async def get_designer_weekly_performance(
+    designer_id: int,
+    week_start: str = Query(..., description="Week start date (YYYY-MM-DD)"),
+    week_end: str = Query(..., description="Week end date (YYYY-MM-DD)"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    designer = db.query(User).filter(User.id == designer_id).first()
+    if not designer:
+        raise HTTPException(status_code=404, detail="Designer not found")
+    
+    projects = get_user_owned_project_query(db, user).all()
+    designer_updates = (
+        db.query(Phase)
+        .join(Project)
+        .filter(
+            Project.id.in_([p.id for p in projects]),
+            Phase.designer_update != "",
+            Phase.designer_update.isnot(None),
+        )
+        .all()
+    )
+    
+    # Count reports submitted by this designer in the week
+    stage_reports = (
+        db.query(StageReport)
+        .filter(
+            StageReport.submitted_by_user_id == str(designer_id),
+            StageReport.submitted_at >= week_start,
+            StageReport.submitted_at <= week_end + "T23:59:59",
+        )
+        .all()
+    )
+    
+    total_updates = len(designer_updates)
+    total_delays = sum(1 for r in stage_reports if r.delay_days and r.delay_days > 0)
+    total_stages_completed = sum(1 for r in stage_reports if r.stage_completed)
+    
+    items = []
+    for sr in stage_reports:
+        proj = db.query(Project).filter(Project.id == sr.project_id).first()
+        if proj:
+            items.append(DesignerProjectItem(
+                project_id=proj.id,
+                project_name=proj.name,
+                stage_index=sr.stage_index,
+                stage_name=sr.stage_name,
+                status=proj.status,
+                progress=proj.progress,
+                updates_count=1,
+                delays_count=sr.delay_days if sr.delay_days and sr.delay_days > 0 else 0,
+                reports_submitted=1,
+            ))
+    
+    return DesignerPerformanceResponse(
+        designer_id=designer.id,
+        designer_name=designer.name,
+        period_start=week_start,
+        period_end=week_end,
+        projects=items,
+        total_updates=total_updates,
+        total_delays=total_delays,
+        total_stages_completed=total_stages_completed,
+    )
+
+
+@app.get("/api/designers/{designer_id}/performance/monthly", response_model=DesignerPerformanceResponse)
+async def get_designer_monthly_performance(
+    designer_id: int,
+    month: int = Query(..., ge=1, le=12),
+    year: int = Query(..., ge=2020, le=2030),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    designer = db.query(User).filter(User.id == designer_id).first()
+    if not designer:
+        raise HTTPException(status_code=404, detail="Designer not found")
+    
+    month_start = f"{year}-{month:02d}-01"
+    if month == 12:
+        month_end = f"{year + 1}-01-01"
+    else:
+        month_end = f"{year}-{month + 1:02d}-01"
+    
+    projects = get_user_owned_project_query(db, user).all()
+    designer_updates = (
+        db.query(Phase)
+        .join(Project)
+        .filter(
+            Project.id.in_([p.id for p in projects]),
+            Phase.designer_update != "",
+            Phase.designer_update.isnot(None),
+        )
+        .all()
+    )
+    
+    stage_reports = (
+        db.query(StageReport)
+        .filter(
+            StageReport.submitted_by_user_id == str(designer_id),
+            StageReport.submitted_at >= month_start,
+            StageReport.submitted_at < month_end,
+        )
+        .all()
+    )
+    
+    total_updates = len(designer_updates)
+    total_delays = sum(1 for r in stage_reports if r.delay_days and r.delay_days > 0)
+    total_stages_completed = sum(1 for r in stage_reports if r.stage_completed)
+    
+    items = []
+    for sr in stage_reports:
+        proj = db.query(Project).filter(Project.id == sr.project_id).first()
+        if proj:
+            items.append(DesignerProjectItem(
+                project_id=proj.id,
+                project_name=proj.name,
+                stage_index=sr.stage_index,
+                stage_name=sr.stage_name,
+                status=proj.status,
+                progress=proj.progress,
+                updates_count=1,
+                delays_count=sr.delay_days if sr.delay_days and sr.delay_days > 0 else 0,
+                reports_submitted=1,
+            ))
+    
+    return DesignerPerformanceResponse(
+        designer_id=designer.id,
+        designer_name=designer.name,
+        period_start=month_start,
+        period_end=month_end,
+        projects=items,
+        total_updates=total_updates,
+        total_delays=total_delays,
+        total_stages_completed=total_stages_completed,
+    )
+
+
+# ---------- Report download endpoints (CSV / Excel) ----------
+
+
+def _project_report_to_csv(report: ProjectReportResponse) -> str:
+    """Convert a ProjectReportResponse to CSV string."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Project", "Designer", "Start Date", "Deadline", "Status",
+        "Progress", "Stage Index", "Manager Notes", "Generated At"
+    ])
+    writer.writerow([
+        report.project_name, report.assigned_designer, report.start_date,
+        report.deadline, report.status, report.progress, report.stage_index,
+        report.manager_notes, report.generated_at
+    ])
+    writer.writerow([])
+    writer.writerow(["Phase", "Stage Index", "Deadline", "Completed At", "Designer Update", "Delay Reason"])
+    for p in report.phases:
+        writer.writerow([
+            p.stage_name, p.stage_index, p.deadline, p.completed_at or "",
+            p.designer_update or "", p.delay_reason or ""
+        ])
+    writer.writerow([])
+    writer.writerow(["Report ID", "Project", "Stage", "Stage Name", "Submitted By", "Submitted At",
+                      "Costing", "Willingness to Buy", "Engagement Life", "Durability",
+                      "Age Appropriateness", "Ease of Use", "Aesthetics", "Easy to Store", "Notes"])
+    for sr in report.stage_reports:
+        writer.writerow([
+            sr.id, sr.project_id, sr.stage_index, sr.stage_name,
+            sr.submitted_by_name, sr.submitted_at.strftime("%Y-%m-%d %H:%M") if sr.submitted_at else "",
+            sr.costing, sr.willingness_to_buy, sr.engagement_life, sr.durability,
+            sr.age_appropriateness, sr.ease_of_use, sr.aesthetics, sr.easy_to_store,
+            sr.notes or ""
+        ])
+    return output.getvalue()
+
+
+def _weekly_report_to_csv(report: WeeklyReportResponse) -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Week Start", "Week End"])
+    writer.writerow([report.week_start, report.week_end])
+    writer.writerow([])
+    writer.writerow(["Project", "Designer", "Stage", "Stage Index", "Status", "Progress",
+                      "Designer Update", "Delay Reason", "Completed At"])
+    for item in report.reports:
+        writer.writerow([
+            item.project_name, item.assigned_designer, item.stage_name,
+            item.stage_index, item.status, item.progress,
+            item.designer_update or "", item.delay_reason or "",
+            item.completed_at or ""
+        ])
+    return output.getvalue()
+
+
+def _monthly_report_to_csv(report: MonthlyReportResponse) -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Month", "Year"])
+    writer.writerow([report.month, report.year])
+    writer.writerow([])
+    writer.writerow(["Project", "Designer", "Stage", "Stage Index", "Status", "Progress",
+                      "Designer Updates", "Delays"])
+    for item in report.reports:
+        updates = "; ".join(item.designer_updates) if item.designer_updates else ""
+        delays = "; ".join(item.delays) if item.delays else ""
+        writer.writerow([
+            item.project_name, item.assigned_designer, item.stage_name,
+            item.stage_index, item.status, item.progress,
+            updates, delays
+        ])
+    return output.getvalue()
+
+
+def _designer_performance_to_csv(report: DesignerPerformanceResponse) -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Designer", "Period Start", "Period End", "Total Updates", "Total Delays", "Total Stages Completed"])
+    writer.writerow([
+        report.designer_name, report.period_start, report.period_end,
+        report.total_updates, report.total_delays, report.total_stages_completed
+    ])
+    writer.writerow([])
+    writer.writerow(["Project", "Stage", "Stage Index", "Status", "Progress", "Updates", "Delays", "Reports Submitted"])
+    for item in report.projects:
+        writer.writerow([
+            item.project_name, item.stage_name, item.stage_index,
+            item.status, item.progress, item.updates_count, item.delays_count,
+            item.reports_submitted
+        ])
+    return output.getvalue()
+
+
+@app.get("/api/reports/project/{project_id}/download")
+async def download_project_report_csv(
+    project_id: int,
+    format: str = Query("csv", regex="^(csv|xlsx)$"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    report = await get_project_report(project_id, user, db)
+    csv_content = _project_report_to_csv(report)
+    if format == "xlsx":
+        return JSONResponse(content={"message": "Excel export for project reports — use CSV for now"})
+    return StreamingResponse(
+        io.StringIO(csv_content),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="project-report-{project_id}.csv"'},
+    )
+
+
+@app.get("/api/reports/weekly/{project_id}/download")
+async def download_weekly_report_csv(
+    project_id: int,
+    week_start: str = Query(...),
+    week_end: str = Query(...),
+    format: str = Query("csv", regex="^(csv|xlsx)$"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    report = await get_project_weekly_report(project_id, week_start, week_end, user, db)
+    csv_content = _weekly_report_to_csv(report)
+    if format == "xlsx":
+        return JSONResponse(content={"message": "Excel export for weekly reports — use CSV for now"})
+    return StreamingResponse(
+        io.StringIO(csv_content),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="weekly-report-{project_id}.csv"'},
+    )
+
+
+@app.get("/api/reports/monthly/{project_id}/download")
+async def download_monthly_report_csv(
+    project_id: int,
+    month: int = Query(...),
+    year: int = Query(...),
+    format: str = Query("csv", regex="^(csv|xlsx)$"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    report = await get_project_monthly_report(project_id, month, year, user, db)
+    csv_content = _monthly_report_to_csv(report)
+    if format == "xlsx":
+        return JSONResponse(content={"message": "Excel export for monthly reports — use CSV for now"})
+    return StreamingResponse(
+        io.StringIO(csv_content),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="monthly-report-{project_id}.csv"'},
+    )
+
+
+@app.get("/api/reports/designer/{designer_id}/performance/download")
+async def download_designer_performance_csv(
+    designer_id: int,
+    period: str = Query("weekly", regex="^(weekly|monthly)$"),
+    week_start: Optional[str] = Query(None),
+    week_end: Optional[str] = Query(None),
+    month: Optional[int] = Query(None),
+    year: Optional[int] = Query(None),
+    format: str = Query("csv", regex="^(csv|xlsx)$"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if period == "weekly":
+        report = await get_designer_weekly_performance(designer_id, week_start, week_end, user, db)
+    else:
+        report = await get_designer_monthly_performance(designer_id, month, year, user, db)
+    csv_content = _designer_performance_to_csv(report)
+    if format == "xlsx":
+        return JSONResponse(content={"message": "Excel export for designer performance — use CSV for now"})
+    return StreamingResponse(
+        io.StringIO(csv_content),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="designer-performance-{designer_id}.csv"'},
+    )
 
 
 # ---------- Startup ----------

@@ -84,6 +84,71 @@ const api = {
     createDesigner: (data) => apiFetch('/designers', { method: 'POST', body: data }),
     deleteDesigner: (id) => apiFetch(`/designers/${id}`, { method: 'DELETE' }),
 
+    // Managers
+    getManagers: () => apiFetch('/managers'),
+
+    // Reports — Project Report
+    getProjectReport: (projectId) => apiFetch(`/projects/${projectId}/report`),
+
+    // Reports — Weekly Report
+    getWeeklyReport: (projectId, weekStart, weekEnd) =>
+        apiFetch(`/projects/${projectId}/weekly-report?week_start=${weekStart}&week_end=${weekEnd}`),
+
+    // Reports — Monthly Report
+    getMonthlyReport: (projectId, month, year) =>
+        apiFetch(`/projects/${projectId}/monthly-report?month=${month}&year=${year}`),
+
+    // Reports — Designer Performance (weekly)
+    getDesignerWeeklyPerformance: (designerId, weekStart, weekEnd) =>
+        apiFetch(`/designers/${designerId}/performance/weekly?week_start=${weekStart}&week_end=${weekEnd}`),
+
+    // Reports — Designer Performance (monthly)
+    getDesignerMonthlyPerformance: (designerId, month, year) =>
+        apiFetch(`/designers/${designerId}/performance/monthly?month=${month}&year=${year}`),
+
+    // Report downloads (CSV / Excel) via fetch+blob
+    downloadReportCSV: async (endpoint) => {
+        const url = `${API_BASE}${endpoint}`;
+        const response = await fetch(url, { credentials: 'include' });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ detail: 'Download failed' }));
+            throw new Error(err.detail || 'Download failed');
+        }
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        const filename = match ? match[1] : 'report.csv';
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(blobUrl);
+    },
+
+    downloadReportExcel: async (endpoint) => {
+        const url = `${API_BASE}${endpoint}`;
+        const response = await fetch(url, { credentials: 'include' });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ detail: 'Download failed' }));
+            throw new Error(err.detail || 'Download failed');
+        }
+        const disposition = response.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        const filename = match ? match[1] : 'report.xlsx';
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(blobUrl);
+    },
+
     // Slack
     getSlackConfig: () => apiFetch('/slack/config'),
     saveSlackConfig: (data) => apiFetch('/slack/config', { method: 'POST', body: data }),

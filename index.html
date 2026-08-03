@@ -288,6 +288,13 @@
             </svg>
             Data & Reports
         </a>
+        <a href="#" onclick="event.preventDefault(); navigateTo('reports')" data-nav="reports" data-roles="ADMIN,MANAGER"
+            class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150">
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 10h18M3 6h18M3 14h18M3 18h18"/>
+            </svg>
+            Reports
+        </a>
     </nav>
 
     <!-- Sidebar Footer -->
@@ -513,15 +520,13 @@
                 <p class="text-xs text-gray-500 mt-1">This designer will be assigned to the project and added to the first workflow stage.</p>
             </div>
 
-            <!-- Priority -->
+            <!-- Managers (Multi-Select) -->
             <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">Priority</label>
-                <select class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors bg-white">
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="low">Low</option>
-                    <option value="urgent">Urgent</option>
-                </select>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Project Managers <span class="text-red-400">*</span></label>
+                <div id="managerSelectContainer" class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors bg-white" style="min-height:48px;">
+                    <!-- Checkboxes rendered by JS -->
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Select managers who will have access to this project. You will be automatically added.</p>
             </div>
 
             <!-- Dates Row -->
@@ -671,17 +676,6 @@
         <label class="block text-sm font-semibold text-gray-700 mb-2">Project Name</label>
         <input type="text" id="editProjectName"
         class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors">
-    </div>
-
-    <!-- Editable: Priority -->
-    <div>
-        <label class="block text-sm font-semibold text-gray-700 mb-2">Priority</label>
-        <select id="editProjectPriority" class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors bg-white">
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-            <option value="urgent">Urgent</option>
-        </select>
     </div>
 
     <!-- Editable: Deadline -->
@@ -963,6 +957,138 @@
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">No summary data available.</div>
         </div>
     </div>
+    </div>
+</section>
+
+<!-- ============================================ -->
+<!-- REPORTS PAGE -->
+<!-- ============================================ -->
+<section id="page-reports" class="page-section hidden">
+    <div class="mb-6">
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Reports</h1>
+        <p class="text-sm text-gray-500 mt-1">Generate project and designer performance reports.</p>
+    </div>
+
+    <!-- Sub-tabs -->
+    <div class="flex items-center gap-4 mb-6 border-b border-gray-200 overflow-x-auto">
+        <button onclick="setReportTab('project')" id="reportTabProject" class="px-4 py-2 text-sm font-medium border-b-2 border-brand-500 text-brand-600 whitespace-nowrap">Project Report</button>
+        <button onclick="setReportTab('weekly')" id="reportTabWeekly" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">Weekly Report</button>
+        <button onclick="setReportTab('monthly')" id="reportTabMonthly" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">Monthly Report</button>
+        <button onclick="setReportTab('designer')" id="reportTabDesigner" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">Designer Performance</button>
+    </div>
+
+    <!-- Project Report Section -->
+    <div id="reportSectionProject">
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Project</label>
+                    <select id="reportProjectSelect" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white">
+                        <option value="">Select project...</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button onclick="loadProjectReport()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors w-full">Generate Report</button>
+                </div>
+            </div>
+        </div>
+        <div id="projectReportContent" class="space-y-6">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">Select a project to generate a report.</div>
+        </div>
+    </div>
+
+    <!-- Weekly Report Section -->
+    <div id="reportSectionWeekly" class="hidden">
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Week Start</label>
+                    <input type="date" id="weeklyWeekStart" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Week End</label>
+                    <input type="date" id="weeklyWeekEnd" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                </div>
+                <div class="flex items-end">
+                    <button onclick="loadWeeklyReport()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors w-full">Generate Report</button>
+                </div>
+            </div>
+        </div>
+        <div id="weeklyReportContent" class="space-y-4">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">Select a week to generate a report.</div>
+        </div>
+    </div>
+
+    <!-- Monthly Report Section -->
+    <div id="reportSectionMonthly" class="hidden">
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Month</label>
+                    <select id="monthlyMonth" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white">
+                        <option value="1">January</option>
+                        <option value="2">February</option>
+                        <option value="3">March</option>
+                        <option value="4">April</option>
+                        <option value="5">May</option>
+                        <option value="6">June</option>
+                        <option value="7">July</option>
+                        <option value="8">August</option>
+                        <option value="9">September</option>
+                        <option value="10">October</option>
+                        <option value="11">November</option>
+                        <option value="12">December</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Year</label>
+                    <input type="number" id="monthlyYear" min="2020" max="2030" value="2025" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                </div>
+                <div class="flex items-end">
+                    <button onclick="loadMonthlyReport()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors w-full">Generate Report</button>
+                </div>
+            </div>
+        </div>
+        <div id="monthlyReportContent" class="space-y-4">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">Select a month to generate a report.</div>
+        </div>
+    </div>
+
+    <!-- Designer Performance Section -->
+    <div id="reportSectionDesigner" class="hidden">
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Designer</label>
+                    <select id="designerPerfSelect" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white">
+                        <option value="">Select designer...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Period</label>
+                    <select id="designerPerfPeriod" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white">
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button onclick="loadDesignerPerformance()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors w-full">Generate Report</button>
+                </div>
+            </div>
+        </div>
+        <div id="designerPerfContent" class="space-y-4">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">Select a designer and period to generate a report.</div>
+        </div>
+    </div>
+
+    <!-- Download buttons -->
+    <div id="reportDownloadActions" class="hidden mt-4 flex gap-3">
+        <button onclick="downloadReportCSV()" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
+            📄 Download CSV
+        </button>
+        <button onclick="downloadReportExcel()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors">
+            📊 Download Excel
+        </button>
     </div>
 </section>
 

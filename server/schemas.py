@@ -98,20 +98,20 @@ class ProjectCreate(BaseModel):
     assigned_designer_id: int
     start_date: str
     deadline: str
-    priority: str = "MEDIUM"
     manager_notes: str = ""
     phases: List[PhaseCreate]
     created_by_user_id: int = 0
+    manager_ids: List[int] = []
 
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    priority: Optional[str] = None
     deadline: Optional[str] = None
     manager_notes: Optional[str] = None
     slack_channel_id: Optional[str] = None
     slack_channel_name: Optional[str] = None
+    manager_ids: Optional[List[int]] = None
 
 
 class ProjectResponse(BaseModel):
@@ -125,11 +125,24 @@ class ProjectResponse(BaseModel):
     deadline: str
     start_date: str
     status: str
-    priority: str
     manager_notes: str
     slack_channel_id: str = ""
     slack_channel_name: str = ""
     phases: List[PhaseResponse] = []
+    managers: List["ProjectManagerResponse"] = []
+
+    class Config:
+        from_attributes = True
+
+
+class ProjectManagerResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+    role: str
+    specialty: str = ""
+    initials: str = ""
+    color: str = ""
 
     class Config:
         from_attributes = True
@@ -305,3 +318,97 @@ class StageReportSummary(BaseModel):
     avg_easy_to_store: Optional[float] = None
     latest_report_id: Optional[int] = None
     latest_submitted_at: Optional[datetime] = None
+
+
+# ---------- Project Reports (downloadable) ----------
+
+
+class ProjectReportResponse(BaseModel):
+    """Overall phasewise report for a project."""
+    project_id: int
+    project_name: str
+    assigned_designer: str
+    start_date: str
+    deadline: str
+    status: str
+    progress: int
+    stage_index: int
+    phases: List[PhaseReportItem] = []
+    stage_reports: List[StageReportResponse] = []
+    manager_notes: str = ""
+    generated_at: Optional[str] = None
+
+
+class PhaseReportItem(BaseModel):
+    stage_index: int
+    stage_name: str
+    deadline: str
+    completed_at: Optional[str] = None
+    designer_update: str = ""
+    delay_reason: str = ""
+    assigned_designer_ids: List[int] = []
+
+
+class WeeklyReportResponse(BaseModel):
+    """Weekly report: designer/project activity for a given week."""
+    week_start: str
+    week_end: str
+    reports: List[WeeklyReportItem] = []
+
+
+class WeeklyReportItem(BaseModel):
+    project_id: int
+    project_name: str
+    assigned_designer: str
+    stage_index: int
+    stage_name: str
+    status: str
+    progress: int
+    designer_update: str = ""
+    delay_reason: str = ""
+    completed_at: Optional[str] = None
+    stage_reports: List[StageReportResponse] = []
+
+
+class MonthlyReportResponse(BaseModel):
+    """Monthly report: designer/project activity for a given month."""
+    month: str
+    year: int
+    reports: List[MonthlyReportItem] = []
+
+
+class MonthlyReportItem(BaseModel):
+    project_id: int
+    project_name: str
+    assigned_designer: str
+    stage_index: int
+    stage_name: str
+    status: str
+    progress: int
+    designer_updates: List[str] = []
+    delays: List[str] = []
+    stage_reports: List[StageReportResponse] = []
+
+
+class DesignerPerformanceResponse(BaseModel):
+    """Designer performance report (weekly/monthly)."""
+    designer_id: int
+    designer_name: str
+    period_start: str
+    period_end: str
+    projects: List[DesignerProjectItem] = []
+    total_updates: int = 0
+    total_delays: int = 0
+    total_stages_completed: int = 0
+
+
+class DesignerProjectItem(BaseModel):
+    project_id: int
+    project_name: str
+    stage_index: int
+    stage_name: str
+    status: str
+    progress: int
+    updates_count: int = 0
+    delays_count: int = 0
+    reports_submitted: int = 0

@@ -40,6 +40,16 @@ class User(Base):
     )
 
 
+class ProjectManager(Base):
+    """Junction table: many-to-many between Projects and Managers."""
+    __tablename__ = "project_managers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    manager_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -53,7 +63,6 @@ class Project(Base):
     deadline = Column(String, nullable=False)
     start_date = Column(String, nullable=False)
     status = Column(String, default="ON_TRACK")
-    priority = Column(String, default="MEDIUM")
     manager_notes = Column(Text, default="")
     slack_channel_id = Column(String, default="")
     slack_channel_name = Column(String, default="")
@@ -66,6 +75,14 @@ class Project(Base):
 
     designer = relationship(
         "User", back_populates="projects", foreign_keys="Project.assigned_designer_id"
+    )
+    managers = relationship(
+        "User",
+        secondary="project_managers",
+        primaryjoin="and_(Project.id == ProjectManager.project_id, ProjectManager.manager_id == User.id)",
+        secondaryjoin="ProjectManager.project_id == Project.id",
+        foreign_keys="[ProjectManager.project_id]",
+        backref="managed_projects",
     )
     phases = relationship(
         "Phase", back_populates="project", cascade="all, delete-orphan"
