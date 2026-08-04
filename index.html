@@ -456,6 +456,13 @@
             </button>
         </div>
 
+        <!-- Projects Tabs -->
+        <div class="flex items-center gap-4 mb-6">
+            <button onclick="setProjectsFilter('all')" id="projectsFilterAll" class="px-4 py-2 text-sm font-medium border-b-2 border-brand-500 text-brand-600 whitespace-nowrap">All Projects</button>
+            <button onclick="setProjectsFilter('IDEATION')" id="projectsFilterIdeation" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">Ideation</button>
+            <button onclick="setProjectsFilter('PRODUCTION')" id="projectsFilterProduction" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">Production</button>
+        </div>
+
         <!-- Projects Table -->
         <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div class="overflow-x-auto">
@@ -463,6 +470,7 @@
                     <thead>
                         <tr class="bg-gray-50 border-b border-gray-200">
                             <th class="text-left px-5 py-4 font-semibold text-gray-600 text-xs uppercase tracking-wider">Project Name</th>
+                            <th class="text-left px-5 py-4 font-semibold text-gray-600 text-xs uppercase tracking-wider">Type</th>
                             <th class="text-left px-5 py-4 font-semibold text-gray-600 text-xs uppercase tracking-wider">Designer</th>
                             <th class="text-left px-5 py-4 font-semibold text-gray-600 text-xs uppercase tracking-wider">Current Stage</th>
                             <th class="text-left px-5 py-4 font-semibold text-gray-600 text-xs uppercase tracking-wider">Progress</th>

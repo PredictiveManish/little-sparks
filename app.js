@@ -563,6 +563,32 @@ async function loadDashboard() {
 // ============================================
 // POPULATE PROJECTS TABLE
 // ============================================
+let currentProjectsFilter = 'all';
+
+function setProjectsFilter(filter) {
+    currentProjectsFilter = filter;
+    
+    const tabs = {
+        all: 'projectsFilterAll',
+        IDEATION: 'projectsFilterIdeation',
+        PRODUCTION: 'projectsFilterProduction',
+    };
+    
+    Object.entries(tabs).forEach(([key, id]) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        if (key === filter) {
+            btn.classList.add('border-brand-500', 'text-brand-600');
+            btn.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700');
+        } else {
+            btn.classList.remove('border-brand-500', 'text-brand-600');
+            btn.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700');
+        }
+    });
+    
+    populateProjectsTable();
+}
+
 async function populateProjectsTable() {
     console.log('[APP] populateProjectsTable: Loading projects table');
     try {
@@ -570,17 +596,25 @@ async function populateProjectsTable() {
         console.log('[APP] populateProjectsTable: Designers loaded', DESIGNERS?.length || 0);
         const projects = await api.getProjects();
         console.log('[APP] populateProjectsTable: Projects loaded', projects?.length || 0);
+        const filteredProjects = currentProjectsFilter === 'all' 
+            ? projects 
+            : projects.filter(p => p.phase_type === currentProjectsFilter);
         const tbody = document.getElementById('projectsTableBody');
         let html = '';
-        projects.forEach(p => {
+        filteredProjects.forEach(p => {
             const statusClass = getStatusColor(p.status);
             const statusText = getStatusText(p.status);
-            const stageLabel = WORKFLOW_STAGES[p.stage_index] || 'N/A';
+            const stages = getStagesForPhaseType(p.phase_type);
+            const stageLabel = stages[p.stage_index] || 'N/A';
+            const typeBadge = p.phase_type === 'IDEATION'
+                ? '<span class="text-xs font-medium px-2 py-1 rounded-full bg-purple-100 text-purple-700">Ideation</span>'
+                : '<span class="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 text-blue-700">Production</span>';
             html += `
                 <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" onclick="navigateTo('project-details', ${p.id})">
                     <td class="px-5 py-4">
                         <p class="font-semibold text-gray-900">${p.name}</p>
                     </td>
+                    <td class="px-5 py-4">${typeBadge}</td>
                     <td class="px-5 py-4 text-gray-600">${getDesignerName(p.assigned_designer_id, DESIGNERS)}</td>
                     <td class="px-5 py-4">
                         <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">Stage ${p.stage_index + 1} — ${stageLabel}</span>
