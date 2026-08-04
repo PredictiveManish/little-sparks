@@ -19,6 +19,8 @@ let MANAGERS = [];
 // ============================================
 
 async function checkAuth() {
+    const initialHash = window.location.hash.replace('#', '');
+    console.log('[APP] checkAuth: Starting authentication check, initialHash=%s', initialHash);
     console.log('[APP] checkAuth: Starting authentication check');
     try {
         const user = await api.getMe();
@@ -35,7 +37,7 @@ async function checkAuth() {
             } else if (user.role === 'ADMIN') {
                 console.log('[APP] checkAuth: User role is ADMIN, showing dashboard');
                 showPage('mainApp');
-                navigateTo('dashboard');
+                navigateTo(initialHash && ['dashboard', 'projects', 'create-project', 'project-details', 'edit-project', 'designers', 'settings', 'slack-messages', 'slack-settings', 'data-export', 'reports'].includes(initialHash) ? initialHash : 'dashboard');
             } else if (user.role === 'DESIGNER') {
                 console.log('[APP] checkAuth: User role is DESIGNER, showing restricted page');
                 showPage('designerRestrictedPage');
@@ -43,7 +45,7 @@ async function checkAuth() {
             } else {
                 console.log('[APP] checkAuth: User authenticated, showing main app');
                 showPage('mainApp');
-                navigateTo('dashboard');
+                navigateTo(initialHash && ['dashboard', 'projects', 'create-project', 'project-details', 'edit-project', 'designers', 'settings', 'slack-messages', 'slack-settings', 'data-export', 'reports'].includes(initialHash) ? initialHash : 'dashboard');
             }
         } else {
             console.log('[APP] checkAuth: No user data, showing login page');
