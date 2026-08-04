@@ -2237,11 +2237,16 @@ async function loadProjectReport() {
                 : delayDays > 0
                     ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed (${delayDays}d)</span>`
                     : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-700">On Track</span>`;
+            const completedStatus = p.completed_at
+                ? (delayDays > 0
+                    ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed</span>`
+                    : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">On Time</span>`)
+                : '—';
             html += `
                 <tr class="border-b border-gray-100">
                     <td class="px-4 py-3 font-medium">${p.stage_name}</td>
                     <td class="px-4 py-3 text-gray-600">${formatDate(p.deadline)}</td>
-                    <td class="px-4 py-3">${p.completed_at ? '✅ ' + formatDateTime(p.completed_at) : '—'}</td>
+                    <td class="px-4 py-3">${completedStatus}</td>
                     <td class="px-4 py-3">${statusBadge}</td>
                     <td class="px-4 py-3 text-gray-500 max-w-xs truncate">${p.designer_update || '—'}</td>
                     <td class="px-4 py-3 text-gray-500 max-w-xs truncate">${p.delay_reason || '—'}</td>
