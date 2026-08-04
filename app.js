@@ -2213,6 +2213,7 @@ async function loadProjectReport() {
                                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Stage</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Deadline</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Completed</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Designer Update</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Delay Reason</th>
                             </tr>
@@ -2231,22 +2232,20 @@ async function loadProjectReport() {
         ].sort((a, b) => a.stage_index - b.stage_index);
         
         visiblePhases.forEach(p => {
-            const delayDays = p.completed_at ? (p.delay_days || 0) : calculateDelayDays(p.deadline);
-            const statusBadge = p.completed_at
-                ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">Completed</span>`
-                : delayDays > 0
-                    ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed (${delayDays}d)</span>`
-                    : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-700">On Track</span>`;
-            const completedStatus = p.completed_at
-                ? (delayDays > 0
-                    ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed</span>`
-                    : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">On Time</span>`)
-                : '—';
+            const isDelayed = p.delay_days > 0;
+            const statusBadge = isDelayed
+                ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed</span>`
+                : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">On Time</span>`;
+            const completedCell = p.completed_at
+                ? '✅ ' + formatDateTime(p.completed_at)
+                : p.is_current
+                    ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-brand-100 text-brand-700">In Progress</span>`
+                    : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-500">Not Started</span>`;
             html += `
                 <tr class="border-b border-gray-100">
                     <td class="px-4 py-3 font-medium">${p.stage_name}</td>
                     <td class="px-4 py-3 text-gray-600">${formatDate(p.deadline)}</td>
-                    <td class="px-4 py-3">${completedStatus}</td>
+                    <td class="px-4 py-3">${completedCell}</td>
                     <td class="px-4 py-3">${statusBadge}</td>
                     <td class="px-4 py-3 text-gray-500 max-w-xs truncate">${p.designer_update || '—'}</td>
                     <td class="px-4 py-3 text-gray-500 max-w-xs truncate">${p.delay_reason || '—'}</td>

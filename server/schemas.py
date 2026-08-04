@@ -348,6 +348,8 @@ class PhaseReportItem(BaseModel):
     designer_update: str = ""
     delay_reason: str = ""
     assigned_designer_ids: List[int] = []
+    is_current: bool = False
+    delay_days: int = 0
 
 
 class WeeklyReportResponse(BaseModel):

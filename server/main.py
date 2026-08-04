@@ -5249,6 +5249,16 @@ async def get_project_report(
     
     phase_items = []
     for ph in phases:
+        delay_days = 0
+        if ph.completed_at:
+            try:
+                completed_dt = datetime.datetime.strptime(ph.completed_at, "%Y-%m-%dT%H:%M:%S")
+                deadline_dt = datetime.datetime.strptime(ph.deadline, "%Y-%m-%d")
+                diff = (completed_dt.date() - deadline_dt.date()).days
+                if diff > 0:
+                    delay_days = diff
+            except (ValueError, TypeError):
+                pass
         phase_items.append(PhaseReportItem(
             stage_index=ph.stage_index,
             stage_name=_get_current_stage_name(ph.stage_index),
@@ -5257,6 +5267,8 @@ async def get_project_report(
             designer_update=ph.designer_update or "",
             delay_reason=ph.delay_reason or "",
             assigned_designer_ids=ph.assigned_designer_ids or [],
+            is_current=ph.stage_index == project.stage_index,
+            delay_days=delay_days,
         ))
     
     return ProjectReportResponse(
