@@ -600,56 +600,68 @@
     </button>
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-            <h1 class="text-2xl md:text-3xl font-bold text-gray-900" id="detailProjectName">STEM Explorer Kit</h1>
-            <p class="text-sm text-gray-500 mt-1" id="detailClientName">Assigned to Isha Saxena</p>
+            <h1 class="text-2xl font-bold text-gray-900" id="detailProjectName">STEM Explorer Kit</h1>
+            <p class="text-sm text-gray-500 mt-0.5" id="detailClientName">Assigned to Isha Saxena</p>
         </div>
-        <div class="flex gap-2">
-            <span class="px-3 py-1.5 rounded-full text-xs font-semibold bg-brand-100 text-brand-700" id="detailStageBadge">Stage 3 — Product Design</span>
+        <div class="flex items-center gap-2">
+            <span class="px-2.5 py-1 rounded-md text-xs font-medium bg-brand-50 text-brand-700" id="detailStageBadge">Stage 3</span>
             <button id="sendReminderBtn" onclick="sendProjectReminder()"
-            class="px-4 py-2 bg-amber-50 border border-amber-300 rounded-lg text-sm font-medium text-amber-700 hover:bg-amber-100 transition-colors">
-            🔔 Send Reminder
+            class="px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors">
+            🔔 Remind
         </button>
         <button onclick="navigateTo('edit-project')"
-            class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-            Edit Project
+            class="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 transition-colors">
+            Edit
         </button>
     </div>
 </div>
 </div>
 
-<!-- Project Summary Cards -->
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-    <div class="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-        <p class="text-xs text-gray-500 uppercase tracking-wider">Progress</p>
-        <p class="text-2xl font-bold text-gray-900 mt-1" id="detailProgress">65%</p>
-        <div class="w-full h-1.5 bg-gray-200 rounded-full mt-2">
-            <div class="h-full bg-brand-500 rounded-full" style="width:65%" id="detailProgressBar"></div>
+<!-- Compact Stats -->
+<div class="flex flex-wrap gap-6 py-4 mb-6 border-b border-gray-100">
+    <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center">
+            <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+        </div>
+        <div>
+            <p class="text-xs text-gray-500">Progress</p>
+            <p class="text-lg font-semibold text-gray-900"><span id="detailProgress">65</span>%</p>
         </div>
     </div>
-    <div class="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-        <p class="text-xs text-gray-500 uppercase tracking-wider">Start Date</p>
-        <p class="text-lg font-semibold text-gray-900 mt-1" id="detailStartDate">15 Jun 2026</p>
+    <div class="flex-1 hidden sm:block">
+        <div class="w-full h-2 bg-gray-100 rounded-full mt-1">
+            <div class="h-full bg-brand-500 rounded-full transition-all duration-500" id="detailProgressBar" style="width:65%"></div>
+        </div>
     </div>
-    <div class="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-        <p class="text-xs text-gray-500 uppercase tracking-wider">Deadline</p>
-        <p class="text-lg font-semibold text-gray-900 mt-1" id="detailDeadline">15 Aug 2026</p>
+    <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center">
+            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        </div>
+        <div>
+            <p class="text-xs text-gray-500">Deadline</p>
+            <p class="text-sm font-semibold text-gray-900" id="detailDeadline">15 Aug 2026</p>
+        </div>
     </div>
-    <div class="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
-        <p class="text-xs text-gray-500 uppercase tracking-wider">Status</p>
-        <p class="text-lg font-semibold text-gray-900 mt-1" id="detailStatus">On Track</p>
+    <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center">
+            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <div>
+            <p class="text-xs text-gray-500">Status</p>
+            <p class="text-sm font-semibold text-gray-900" id="detailStatus">On Track</p>
+        </div>
     </div>
 </div>
 
-<!-- Horizontal Workflow Tracker -->
-<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-8 overflow-x-auto">
-    <h3 class="text-sm font-semibold text-gray-700 mb-5">📌 Workflow Progress</h3>
-    <div class="flex items-start justify-between min-w-[700px] relative" id="workflowTracker">
+<!-- Workflow Stepper -->
+<div class="mb-8">
+    <div class="flex items-center justify-between overflow-x-auto pb-2" id="workflowTracker">
         <!-- Generated by JS -->
     </div>
 </div>
 
-<!-- Stage Cards -->
-<div class="space-y-4" id="stageCardsContainer">
+<!-- Stages -->
+<div class="space-y-3" id="stageCardsContainer">
     <!-- Generated by JS -->
 </div>
 </section>

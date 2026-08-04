@@ -620,10 +620,9 @@ async function populateProjectDetails() {
         document.getElementById('detailProjectName').textContent = project.name;
         document.getElementById('detailClientName').textContent = 'Assigned to ' + getDesignerName(project.assigned_designer_id, DESIGNERS);
         document.getElementById('detailStageBadge').textContent =
-            `Stage ${project.stage_index + 1} — ${WORKFLOW_STAGES[project.stage_index]}`;
-        document.getElementById('detailProgress').textContent = project.progress + '%';
+            `Stage ${project.stage_index + 1}`;
+        document.getElementById('detailProgress').textContent = project.progress;
         document.getElementById('detailProgressBar').style.width = project.progress + '%';
-        document.getElementById('detailStartDate').textContent = formatDate(project.start_date);
         document.getElementById('detailDeadline').textContent = formatDate(project.deadline);
         document.getElementById('detailStatus').textContent = getStatusText(project.status);
 
@@ -631,34 +630,34 @@ async function populateProjectDetails() {
         const tracker = document.getElementById('workflowTracker');
         let trackerHTML = '';
         WORKFLOW_STAGES.forEach((stage, idx) => {
-            let nodeClass = 'upcoming';
-            let dotBg = 'bg-gray-200';
-            let dotBorder = 'border-gray-300';
-            let textColor = 'text-gray-400';
-            let dotContent =
-                '<svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/></svg>';
+            const isCompleted = idx < project.stage_index;
+            const isCurrent = idx === project.stage_index;
+            const isUpcoming = idx > project.stage_index;
 
-            if (idx < project.stage_index) {
-                nodeClass = 'completed';
-                dotBg = 'bg-green-500';
-                dotBorder = 'border-green-500';
-                textColor = 'text-green-700';
-                dotContent =
-                    '<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>';
-            } else if (idx === project.stage_index) {
-                nodeClass = 'current';
-                dotBg = 'bg-brand-500';
-                dotBorder = 'border-brand-500';
-                textColor = 'text-brand-700 font-semibold';
-                dotContent = '<span class="text-white text-xs font-bold">' + (idx + 1) + '</span>';
+            let circleClass = 'bg-gray-100 text-gray-400';
+            let labelClass = 'text-gray-400';
+            let icon = '○';
+            let connectorClass = 'bg-gray-200';
+
+            if (isCompleted) {
+                circleClass = 'bg-green-500 text-white';
+                labelClass = 'text-green-700';
+                icon = '✓';
+                connectorClass = 'bg-green-500';
+            } else if (isCurrent) {
+                circleClass = 'bg-brand-500 text-white ring-4 ring-brand-100';
+                labelClass = 'text-brand-700 font-semibold';
+                icon = (idx + 1).toString();
+                connectorClass = 'bg-brand-500';
             }
 
             trackerHTML += `
-                <div class="flex flex-col items-center relative workflow-node ${nodeClass} flex-shrink-0" style="width:${100 / 9}%; min-width:70px;">
-                    <div class="w-9 h-9 rounded-full ${dotBg} ${dotBorder} border-2 flex items-center justify-center z-10 relative ${idx === project.stage_index ? 'current-stage-pulse' : ''} shadow-sm">
-                        ${dotContent}
+                <div class="flex flex-col items-center flex-shrink-0 relative" style="min-width:60px;">
+                    <div class="w-8 h-8 rounded-full ${circleClass} flex items-center justify-center text-xs font-bold z-10 relative">
+                        ${icon}
                     </div>
-                    <span class="text-[10px] md:text-xs mt-2 text-center font-medium ${textColor} leading-tight">${stage}</span>
+                    <span class="text-[10px] md:text-xs mt-1.5 text-center ${labelClass} leading-tight max-w-[60px]">${stage}</span>
+                    ${idx < WORKFLOW_STAGES.length - 1 ? `<div class="absolute top-4 left-[calc(50%+20px)] w-[calc(100%-40px)] h-0.5 ${connectorClass}" style="width:calc(100vw / 9); max-width:60px; left:50%;"></div>` : ''}
                 </div>
             `;
         });
@@ -668,101 +667,86 @@ async function populateProjectDetails() {
         const cardsContainer = document.getElementById('stageCardsContainer');
         let cardsHTML = '';
         project.phases.forEach((sd, idx) => {
-            let cardBorder = 'border-l-gray-300';
-            let statusBadge = 'bg-gray-100 text-gray-500';
-            let statusText = 'Locked';
-            let bgTint = '';
-
-            if (idx < project.stage_index) {
-                cardBorder = 'border-l-green-400';
-                statusBadge = 'bg-green-100 text-green-700';
-                statusText = 'Completed';
-                bgTint = 'bg-green-50/30';
-            } else if (idx === project.stage_index) {
-                cardBorder = 'border-l-brand-500';
-                statusBadge = 'bg-brand-100 text-brand-700';
-                statusText = 'In Progress';
-                bgTint = 'bg-brand-50/30';
-            }
-
-            const assignedNames = sd.assignedDesigners
-                ? sd.assignedDesigners.map(dId => DESIGNERS.find(d => d.id === dId)).filter(Boolean).map(d => d.name).join(', ')
-                : 'None assigned';
-
-            const designerUpdate = sd.designer_update || '—';
-            const delayReason = sd.delay_reason || 'No delays reported.';
-            const completedAt = sd.completed_at ? formatDateTime(sd.completed_at) : '—';
-            const deadline = sd.deadline ? formatDate(sd.deadline) : '—';
             const isCompleted = sd.completed_at !== null;
             const isCurrent = idx === project.stage_index;
             const isLocked = idx > project.stage_index;
             const prevCompleted = idx === 0 ? true : (project.phases[idx - 1].completed_at !== null);
             const canComplete = isCurrent && !isCompleted && prevCompleted;
 
+            const assignedNames = sd.assignedDesigners
+                ? sd.assignedDesigners.map(dId => DESIGNERS.find(d => d.id === dId)).filter(Boolean).map(d => d.name).join(', ')
+                : 'Unassigned';
+
+            const designerUpdate = sd.designer_update || '—';
+            const delayReason = sd.delay_reason || '—';
+            const completedAt = sd.completed_at ? formatDateTime(sd.completed_at) : '—';
+            const deadline = sd.deadline ? formatDate(sd.deadline) : '—';
+
+            let statusClass = 'bg-gray-100 text-gray-500';
+            let statusText = 'Locked';
+            let leftBorder = 'border-l-gray-200';
+            let cardBg = 'bg-white';
+
+            if (isCompleted) {
+                statusClass = 'bg-green-50 text-green-700';
+                statusText = 'Completed';
+                leftBorder = 'border-l-green-400';
+                cardBg = 'bg-white';
+            } else if (isCurrent) {
+                statusClass = 'bg-brand-50 text-brand-700';
+                statusText = 'In Progress';
+                leftBorder = 'border-l-brand-500';
+                cardBg = 'bg-brand-50/20';
+            }
+
             cardsHTML += `
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm stage-card ${bgTint} border-l-4 ${cardBorder} p-5">
-                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                        <div class="flex items-center gap-3">
-                            <span class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isCompleted ? 'bg-green-500 text-white' : isCurrent ? 'bg-brand-500 text-white' : 'bg-gray-200 text-gray-500'}">${idx + 1}</span>
+                <div class="rounded-lg border border-gray-200 ${leftBorder} ${cardBg} p-4">
+                    <div class="flex items-center justify-between gap-3 mb-3">
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${isCompleted ? 'bg-green-500 text-white' : isCurrent ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-400'}">${idx + 1}</span>
                             <div>
-                                <h4 class="font-semibold text-gray-900">${WORKFLOW_STAGES[idx]}</h4>
-                                <span class="text-xs font-medium px-2 py-0.5 rounded-full ${statusBadge}">${statusText}</span>
+                                <h4 class="text-sm font-semibold text-gray-900">${WORKFLOW_STAGES[idx]}</h4>
+                                <span class="text-[10px] font-medium px-1.5 py-0.5 rounded ${statusClass}">${statusText}</span>
                             </div>
                         </div>
-                        <div class="flex gap-2 flex-shrink-0">
-                            <button onclick="openDesignerModal(${idx})" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 transition-colors ${isLocked ? 'opacity-60 cursor-not-allowed' : ''}" ${isLocked ? 'disabled' : ''}>
-                                👤 Assign Designer
-                            </button>
-                            ${isCompleted ? `
-                            <button onclick="unmarkStageComplete(${idx})" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-red-300 bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
-                                ↩ Unmark
-                            </button>
-                            ` : ''}
+                        <div class="flex items-center gap-1.5 flex-shrink-0">
                             ${canComplete ? `
-                            <button onclick="markStageComplete(${idx})" class="px-3 py-1.5 text-xs font-medium rounded-lg border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 transition-colors">
-                                ✓ Mark Complete
+                            <button onclick="markStageComplete(${idx})" class="px-2.5 py-1 text-xs font-medium bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+                                ✓ Complete
                             </button>
                             ` : ''}
-                            ${isCurrent && !isCompleted && !prevCompleted ? `
-                            <span class="px-3 py-1.5 text-xs font-medium rounded-lg border border-amber-300 bg-amber-50 text-amber-600">
-                                🔒 Complete previous stage first
-                            </span>
+                            ${isCompleted ? `
+                            <button onclick="unmarkStageComplete(${idx})" class="px-2.5 py-1 text-xs font-medium text-red-600 border border-red-200 rounded-md hover:bg-red-50 transition-colors">
+                                ↩
+                            </button>
                             ` : ''}
                             ${isLocked ? `
-                            <span class="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-gray-50 text-gray-400">
-                                🔒 Locked
-                            </span>
+                            <span class="px-2 py-1 text-xs text-gray-400">🔒</span>
                             ` : ''}
+                            ${isCurrent && !isCompleted && !prevCompleted ? `
+                            <span class="px-2 py-1 text-xs text-amber-600 bg-amber-50 rounded-md">🔒</span>
+                            ` : ''}
+                            <button onclick="openDesignerModal(${idx})" class="px-2.5 py-1 text-xs font-medium text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors ${isLocked ? 'opacity-40 cursor-not-allowed' : ''}" ${isLocked ? 'disabled' : ''}>
+                                👤
+                            </button>
                         </div>
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                         <div>
-                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Assigned Designers</p>
-                            <p class="font-medium text-gray-800">${assignedNames}</p>
-                        </div>
-                        <div>
-                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Stage Deadline</p>
-                            <p class="font-medium text-gray-800">${deadline}</p>
+                            <p class="text-gray-400 mb-0.5">Deadline</p>
+                            <p class="font-medium text-gray-700">${deadline}</p>
                         </div>
                         <div>
-                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Expected Completion</p>
-                            <p class="font-medium text-gray-800">${deadline}</p>
+                            <p class="text-gray-400 mb-0.5">Designer</p>
+                            <p class="font-medium text-gray-700">${assignedNames}</p>
                         </div>
-                        <div class="sm:col-span-2 lg:col-span-3">
-                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Manager Notes</p>
-                            <p class="text-gray-700">${project.manager_notes || 'No notes added.'}</p>
+                        <div>
+                            <p class="text-gray-400 mb-0.5">Update</p>
+                            <p class="text-gray-500 truncate">${designerUpdate}</p>
                         </div>
-                        <div class="readonly-field rounded-lg p-3 pt-5 text-sm">
-                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Latest Designer Update</p>
-                            <p class="text-gray-500 italic">${designerUpdate}</p>
-                        </div>
-                        <div class="readonly-field rounded-lg p-3 pt-5 text-sm">
-                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Delay Reason</p>
-                            <p class="text-gray-500 italic">${delayReason}</p>
-                        </div>
-                        <div class="readonly-field rounded-lg p-3 pt-5 text-sm">
-                            <p class="text-xs text-gray-400 uppercase tracking-wider mb-1">Completion Timestamp</p>
-                            <p class="text-gray-500 italic">${completedAt}</p>
+                        <div>
+                            <p class="text-gray-400 mb-0.5">Delay</p>
+                            <p class="text-gray-500 truncate">${delayReason}</p>
                         </div>
                     </div>
                 </div>
