@@ -29,6 +29,8 @@ function getStagesForPhaseType(phaseType) {
     return PRODUCTION_STAGES;
 }
 
+const WORKFLOW_STAGES = PRODUCTION_STAGES;
+
 function formatDate(dateStr) {
     if (!dateStr) return '—';
     const d = new Date(dateStr);
