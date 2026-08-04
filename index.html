@@ -699,17 +699,16 @@
         class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors resize-none"></textarea>
     </div>
 
-    <!-- Editable: Delay Reason -->
-    <div>
-        <label class="block text-sm font-semibold text-gray-700 mb-2">Delay Reason</label>
-        <textarea id="editProjectDelayReason" rows="3" placeholder="Reason for delay (if any)..."
-        class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors resize-none"></textarea>
-    </div>
-
     <!-- Read Only: Designer Update -->
     <div class="readonly-field rounded-lg p-4 pt-6">
         <label class="block text-sm font-semibold text-gray-500 mb-2">Latest Designer Update</label>
         <p class="text-sm text-gray-500 italic">"Completed initial CAD models for the main circuit board enclosure. Awaiting manager review before proceeding to detailed design." — Isha Saxena, 14 Jul 2026</p>
+    </div>
+
+    <!-- Read Only: Delay Reason -->
+    <div class="readonly-field rounded-lg p-4 pt-6">
+        <label class="block text-sm font-semibold text-gray-500 mb-2">Delay Reason</label>
+        <p class="text-sm text-gray-400 italic">No delays reported.</p>
     </div>
 
     <!-- Read Only: Completion Timestamp -->
@@ -1392,6 +1391,41 @@
             Save Assignment
         </button>
         <button onclick="closeDesignerModal()"
+        class="px-4 py-2.5 bg-white text-gray-600 rounded-lg font-medium text-sm border border-gray-300 hover:bg-gray-50 transition-colors">
+        Cancel
+    </button>
+</div>
+</div>
+</div>
+
+<!-- ============================================ -->
+<!-- DELAY REASON MODAL -->
+<!-- ============================================ -->
+<div id="delayReasonModal" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40" onclick="closeDelayReasonModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md z-10">
+        <div class="flex items-center justify-between mb-5">
+            <h3 class="text-lg font-semibold text-gray-900">Mark Stage Complete</h3>
+            <button onclick="closeDelayReasonModal()" class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <p class="text-sm text-gray-500 mb-4" id="delayReasonStageLabel">Stage: Product Design</p>
+
+        <div class="mb-4">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Delay Reason <span class="text-gray-400 font-normal">(optional)</span></label>
+            <textarea id="delayReasonInput" rows="3" placeholder="Enter reason for delay (if any)..."
+            class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors resize-none"></textarea>
+        </div>
+
+        <div class="flex gap-3 mt-5 pt-4 border-t border-gray-100">
+            <button onclick="confirmMarkComplete()"
+            class="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium text-sm hover:bg-green-700 transition-colors">
+            ✓ Mark Complete
+        </button>
+        <button onclick="closeDelayReasonModal()"
         class="px-4 py-2.5 bg-white text-gray-600 rounded-lg font-medium text-sm border border-gray-300 hover:bg-gray-50 transition-colors">
         Cancel
     </button>

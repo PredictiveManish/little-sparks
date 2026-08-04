@@ -1575,6 +1575,7 @@ async def update_project(
 async def complete_stage(
     project_id: int,
     stage_index: int,
+    delay_reason: Optional[str] = Query(None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1613,6 +1614,13 @@ async def complete_stage(
             raise HTTPException(
                 status_code=400, detail="Complete the previous stage first!"
             )
+
+    if delay_reason:
+        old_reason = phases[stage_index].delay_reason or ""
+        if old_reason and old_reason not in ("On time", ""):
+            phases[stage_index].delay_reason = f"{old_reason} (Revised: {delay_reason})"
+        else:
+            phases[stage_index].delay_reason = delay_reason
 
     now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
     phases[stage_index].completed_at = now

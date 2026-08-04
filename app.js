@@ -6,6 +6,7 @@ let selectedProjectId = 1;
 let slackMessagesPollInterval = null;
 let selectedSlackProjectId = null;
 let designerModalStageIndex = null;
+let pendingCompleteStageIndex = null;
 let tempDesignerSelections = [];
 let DESIGNERS = [];
 let CURRENT_USER = null;
@@ -860,12 +861,6 @@ async function populateEditProject() {
         if (descInput) descInput.value = project.description;
         const notesInput = document.getElementById('editProjectManagerNotes');
         if (notesInput) notesInput.value = project.manager_notes;
-        const delayReasonInput = document.getElementById('editProjectDelayReason');
-        if (delayReasonInput) {
-            const phases = project.phases || [];
-            const currentPhase = phases.find(p => p.stage_index === project.stage_index);
-            delayReasonInput.value = currentPhase ? (currentPhase.delay_reason || '') : '';
-        }
     } catch (err) {
         console.error('[APP] populateEditProject: Failed to load project:', err.message);
         showToast('Failed to load project: ' + err.message);
@@ -880,7 +875,6 @@ async function saveProjectEdit() {
         const dateInput = document.getElementById('editProjectDeadline');
         const descInput = document.getElementById('editProjectDescription');
         const notesInput = document.getElementById('editProjectManagerNotes');
-        const delayReasonInput = document.getElementById('editProjectDelayReason');
 
         await api.updateProject(selectedProjectId, {
             name: nameInput ? nameInput.value : null,
@@ -888,7 +882,6 @@ async function saveProjectEdit() {
             deadline: dateInput ? dateInput.value : null,
             description: descInput ? descInput.value : null,
             manager_notes: notesInput ? notesInput.value : null,
-            delay_reason: delayReasonInput ? delayReasonInput.value : null,
         });
 
         showToast('Project updated successfully!');
@@ -903,14 +896,31 @@ async function saveProjectEdit() {
 // STAGE COMPLETION
 // ============================================
 async function markStageComplete(stageIndex) {
-    console.log('[APP] markStageComplete: Marking stage', stageIndex, 'complete for project', selectedProjectId);
+    console.log('[APP] markStageComplete: Opening delay reason modal for stage', stageIndex, 'on project', selectedProjectId);
+    pendingCompleteStageIndex = stageIndex;
+    document.getElementById('delayReasonStageLabel').textContent = `Stage: ${WORKFLOW_STAGES[stageIndex]}`;
+    document.getElementById('delayReasonInput').value = '';
+    document.getElementById('delayReasonModal').classList.remove('hidden');
+}
+
+function closeDelayReasonModal() {
+    document.getElementById('delayReasonModal').classList.add('hidden');
+    pendingCompleteStageIndex = null;
+}
+
+async function confirmMarkComplete() {
+    if (pendingCompleteStageIndex === null) return;
+    const delayReason = document.getElementById('delayReasonInput').value.trim();
+    console.log('[APP] confirmMarkComplete: Marking stage', pendingCompleteStageIndex, 'complete for project', selectedProjectId, 'delay_reason:', delayReason || '(none)');
     try {
-        await api.completeStage(selectedProjectId, stageIndex);
+        await api.completeStage(selectedProjectId, pendingCompleteStageIndex, delayReason || undefined);
         populateProjectDetails();
-        showToast(`"${WORKFLOW_STAGES[stageIndex]}" marked as complete!`);
+        showToast(`"${WORKFLOW_STAGES[pendingCompleteStageIndex]}" marked as complete!`);
     } catch (err) {
-        console.error('[APP] markStageComplete: Failed to mark stage complete:', err.message);
+        console.error('[APP] confirmMarkComplete: Failed to mark stage complete:', err.message);
         showToast(err.message);
+    } finally {
+        closeDelayReasonModal();
     }
 }
 
