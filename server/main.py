@@ -5254,13 +5254,13 @@ async def get_project_report(
             completed_dt = None
             for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]:
                 try:
-                    completed_dt = datetime.datetime.strptime(ph.completed_at, fmt)
+                    completed_dt = datetime.strptime(ph.completed_at, fmt)
                     break
                 except ValueError:
                     pass
             if completed_dt:
                 try:
-                    deadline_dt = datetime.datetime.strptime(ph.deadline, "%Y-%m-%d")
+                    deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
                     diff = (completed_dt.date() - deadline_dt.date()).days
                     delay_days = max(0, diff)
                 except Exception:
