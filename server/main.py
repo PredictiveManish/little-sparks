@@ -4503,10 +4503,11 @@ class SlackChannelStatusBatchResponse(BaseModel):
     response_model=SlackChannelStatusBatchResponse,
 )
 async def get_slack_channel_status(
-    auto_correct: bool = False,
+    auto_correct: str = Query("false", description="Pass 'true' to auto-correct invalid channels"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    auto_correct_bool = auto_correct.lower() in ("true", "1", "yes")
     """Batch endpoint to check real Slack channel status for all projects.
 
     If auto_correct=True, clears slack_channel_id/name for projects where
