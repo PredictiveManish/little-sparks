@@ -5251,14 +5251,20 @@ async def get_project_report(
     for ph in phases:
         delay_days = 0
         if ph.completed_at:
-            try:
-                completed_dt = datetime.datetime.strptime(ph.completed_at, "%Y-%m-%dT%H:%M:%S")
-                deadline_dt = datetime.datetime.strptime(ph.deadline, "%Y-%m-%d")
-                diff = (completed_dt.date() - deadline_dt.date()).days
-                if diff > 0:
-                    delay_days = diff
-            except (ValueError, TypeError):
-                pass
+            completed_dt = None
+            for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]:
+                try:
+                    completed_dt = datetime.datetime.strptime(ph.completed_at, fmt)
+                    break
+                except ValueError:
+                    pass
+            if completed_dt:
+                try:
+                    deadline_dt = datetime.datetime.strptime(ph.deadline, "%Y-%m-%d")
+                    diff = (completed_dt.date() - deadline_dt.date()).days
+                    delay_days = max(0, diff)
+                except Exception:
+                    pass
         phase_items.append(PhaseReportItem(
             stage_index=ph.stage_index,
             stage_name=_get_current_stage_name(ph.stage_index),
