@@ -1762,6 +1762,17 @@ function applyRoleBasedNavVisibility() {
             item.classList.remove('hidden');
         }
     });
+    
+    // Also handle report sub-tab buttons with data-roles
+    const reportTabs = document.querySelectorAll('[data-roles]');
+    reportTabs.forEach(item => {
+        const allowedRoles = item.getAttribute('data-roles').split(',').map(r => r.trim());
+        if (!allowedRoles.includes(role.toUpperCase())) {
+            item.classList.add('hidden');
+        } else {
+            item.classList.remove('hidden');
+        }
+    });
 }
 
 function setExportSubTab(tab) {
@@ -2158,6 +2169,7 @@ function setReportTab(tab) {
         weekly: 'reportSectionWeekly',
         monthly: 'reportSectionMonthly',
         designer: 'reportSectionDesigner',
+        export: 'reportSectionExport',
     };
     
     Object.values(sections).forEach(id => {
@@ -2176,6 +2188,7 @@ function setReportTab(tab) {
         weekly: 'reportTabWeekly',
         monthly: 'reportTabMonthly',
         designer: 'reportTabDesigner',
+        export: 'reportTabExport',
     };
     
     Object.entries(tabs).forEach(([key, id]) => {
