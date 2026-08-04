@@ -109,6 +109,7 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     deadline: Optional[str] = None
     manager_notes: Optional[str] = None
+    delay_reason: Optional[str] = None
     slack_channel_id: Optional[str] = None
     slack_channel_name: Optional[str] = None
     manager_ids: Optional[List[int]] = None

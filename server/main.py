@@ -1471,6 +1471,23 @@ async def update_project(
     if data.manager_notes is not None and data.manager_notes != project.manager_notes:
         changes.append(f"Manager notes updated")
         project.manager_notes = data.manager_notes
+    if data.delay_reason is not None:
+        # Update delay_reason on the current active phase
+        current_phase = (
+            db.query(Phase)
+            .filter(Phase.project_id == project_id, Phase.stage_index == project.stage_index)
+            .first()
+        )
+        if current_phase:
+            old_reason = current_phase.delay_reason or ""
+            if old_reason and old_reason not in ("On time", ""):
+                current_phase.delay_reason = f"{old_reason} (Revised: {data.delay_reason})"
+            else:
+                current_phase.delay_reason = data.delay_reason
+            changes.append(f"Delay reason updated")
+        else:
+            # No phase found, just log it
+            pass
     if (
         data.slack_channel_id is not None
         and data.slack_channel_id != project.slack_channel_id

@@ -860,6 +860,12 @@ async function populateEditProject() {
         if (descInput) descInput.value = project.description;
         const notesInput = document.getElementById('editProjectManagerNotes');
         if (notesInput) notesInput.value = project.manager_notes;
+        const delayReasonInput = document.getElementById('editProjectDelayReason');
+        if (delayReasonInput) {
+            const phases = project.phases || [];
+            const currentPhase = phases.find(p => p.stage_index === project.stage_index);
+            delayReasonInput.value = currentPhase ? (currentPhase.delay_reason || '') : '';
+        }
     } catch (err) {
         console.error('[APP] populateEditProject: Failed to load project:', err.message);
         showToast('Failed to load project: ' + err.message);
@@ -874,6 +880,7 @@ async function saveProjectEdit() {
         const dateInput = document.getElementById('editProjectDeadline');
         const descInput = document.getElementById('editProjectDescription');
         const notesInput = document.getElementById('editProjectManagerNotes');
+        const delayReasonInput = document.getElementById('editProjectDelayReason');
 
         await api.updateProject(selectedProjectId, {
             name: nameInput ? nameInput.value : null,
@@ -881,6 +888,7 @@ async function saveProjectEdit() {
             deadline: dateInput ? dateInput.value : null,
             description: descInput ? descInput.value : null,
             manager_notes: notesInput ? notesInput.value : null,
+            delay_reason: delayReasonInput ? delayReasonInput.value : null,
         });
 
         showToast('Project updated successfully!');
