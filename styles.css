@@ -112,3 +112,30 @@ body {
         transform: translateX(0);
     }
 }
+
+/* Phase type card selection */
+input[type="radio"][name="phaseType"]:checked + .phase-type-card {
+    border-color: #F47920 !important;
+    background-color: #FFF7F0 !important;
+    box-shadow: 0 0 0 1px #F47920;
+}
+
+input[type="radio"][name="phaseType"]:checked + .phase-type-card .w-10 {
+    background-color: #F47920 !important;
+}
+
+input[type="radio"][name="phaseType"]:checked + .phase-type-card .text-gray-700 {
+    color: #C2410C !important;
+}
+
+input[type="radio"][name="phaseType"]:checked + .phase-type-card .text-gray-400 {
+    color: #F47920 !important;
+}
+
+input[type="radio"][name="phaseType"]:checked + .phase-type-card .text-brand-700 {
+    color: #C2410C !important;
+}
+
+input[type="radio"][name="phaseType"]:checked + .phase-type-card .text-brand-500 {
+    color: #F47920 !important;
+}

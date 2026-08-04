@@ -626,10 +626,12 @@ async function populateProjectDetails() {
         document.getElementById('detailDeadline').textContent = formatDate(project.deadline);
         document.getElementById('detailStatus').textContent = getStatusText(project.status);
 
+        const stages = getStagesForPhaseType(project.phase_type);
+
         // Workflow tracker
         const tracker = document.getElementById('workflowTracker');
         let trackerHTML = '';
-        WORKFLOW_STAGES.forEach((stage, idx) => {
+        stages.forEach((stage, idx) => {
             const isCompleted = idx < project.stage_index;
             const isCurrent = idx === project.stage_index;
             const isUpcoming = idx > project.stage_index;
@@ -657,7 +659,7 @@ async function populateProjectDetails() {
                         ${icon}
                     </div>
                     <span class="text-[10px] md:text-xs mt-1.5 text-center ${labelClass} leading-tight max-w-[60px]">${stage}</span>
-                    ${idx < WORKFLOW_STAGES.length - 1 ? `<div class="absolute top-4 left-[calc(50%+20px)] w-[calc(100%-40px)] h-0.5 ${connectorClass}" style="width:calc(100vw / 9); max-width:60px; left:50%;"></div>` : ''}
+                    ${idx < stages.length - 1 ? `<div class="absolute top-4 left-[calc(50%+20px)] w-[calc(100%-40px)] h-0.5 ${connectorClass}" style="width:calc(100vw / ${stages.length}); max-width:60px; left:50%;"></div>` : ''}
                 </div>
             `;
         });
@@ -705,7 +707,7 @@ async function populateProjectDetails() {
                         <div class="flex items-center gap-2.5">
                             <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${isCompleted ? 'bg-green-500 text-white' : isCurrent ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-400'}">${idx + 1}</span>
                             <div>
-                                <h4 class="text-sm font-semibold text-gray-900">${WORKFLOW_STAGES[idx]}</h4>
+                                <h4 class="text-sm font-semibold text-gray-900">${stages[idx]}</h4>
                                 <span class="text-[10px] font-medium px-1.5 py-0.5 rounded ${statusClass}">${statusText}</span>
                             </div>
                         </div>
@@ -1000,6 +1002,11 @@ async function handleAddDesigner(event) {
 // ============================================
 // CREATE PROJECT FORM
 // ============================================
+function onPhaseTypeChange() {
+    const ideationRadio = document.querySelector('input[name="phaseType"][value="IDEATION"]');
+    renderPhaseDeadlines();
+}
+
 function renderPhaseDeadlines() {
     const container = document.getElementById('phaseDeadlinesContainer');
     if (!container) return;
@@ -1011,8 +1018,11 @@ function renderPhaseDeadlines() {
     existingInputs.forEach(input => {
         existingValues[input.dataset.phaseIndex] = input.value;
     });
+    const ideationRadio = document.querySelector('input[name="phaseType"][value="IDEATION"]');
+    const phaseType = ideationRadio && ideationRadio.checked ? 'IDEATION' : 'PRODUCTION';
+    const stages = getStagesForPhaseType(phaseType);
     let html = '';
-    WORKFLOW_STAGES.forEach((stage, index) => {
+    stages.forEach((stage, index) => {
         let minDate = '';
         if (index === 0) {
             minDate = startDateInput ? `min="${startDateInput.value}"` : '';
@@ -1095,6 +1105,9 @@ async function handleCreateProject(event) {
         }
     }
 
+    const ideationRadio = document.querySelector('input[name="phaseType"][value="IDEATION"]');
+    const phaseType = ideationRadio && ideationRadio.checked ? 'IDEATION' : 'PRODUCTION';
+
     const phases = phaseDeadlines.map((phaseDeadline, index) => ({
         stage_index: index,
         deadline: phaseDeadline
@@ -1109,7 +1122,8 @@ async function handleCreateProject(event) {
             deadline: deadline,
             manager_notes: '',
             phases: phases,
-            manager_ids: tempManagerSelections
+            manager_ids: tempManagerSelections,
+            phase_type: phaseType
         });
         const successMsg = document.getElementById('createSuccessMessage');
         form.classList.add('hidden');
@@ -1126,10 +1140,25 @@ function resetCreateProjectForm() {
     if (form) form.classList.remove('hidden');
     if (successMsg) successMsg.classList.add('hidden');
     if (form) form.reset();
+    const ideationRadio = document.querySelector('input[name="phaseType"][value="IDEATION"]');
+    if (ideationRadio) ideationRadio.checked = true;
+    updateCreateProjectDescription();
     tempManagerSelections = [];
     populateCreateDesignerSelect();
     populateCreateManagerSelect();
     renderPhaseDeadlines();
+}
+
+function updateCreateProjectDescription() {
+    const ideationRadio = document.querySelector('input[name="phaseType"][value="IDEATION"]');
+    const descEl = document.getElementById('createProjectDescription');
+    if (descEl) {
+        if (ideationRadio && ideationRadio.checked) {
+            descEl.textContent = 'Fill in the details below. An 11-phase Ideation workflow will be automatically created.';
+        } else {
+            descEl.textContent = 'Fill in the details below. A 9-phase Production workflow will be automatically created.';
+        }
+    }
 }
 
 async function populateCreateDesignerSelect() {

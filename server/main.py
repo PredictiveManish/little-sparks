@@ -1252,6 +1252,7 @@ def get_projects(user: User = Depends(get_current_user), db: Session = Depends(g
                 manager_notes=p.manager_notes,
                 slack_channel_id=p.slack_channel_id or "",
                 slack_channel_name=p.slack_channel_name or "",
+                phase_type=p.phase_type,
                 created_by_user_id=p.created_by_user_id,
                 phases=[PhaseResponse.model_validate(ph) for ph in phases],
                 managers=[ProjectManagerResponse.model_validate(u) for u in managers],
@@ -1312,6 +1313,7 @@ def get_project(
         manager_notes=project.manager_notes,
         slack_channel_id=project.slack_channel_id or "",
         slack_channel_name=project.slack_channel_name or "",
+        phase_type=project.phase_type,
         phases=[PhaseResponse.model_validate(ph) for ph in phases],
         managers=[ProjectManagerResponse.model_validate(u) for u in managers],
     )
@@ -1361,6 +1363,7 @@ async def create_project(
         start_date=data.start_date,
         deadline=data.deadline,
         manager_notes=data.manager_notes,
+        phase_type=data.phase_type,
     )
     db.add(project)
     db.flush()
@@ -1425,6 +1428,7 @@ async def create_project(
         manager_notes=project.manager_notes,
         slack_channel_id=project.slack_channel_id or "",
         slack_channel_name=project.slack_channel_name or "",
+        phase_type=project.phase_type,
         phases=[PhaseResponse.model_validate(ph) for ph in phases],
         managers=[ProjectManagerResponse.model_validate(u) for u in managers],
     )
@@ -1566,6 +1570,7 @@ async def update_project(
         slack_channel_id=project.slack_channel_id or "",
         slack_channel_name=project.slack_channel_name or "",
         created_by_user_id=project.created_by_user_id,
+        phase_type=project.phase_type,
         phases=[PhaseResponse.model_validate(ph) for ph in phases],
         managers=[ProjectManagerResponse.model_validate(u) for u in managers],
     )

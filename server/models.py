@@ -66,6 +66,7 @@ class Project(Base):
     manager_notes = Column(Text, default="")
     slack_channel_id = Column(String, default="")
     slack_channel_name = Column(String, default="")
+    phase_type = Column(String, default="PRODUCTION")
     last_daily_reminder_date = Column(String, default="", nullable=True)
     last_reminder_sent_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

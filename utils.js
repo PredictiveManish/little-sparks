@@ -1,4 +1,18 @@
-const WORKFLOW_STAGES = [
+const IDEATION_STAGES = [
+    'Sourcing Starts',
+    'Mockup 1',
+    'Internal Discussion (Deeksha + Mentor + Rajat)',
+    'User Testing -1 Concluded',
+    'Mockup 2 - Internal Discussion',
+    'Sourcing Locked with Production',
+    'Costing Sheet Check',
+    'User Testing -2',
+    'Internal Discussion',
+    'Sales Alignment for Launch Plan',
+    'Conclusion'
+];
+
+const PRODUCTION_STAGES = [
     'Lock Concept',
     'Lock UX features',
     'Lock MRP',
@@ -9,6 +23,11 @@ const WORKFLOW_STAGES = [
     'Lock CCP',
     'Final Handover'
 ];
+
+function getStagesForPhaseType(phaseType) {
+    if (phaseType === 'IDEATION') return IDEATION_STAGES;
+    return PRODUCTION_STAGES;
+}
 
 function formatDate(dateStr) {
     if (!dateStr) return '—';

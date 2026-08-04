@@ -281,13 +281,6 @@
             </svg>
             Designers
         </a>
-        <a href="#" onclick="event.preventDefault(); navigateTo('data-export')" data-nav="data-export" data-roles="ADMIN"
-            class="nav-item nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150 hidden">
-            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 4v16h16M8 16v-4m4 4V8m4 8v-6"/>
-            </svg>
-            Data & Reports
-        </a>
         <a href="#" onclick="event.preventDefault(); navigateTo('reports')" data-nav="reports" data-roles="ADMIN,MANAGER"
             class="nav-link flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-600 transition-colors duration-150">
             <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -499,7 +492,7 @@
             Back to Projects
         </button>
         <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Create New Project</h1>
-        <p class="text-sm text-gray-500 mt-1">Fill in the details below. A predefined 7-stage workflow will be automatically created.</p>
+        <p class="text-sm text-gray-500 mt-1" id="createProjectDescription">Fill in the details below. An 11-phase Ideation workflow will be automatically created.</p>
     </div>
 
     <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 md:p-8 max-w-2xl">
@@ -548,6 +541,33 @@
                 <label class="block text-sm font-semibold text-gray-700 mb-2">Description</label>
                 <textarea rows="4" placeholder="Brief project description..."
                 class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors resize-none"></textarea>
+            </div>
+
+            <!-- Phase Type Selection -->
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Phase Type <span class="text-red-400">*</span></label>
+                <div class="grid grid-cols-2 gap-3">
+                    <label class="phase-type-option cursor-pointer">
+                        <input type="radio" name="phaseType" value="IDEATION" checked class="hidden" onchange="onPhaseTypeChange()">
+                        <div class="phase-type-card border-2 border-brand-500 bg-brand-50 rounded-xl p-4 text-center transition-all">
+                            <div class="w-10 h-10 rounded-lg bg-brand-500 text-white flex items-center justify-center mx-auto mb-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                            </div>
+                            <p class="text-sm font-semibold text-brand-700">Ideation</p>
+                            <p class="text-xs text-brand-500 mt-0.5">11 Phases</p>
+                        </div>
+                    </label>
+                    <label class="phase-type-option cursor-pointer">
+                        <input type="radio" name="phaseType" value="PRODUCTION" class="hidden" onchange="onPhaseTypeChange()">
+                        <div class="phase-type-card border-2 border-gray-200 bg-white rounded-xl p-4 text-center transition-all hover:border-gray-300">
+                            <div class="w-10 h-10 rounded-lg bg-gray-500 text-white flex items-center justify-center mx-auto mb-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.442l4.896 4.896a2 2 0 002.828 0l4.896-4.896a2 2 0 00.586-1.442V5l-1-1H4z"/></svg>
+                            </div>
+                            <p class="text-sm font-semibold text-gray-700">Production</p>
+                            <p class="text-xs text-gray-400 mt-0.5">9 Phases</p>
+                        </div>
+                    </label>
+                </div>
             </div>
 
             <!-- Phase-wise Deadlines -->
@@ -797,181 +817,6 @@
 <!-- ADMIN DATA EXPORT PAGE -->
 <!-- ============================================ -->
 <section id="page-data-export" class="page-section hidden">
-    <div class="mb-6">
-        <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Data & Reports</h1>
-        <p class="text-sm text-gray-500 mt-1">Export data and view stage evaluation reports.</p>
-    </div>
-
-    <!-- Sub-tabs -->
-    <div class="flex items-center gap-4 mb-6 border-b border-gray-200">
-        <button onclick="setExportSubTab('export')" id="exportSubTabExport" class="px-4 py-2 text-sm font-medium border-b-2 border-brand-500 text-brand-600">Export Data</button>
-        <button onclick="setExportSubTab('reports')" id="exportSubTabReports" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">Stage Reports</button>
-    </div>
-
-    <!-- Export Data Section -->
-    <div id="exportDataSection">
-    <div class="mb-6">
-        <h2 class="text-lg font-semibold text-gray-900">Export Data</h2>
-        <p class="text-sm text-gray-500 mt-1">Export designers, managers, and project data. Downloads the entire dataset by default — use the custom range below to narrow it down.</p>
-    </div>
-
-    <!-- Custom range toggle -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
-        <label class="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
-            <input type="checkbox" id="exportUseRange" onchange="toggleExportRangeInputs()" class="rounded border-gray-300">
-            Use a custom date/time range instead of the whole dataset
-        </label>
-        <div id="exportRangeInputs" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-            <div>
-                <label class="block text-xs text-gray-500 uppercase tracking-wider mb-1">From</label>
-                <input type="datetime-local" id="exportFrom" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-            </div>
-            <div>
-                <label class="block text-xs text-gray-500 uppercase tracking-wider mb-1">To</label>
-                <input type="datetime-local" id="exportTo" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-            </div>
-        </div>
-        <p class="text-xs text-gray-400 mt-3">Range applies to each record's created date. Leave unchecked to always export everything.</p>
-    </div>
-
-    <!-- Export cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
-            <h3 class="font-semibold text-gray-900 mb-1">Designers</h3>
-            <p class="text-xs text-gray-500 mb-4 flex-1">All designer accounts.</p>
-            <div class="flex gap-2">
-                <button onclick="runExport('designers','csv')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">CSV</button>
-                <button onclick="runExport('designers','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100">Excel</button>
-            </div>
-        </div>
-        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
-            <h3 class="font-semibold text-gray-900 mb-1">Managers</h3>
-            <p class="text-xs text-gray-500 mb-4 flex-1">Admin & manager accounts.</p>
-            <div class="flex gap-2">
-                <button onclick="runExport('managers','csv')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">CSV</button>
-                <button onclick="runExport('managers','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100">Excel</button>
-            </div>
-        </div>
-        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
-            <h3 class="font-semibold text-gray-900 mb-1">Projects</h3>
-            <p class="text-xs text-gray-500 mb-4 flex-1">Projects + every stage/phase.</p>
-            <div class="flex gap-2">
-                <button onclick="runExport('projects','csv')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">CSV</button>
-                <button onclick="runExport('projects','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100">Excel</button>
-            </div>
-        </div>
-        <div class="bg-white rounded-xl border border-brand-300 shadow-sm p-5 flex flex-col bg-brand-50/30">
-            <h3 class="font-semibold text-gray-900 mb-1">Everything</h3>
-            <p class="text-xs text-gray-500 mb-4 flex-1">Designers, managers, projects & phases together.</p>
-            <div class="flex gap-2">
-                <button onclick="runExport('all','csv')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">CSV (.zip)</button>
-                <button onclick="runExport('all','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-400 bg-brand-500 text-white hover:bg-brand-600">Excel</button>
-            </div>
-        </div>
-    </div>
-    </div>
-
-    <!-- Stage Reports Section -->
-    <div id="stageReportsSection" class="hidden">
-    <div class="mb-6">
-        <h2 class="text-lg font-semibold text-gray-900">Stage Evaluation Reports</h2>
-        <p class="text-sm text-gray-500 mt-1">Track designer evaluations across all project stages.</p>
-    </div>
-
-    <!-- Filters -->
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">Project</label>
-                <select id="reportProjectFilter" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
-                    <option value="">All Projects</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">Designer</label>
-                <select id="reportDesignerFilter" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
-                    <option value="">All Designers</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">Stage</label>
-                <select id="reportStageFilter" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
-                    <option value="">All Stages</option>
-                    <option value="0">Stage 1 — Lock Concept</option>
-                    <option value="1">Stage 2 — Lock UX features</option>
-                    <option value="2">Stage 3 — Lock MRP</option>
-                    <option value="3">Stage 4 — Lock graphics theme</option>
-                    <option value="4">Stage 5 — Lock Production feasibility</option>
-                    <option value="5">Stage 6 — Lock Procurement</option>
-                    <option value="6">Stage 7 — Lock IM</option>
-                    <option value="7">Stage 8 — Lock CCP</option>
-                    <option value="8">Stage 9 — Final Handover</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">From Date</label>
-                <input type="date" id="reportDateFrom" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">To Date</label>
-                <input type="date" id="reportDateTo" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
-            </div>
-        </div>
-        <div class="flex items-center gap-3 mt-4">
-            <button onclick="loadReports()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors">Apply Filters</button>
-            <button onclick="resetReportFilters()" class="px-4 py-2 bg-white text-gray-600 rounded-lg text-sm font-medium border border-gray-300 hover:bg-gray-50 transition-colors">Reset</button>
-            <div class="ml-auto flex items-center gap-2">
-                <button onclick="openSubmitReportModalFromTable()" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors">+ Submit Report</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- View Toggle -->
-    <div class="flex items-center gap-4 mb-4">
-        <div class="flex items-center bg-gray-100 rounded-lg p-1">
-            <button onclick="setReportView('table')" id="reportViewTable" class="px-4 py-1.5 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm transition-colors">Table View</button>
-            <button onclick="setReportView('summary')" id="reportViewSummary" class="px-4 py-1.5 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Summary View</button>
-        </div>
-        <span class="text-xs text-gray-400" id="reportCountLabel">0 reports</span>
-    </div>
-
-    <!-- Table View -->
-    <div id="reportTableView" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full">
-                <thead>
-                    <tr class="bg-gray-50 border-b border-gray-200">
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Project</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Stage</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Submitted By</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
-                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Costing</th>
-                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Willingness</th>
-                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Engagement</th>
-                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Durability</th>
-                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Age Appr.</th>
-                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Ease</th>
-                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Aesthetics</th>
-                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Store</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Notes</th>
-                    </tr>
-                </thead>
-                <tbody id="reportsTableBody">
-                    <tr><td colspan="13" class="px-4 py-12 text-center text-gray-400">No reports to display. Use filters or submit a new report.</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- Summary View -->
-    <div id="reportSummaryView" class="hidden space-y-6">
-        <div id="reportSummaryCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">No summary data available.</div>
-        </div>
-    </div>
-    </div>
-</section>
-
 <!-- ============================================ -->
 <!-- REPORTS PAGE -->
 <!-- ============================================ -->
@@ -987,6 +832,7 @@
         <button onclick="setReportTab('weekly')" id="reportTabWeekly" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">Weekly Report</button>
         <button onclick="setReportTab('monthly')" id="reportTabMonthly" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">Monthly Report</button>
         <button onclick="setReportTab('designer')" id="reportTabDesigner" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap">Designer Performance</button>
+        <button onclick="setReportTab('export')" id="reportTabExport" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 whitespace-nowrap hidden" data-roles="ADMIN">Export Data</button>
     </div>
 
     <!-- Project Report Section -->
@@ -1113,6 +959,69 @@
         <button onclick="downloadReportExcel()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors">
             📊 Download Excel
         </button>
+    </div>
+
+    <!-- Export Data Section (Admin Only) -->
+    <div id="reportSectionExport" class="hidden">
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold text-gray-900">Export Data</h2>
+            <p class="text-sm text-gray-500 mt-1">Export designers, managers, and project data. Downloads the entire dataset by default — use the custom range below to narrow it down.</p>
+        </div>
+
+        <!-- Custom range toggle -->
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
+            <label class="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                <input type="checkbox" id="exportUseRange" onchange="toggleExportRangeInputs()" class="rounded border-gray-300">
+                Use a custom date/time range instead of the whole dataset
+            </label>
+            <div id="exportRangeInputs" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                <div>
+                    <label class="block text-xs text-gray-500 uppercase tracking-wider mb-1">From</label>
+                    <input type="datetime-local" id="exportFrom" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 uppercase tracking-wider mb-1">To</label>
+                    <input type="datetime-local" id="exportTo" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                </div>
+            </div>
+            <p class="text-xs text-gray-400 mt-3">Range applies to each record's created date. Leave unchecked to always export everything.</p>
+        </div>
+
+        <!-- Export cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
+                <h3 class="font-semibold text-gray-900 mb-1">Designers</h3>
+                <p class="text-xs text-gray-500 mb-4 flex-1">All designer accounts.</p>
+                <div class="flex gap-2">
+                    <button onclick="runExport('designers','csv')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">CSV</button>
+                    <button onclick="runExport('designers','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100">Excel</button>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
+                <h3 class="font-semibold text-gray-900 mb-1">Managers</h3>
+                <p class="text-xs text-gray-500 mb-4 flex-1">Admin & manager accounts.</p>
+                <div class="flex gap-2">
+                    <button onclick="runExport('managers','csv')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">CSV</button>
+                    <button onclick="runExport('managers','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100">Excel</button>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
+                <h3 class="font-semibold text-gray-900 mb-1">Projects</h3>
+                <p class="text-xs text-gray-500 mb-4 flex-1">Projects + every stage/phase.</p>
+                <div class="flex gap-2">
+                    <button onclick="runExport('projects','csv')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">CSV</button>
+                    <button onclick="runExport('projects','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100">Excel</button>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl border border-brand-300 shadow-sm p-5 flex flex-col bg-brand-50/30">
+                <h3 class="font-semibold text-gray-900 mb-1">Everything</h3>
+                <p class="text-xs text-gray-500 mb-4 flex-1">Designers, managers, projects & phases together.</p>
+                <div class="flex gap-2">
+                    <button onclick="runExport('all','csv')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">CSV (.zip)</button>
+                    <button onclick="runExport('all','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-400 bg-brand-500 text-white hover:bg-brand-600">Excel</button>
+                </div>
+            </div>
+        </div>
     </div>
 </section>
 
