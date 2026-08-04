@@ -2180,7 +2180,7 @@ async function loadProjectReport() {
     try {
         const report = await api.getProjectReport(parseInt(projectId));
         currentReportData = report;
-        showReportDownloadActions(`/api/reports/project/${report.project_id}/download`);
+        showReportDownloadActions(`/reports/project/${report.project_id}/download`);
         
         let html = `
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
@@ -2338,7 +2338,7 @@ async function loadWeeklyReport() {
     try {
         const report = await api.getWeeklyReport(parseInt(projectId), weekStart, weekEnd);
         currentReportData = report;
-        showReportDownloadActions(`/api/reports/weekly/${report.reports.length > 0 ? report.reports[0].project_id : projectId}/download?week_start=${weekStart}&week_end=${weekEnd}`);
+        showReportDownloadActions(`/reports/weekly/${report.reports.length > 0 ? report.reports[0].project_id : projectId}/download?week_start=${weekStart}&week_end=${weekEnd}`);
         
         let html = `
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
@@ -2413,7 +2413,7 @@ async function loadMonthlyReport() {
     try {
         const report = await api.getMonthlyReport(parseInt(projectId), parseInt(month), parseInt(year));
         currentReportData = report;
-        showReportDownloadActions(`/api/reports/monthly/${report.reports.length > 0 ? report.reports[0].project_id : projectId}/download?month=${month}&year=${year}`);
+        showReportDownloadActions(`/reports/monthly/${report.reports.length > 0 ? report.reports[0].project_id : projectId}/download?month=${month}&year=${year}`);
         
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         
@@ -2575,7 +2575,7 @@ function downloadReportCSV() {
         showToast('No report loaded to download');
         return;
     }
-    api.downloadReportCSV(currentReportEndpoint + '&format=csv')
+    api.downloadReportCSV(currentReportEndpoint + (currentReportEndpoint.includes('?') ? '&' : '?') + 'format=csv')
         .then(() => showToast('CSV downloaded successfully'))
         .catch(err => showToast('Download failed: ' + err.message));
 }
@@ -2585,7 +2585,7 @@ function downloadReportExcel() {
         showToast('No report loaded to download');
         return;
     }
-    api.downloadReportExcel(currentReportEndpoint + '&format=xlsx')
+    api.downloadReportExcel(currentReportEndpoint + (currentReportEndpoint.includes('?') ? '&' : '?') + 'format=xlsx')
         .then(() => showToast('Excel downloaded successfully'))
         .catch(err => showToast('Download failed: ' + err.message));
 }
