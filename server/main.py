@@ -5636,7 +5636,7 @@ def _weekly_report_to_csv(report: WeeklyReportResponse) -> str:
     writer.writerow([report.week_start, report.week_end])
     writer.writerow([])
     writer.writerow(["Project", "Designer", "Stage", "Stage Index", "Status", "Progress",
-                      "Designer Update", "Delay Reason", "Completed At"])
+                      "Delay Reason", "Completed At"])
     for item in report.reports:
         writer.writerow([
             item.project_name, item.assigned_designer, item.stage_name,
@@ -5654,7 +5654,7 @@ def _monthly_report_to_csv(report: MonthlyReportResponse) -> str:
     writer.writerow([report.month, report.year])
     writer.writerow([])
     writer.writerow(["Project", "Designer", "Stage", "Stage Index", "Status", "Progress",
-                      "Designer Updates", "Delays"])
+                      "Delays"])
     for item in report.reports:
         updates = "; ".join(item.designer_updates) if item.designer_updates else ""
         delays = "; ".join(item.delays) if item.delays else ""

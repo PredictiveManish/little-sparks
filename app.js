@@ -2214,7 +2214,6 @@ async function loadProjectReport() {
                                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Deadline</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Completed</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Designer Update</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Delay Reason</th>
                             </tr>
                         </thead>
@@ -2234,7 +2233,7 @@ async function loadProjectReport() {
         visiblePhases.forEach(p => {
             const isDelayed = p.delay_days > 0;
             const statusBadge = isDelayed
-                ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed</span>`
+                ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed (${p.delay_days}d)</span>`
                 : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">On Time</span>`;
             const completedCell = p.completed_at
                 ? '✅ ' + formatDateTime(p.completed_at)
@@ -2247,7 +2246,6 @@ async function loadProjectReport() {
                     <td class="px-4 py-3 text-gray-600">${formatDate(p.deadline)}</td>
                     <td class="px-4 py-3">${completedCell}</td>
                     <td class="px-4 py-3">${statusBadge}</td>
-                    <td class="px-4 py-3 text-gray-500 max-w-xs truncate">${p.designer_update || '—'}</td>
                     <td class="px-4 py-3 text-gray-500 max-w-xs truncate">${p.delay_reason || '—'}</td>
                 </tr>
             `;
@@ -2378,10 +2376,6 @@ async function loadWeeklyReport() {
                                 <p class="font-medium">${item.progress}%</p>
                             </div>
                             <div>
-                                <p class="text-xs text-gray-500">Update</p>
-                                <p class="text-gray-600 truncate">${item.designer_update || '—'}</p>
-                            </div>
-                            <div>
                                 <p class="text-xs text-gray-500">Delay</p>
                                 <p class="text-gray-600 truncate">${item.delay_reason || '—'}</p>
                             </div>
@@ -2439,7 +2433,6 @@ async function loadMonthlyReport() {
                     : delayDays > 0
                         ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed (${delayDays}d)</span>`
                         : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-700">On Track</span>`;
-                const updates = item.designer_updates && item.designer_updates.length > 0 ? item.designer_updates.join('<br>') : '<span class="text-gray-400">—</span>';
                 const delays = item.delays && item.delays.length > 0 ? item.delays.join('<br>') : '<span class="text-gray-400">—</span>';
                 html += `
                     <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
@@ -2447,7 +2440,7 @@ async function loadMonthlyReport() {
                             <h4 class="font-semibold text-gray-900">${item.stage_name}</h4>
                             ${statusBadge}
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                             <div>
                                 <p class="text-xs text-gray-500">Designer</p>
                                 <p class="font-medium">${item.assigned_designer}</p>
@@ -2455,10 +2448,6 @@ async function loadMonthlyReport() {
                             <div>
                                 <p class="text-xs text-gray-500">Progress</p>
                                 <p class="font-medium">${item.progress}%</p>
-                            </div>
-                            <div>
-                                <p class="text-xs text-gray-500">Updates</p>
-                                <p class="text-gray-600">${updates}</p>
                             </div>
                         </div>
                         <div class="mt-2 text-sm">
