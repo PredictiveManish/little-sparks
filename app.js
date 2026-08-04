@@ -2501,51 +2501,51 @@ async function loadDesignerPerformance() {
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                 <div class="grid grid-cols-3 gap-4 mb-6">
                     <div class="text-center p-4 bg-brand-50 rounded-lg">
-                        <p class="text-2xl font-bold text-brand-600">${report.total_updates}</p>
-                        <p class="text-xs text-gray-500 mt-1">Total Updates</p>
+                        <p class="text-2xl font-bold text-brand-600">${report.total_stages_completed}</p>
+                        <p class="text-xs text-gray-500 mt-1">Stages Completed</p>
+                    </div>
+                    <div class="text-center p-4 bg-green-50 rounded-lg">
+                        <p class="text-2xl font-bold text-green-600">${report.total_on_time || 0}</p>
+                        <p class="text-xs text-gray-500 mt-1">On Time</p>
                     </div>
                     <div class="text-center p-4 bg-red-50 rounded-lg">
                         <p class="text-2xl font-bold text-red-600">${report.total_delays}</p>
-                        <p class="text-xs text-gray-500 mt-1">Total Delays</p>
-                    </div>
-                    <div class="text-center p-4 bg-green-50 rounded-lg">
-                        <p class="text-2xl font-bold text-green-600">${report.total_stages_completed}</p>
-                        <p class="text-xs text-gray-500 mt-1">Stages Completed</p>
+                        <p class="text-xs text-gray-500 mt-1">Delayed</p>
                     </div>
                 </div>
                 
-                <h3 class="text-sm font-semibold text-gray-700 mb-3">Project Activity</h3>
+                <h3 class="text-sm font-semibold text-gray-700 mb-3">Phase Activity</h3>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
                             <tr class="bg-gray-50 border-b border-gray-200">
                                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Project</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Stage</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Deadline</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Completed</th>
                                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
-                                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Progress</th>
-                                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Updates</th>
-                                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Delays</th>
-                                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Reports</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Delay</th>
                             </tr>
                         </thead>
                         <tbody>
         `;
         
         if (report.projects.length === 0) {
-            html += '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-400">No activity for this period.</td></tr>';
+            html += '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No activity for this period.</td></tr>';
         } else {
             report.projects.forEach(item => {
+                const isDelayed = item.delay_days > 0;
+                const statusBadge = isDelayed
+                    ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed (${item.delay_days}d)</span>`
+                    : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">On Time</span>`;
                 html += `
                     <tr class="border-b border-gray-100">
                         <td class="px-4 py-3 font-medium">${item.project_name}</td>
                         <td class="px-4 py-3 text-gray-600">${item.stage_name}</td>
-                        <td class="px-4 py-3">
-                            <span class="text-xs font-medium px-2 py-1 rounded-full ${item.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : item.status === 'DELAYED' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}">${item.status.replace('_', ' ')}</span>
-                        </td>
-                        <td class="px-4 py-3 text-center font-medium">${item.progress}%</td>
-                        <td class="px-4 py-3 text-center">${item.updates_count}</td>
-                        <td class="px-4 py-3 text-center ${item.delays_count > 0 ? 'text-red-600 font-semibold' : 'text-gray-600'}">${item.delays_count}</td>
-                        <td class="px-4 py-3 text-center">${item.reports_submitted}</td>
+                        <td class="px-4 py-3 text-gray-600">${formatDate(item.deadline)}</td>
+                        <td class="px-4 py-3 text-gray-600">${item.completed_at ? formatDateTime(item.completed_at) : '—'}</td>
+                        <td class="px-4 py-3">${statusBadge}</td>
+                        <td class="px-4 py-3 text-gray-500 max-w-xs truncate">${item.delay_reason || '—'}</td>
                     </tr>
                 `;
             });

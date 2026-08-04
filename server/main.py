@@ -5464,48 +5464,84 @@ async def get_designer_weekly_performance(
     if not designer:
         raise HTTPException(status_code=404, detail="Designer not found")
     
-    projects = get_user_owned_project_query(db, user).all()
-    designer_updates = (
+    # Find all projects assigned to this designer
+    projects = (
+        db.query(Project)
+        .filter(Project.assigned_designer_id == designer_id)
+        .all()
+    )
+    
+    if not projects:
+        return DesignerPerformanceResponse(
+            designer_id=designer.id,
+            designer_name=designer.name,
+            period_start=week_start,
+            period_end=week_end,
+            projects=[],
+            total_updates=0,
+            total_delays=0,
+            total_stages_completed=0,
+            total_on_time=0,
+        )
+    
+    project_ids = [p.id for p in projects]
+    
+    # Get all phases for these projects that were completed in the week
+    phases = (
         db.query(Phase)
-        .join(Project)
         .filter(
-            Project.id.in_([p.id for p in projects]),
-            Phase.designer_update != "",
-            Phase.designer_update.isnot(None),
+            Phase.project_id.in_(project_ids),
+            Phase.completed_at.isnot(None),
         )
         .all()
     )
     
-    # Count reports submitted by this designer in the week
-    stage_reports = (
-        db.query(StageReport)
-        .filter(
-            StageReport.submitted_by_user_id == str(designer_id),
-            StageReport.submitted_at >= week_start,
-            StageReport.submitted_at <= week_end + "T23:59:59",
-        )
-        .all()
-    )
-    
-    total_updates = len(designer_updates)
-    total_delays = sum(1 for r in stage_reports if r.delay_days and r.delay_days > 0)
-    total_stages_completed = sum(1 for r in stage_reports if r.stage_completed)
-    
+    total_stages_completed = 0
+    total_delays = 0
+    total_on_time = 0
     items = []
-    for sr in stage_reports:
-        proj = db.query(Project).filter(Project.id == sr.project_id).first()
-        if proj:
-            items.append(DesignerProjectItem(
-                project_id=proj.id,
-                project_name=proj.name,
-                stage_index=sr.stage_index,
-                stage_name=sr.stage_name,
-                status=proj.status,
-                progress=proj.progress,
-                updates_count=1,
-                delays_count=sr.delay_days if sr.delay_days and sr.delay_days > 0 else 0,
-                reports_submitted=1,
-            ))
+    
+    for ph in phases:
+        proj = db.query(Project).filter(Project.id == ph.project_id).first()
+        if not proj:
+            continue
+        
+        # Calculate delay
+        delay_days = 0
+        if ph.completed_at and ph.deadline:
+            try:
+                completed_dt = None
+                for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]:
+                    try:
+                        completed_dt = datetime.strptime(ph.completed_at, fmt)
+                        break
+                    except ValueError:
+                        pass
+                if completed_dt:
+                    deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+                    diff = (completed_dt.date() - deadline_dt.date()).days
+                    delay_days = max(0, diff)
+            except Exception:
+                pass
+        
+        total_stages_completed += 1
+        if delay_days > 0:
+            total_delays += 1
+        else:
+            total_on_time += 1
+        
+        items.append(DesignerProjectItem(
+            project_id=proj.id,
+            project_name=proj.name,
+            stage_index=ph.stage_index,
+            stage_name=_get_current_stage_name(ph.stage_index),
+            status=proj.status,
+            progress=proj.progress,
+            deadline=ph.deadline,
+            completed_at=ph.completed_at,
+            delay_days=delay_days,
+            delay_reason=ph.delay_reason or "",
+        ))
     
     return DesignerPerformanceResponse(
         designer_id=designer.id,
@@ -5513,9 +5549,10 @@ async def get_designer_weekly_performance(
         period_start=week_start,
         period_end=week_end,
         projects=items,
-        total_updates=total_updates,
+        total_updates=len(items),
         total_delays=total_delays,
         total_stages_completed=total_stages_completed,
+        total_on_time=total_on_time,
     )
 
 
@@ -5537,47 +5574,84 @@ async def get_designer_monthly_performance(
     else:
         month_end = f"{year}-{month + 1:02d}-01"
     
-    projects = get_user_owned_project_query(db, user).all()
-    designer_updates = (
+    # Find all projects assigned to this designer
+    projects = (
+        db.query(Project)
+        .filter(Project.assigned_designer_id == designer_id)
+        .all()
+    )
+    
+    if not projects:
+        return DesignerPerformanceResponse(
+            designer_id=designer.id,
+            designer_name=designer.name,
+            period_start=month_start,
+            period_end=month_end,
+            projects=[],
+            total_updates=0,
+            total_delays=0,
+            total_stages_completed=0,
+            total_on_time=0,
+        )
+    
+    project_ids = [p.id for p in projects]
+    
+    # Get all phases for these projects that were completed in the month
+    phases = (
         db.query(Phase)
-        .join(Project)
         .filter(
-            Project.id.in_([p.id for p in projects]),
-            Phase.designer_update != "",
-            Phase.designer_update.isnot(None),
+            Phase.project_id.in_(project_ids),
+            Phase.completed_at.isnot(None),
         )
         .all()
     )
     
-    stage_reports = (
-        db.query(StageReport)
-        .filter(
-            StageReport.submitted_by_user_id == str(designer_id),
-            StageReport.submitted_at >= month_start,
-            StageReport.submitted_at < month_end,
-        )
-        .all()
-    )
-    
-    total_updates = len(designer_updates)
-    total_delays = sum(1 for r in stage_reports if r.delay_days and r.delay_days > 0)
-    total_stages_completed = sum(1 for r in stage_reports if r.stage_completed)
-    
+    total_stages_completed = 0
+    total_delays = 0
+    total_on_time = 0
     items = []
-    for sr in stage_reports:
-        proj = db.query(Project).filter(Project.id == sr.project_id).first()
-        if proj:
-            items.append(DesignerProjectItem(
-                project_id=proj.id,
-                project_name=proj.name,
-                stage_index=sr.stage_index,
-                stage_name=sr.stage_name,
-                status=proj.status,
-                progress=proj.progress,
-                updates_count=1,
-                delays_count=sr.delay_days if sr.delay_days and sr.delay_days > 0 else 0,
-                reports_submitted=1,
-            ))
+    
+    for ph in phases:
+        proj = db.query(Project).filter(Project.id == ph.project_id).first()
+        if not proj:
+            continue
+        
+        # Calculate delay
+        delay_days = 0
+        if ph.completed_at and ph.deadline:
+            try:
+                completed_dt = None
+                for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]:
+                    try:
+                        completed_dt = datetime.strptime(ph.completed_at, fmt)
+                        break
+                    except ValueError:
+                        pass
+                if completed_dt:
+                    deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+                    diff = (completed_dt.date() - deadline_dt.date()).days
+                    delay_days = max(0, diff)
+            except Exception:
+                pass
+        
+        total_stages_completed += 1
+        if delay_days > 0:
+            total_delays += 1
+        else:
+            total_on_time += 1
+        
+        items.append(DesignerProjectItem(
+            project_id=proj.id,
+            project_name=proj.name,
+            stage_index=ph.stage_index,
+            stage_name=_get_current_stage_name(ph.stage_index),
+            status=proj.status,
+            progress=proj.progress,
+            deadline=ph.deadline,
+            completed_at=ph.completed_at,
+            delay_days=delay_days,
+            delay_reason=ph.delay_reason or "",
+        ))
     
     return DesignerPerformanceResponse(
         designer_id=designer.id,
@@ -5585,9 +5659,10 @@ async def get_designer_monthly_performance(
         period_start=month_start,
         period_end=month_end,
         projects=items,
-        total_updates=total_updates,
+        total_updates=len(items),
         total_delays=total_delays,
         total_stages_completed=total_stages_completed,
+        total_on_time=total_on_time,
     )
 
 
@@ -5669,18 +5744,18 @@ def _monthly_report_to_csv(report: MonthlyReportResponse) -> str:
 def _designer_performance_to_csv(report: DesignerPerformanceResponse) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Designer", "Period Start", "Period End", "Total Updates", "Total Delays", "Total Stages Completed"])
+    writer.writerow(["Designer", "Period Start", "Period End", "Stages Completed", "On Time", "Delayed"])
     writer.writerow([
         report.designer_name, report.period_start, report.period_end,
-        report.total_updates, report.total_delays, report.total_stages_completed
+        report.total_stages_completed, report.total_on_time, report.total_delays
     ])
     writer.writerow([])
-    writer.writerow(["Project", "Stage", "Stage Index", "Status", "Progress", "Updates", "Delays", "Reports Submitted"])
+    writer.writerow(["Project", "Stage", "Deadline", "Completed At", "Status", "Delay Days", "Delay Reason"])
     for item in report.projects:
         writer.writerow([
-            item.project_name, item.stage_name, item.stage_index,
-            item.status, item.progress, item.updates_count, item.delays_count,
-            item.reports_submitted
+            item.project_name, item.stage_name, item.deadline,
+            item.completed_at or "", item.status, item.delay_days,
+            item.delay_reason or ""
         ])
     return output.getvalue()
 

@@ -407,6 +407,7 @@ class DesignerPerformanceResponse(BaseModel):
     total_updates: int = 0
     total_delays: int = 0
     total_stages_completed: int = 0
+    total_on_time: int = 0
 
 
 class DesignerProjectItem(BaseModel):
@@ -416,6 +417,7 @@ class DesignerProjectItem(BaseModel):
     stage_name: str
     status: str
     progress: int
-    updates_count: int = 0
-    delays_count: int = 0
-    reports_submitted: int = 0
+    deadline: str = ""
+    completed_at: Optional[str] = None
+    delay_days: int = 0
+    delay_reason: str = ""
