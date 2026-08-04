@@ -4883,15 +4883,15 @@ def export_data(
     if entity == "designers":
         fieldnames, rows = _users_rows(db, ["DESIGNER"], dt_from, dt_to)
         sheets = {"Designers": (fieldnames, rows)}
-        filename = f"designers-{stamp}"
+        filename = f"smartivity-designers-export-{stamp}"
     elif entity == "managers":
         fieldnames, rows = _users_rows(db, ["ADMIN", "MANAGER"], dt_from, dt_to)
         sheets = {"Managers": (fieldnames, rows)}
-        filename = f"managers-{stamp}"
+        filename = f"smartivity-managers-export-{stamp}"
     elif entity == "projects":
         (pf, pr), (phf, phr) = _projects_rows(db, dt_from, dt_to)
         sheets = {"Projects": (pf, pr), "Phases": (phf, phr)}
-        filename = f"projects-{stamp}"
+        filename = f"smartivity-projects-export-{stamp}"
     elif entity == "all":
         df, dr = _users_rows(db, ["DESIGNER"], dt_from, dt_to)
         mf, mr = _users_rows(db, ["ADMIN", "MANAGER"], dt_from, dt_to)
@@ -4900,7 +4900,7 @@ def export_data(
             "Designers": (df, dr), "Managers": (mf, mr),
             "Projects": (pf, pr), "Phases": (phf, phr),
         }
-        filename = f"smartivity-all-data-{stamp}"
+        filename = f"smartivity-full-export-{stamp}"
     else:
         raise HTTPException(
             status_code=404,
@@ -5777,10 +5777,11 @@ async def download_project_report_csv(
     csv_content = _project_report_to_csv(report)
     if format == "xlsx":
         return JSONResponse(content={"message": "Excel export for project reports — use CSV for now"})
+    project_name_slug = report.project_name.replace(" ", "-").replace("&", "and").lower()
     return StreamingResponse(
         io.StringIO(csv_content),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="project-report-{project_id}.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="{project_name_slug}-project-report.csv"'},
     )
 
 
@@ -5797,10 +5798,12 @@ async def download_weekly_report_csv(
     csv_content = _weekly_report_to_csv(report)
     if format == "xlsx":
         return JSONResponse(content={"message": "Excel export for weekly reports — use CSV for now"})
+    first_project = report.reports[0].project_name if report.reports else f"project-{project_id}"
+    project_slug = first_project.replace(" ", "-").replace("&", "and").lower()
     return StreamingResponse(
         io.StringIO(csv_content),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="weekly-report-{project_id}.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="weekly-report-{project_slug}-{week_start}-to-{week_end}.csv"'},
     )
 
 
@@ -5817,10 +5820,12 @@ async def download_monthly_report_csv(
     csv_content = _monthly_report_to_csv(report)
     if format == "xlsx":
         return JSONResponse(content={"message": "Excel export for monthly reports — use CSV for now"})
+    first_project = report.reports[0].project_name if report.reports else f"project-{project_id}"
+    project_slug = first_project.replace(" ", "-").replace("&", "and").lower()
     return StreamingResponse(
         io.StringIO(csv_content),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="monthly-report-{project_id}.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="monthly-report-{project_slug}-{month:02d}-{year}.csv"'},
     )
 
 
@@ -5843,10 +5848,15 @@ async def download_designer_performance_csv(
     csv_content = _designer_performance_to_csv(report)
     if format == "xlsx":
         return JSONResponse(content={"message": "Excel export for designer performance — use CSV for now"})
+    designer_slug = report.designer_name.replace(" ", "-").replace("&", "and").lower()
+    if period == "weekly":
+        date_part = f"{week_start}-to-{week_end}" if week_start else "weekly"
+    else:
+        date_part = f"{month:02d}-{year}" if month else f"{year}"
     return StreamingResponse(
         io.StringIO(csv_content),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="designer-performance-{designer_id}.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="{designer_slug}-performance-{period}-{date_part}.csv"'},
     )
 
 
