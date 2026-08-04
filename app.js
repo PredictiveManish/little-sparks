@@ -673,9 +673,9 @@ async function populateProjectDetails() {
             const prevCompleted = idx === 0 ? true : (project.phases[idx - 1].completed_at !== null);
             const canComplete = isCurrent && !isCompleted && prevCompleted;
 
-            const assignedNames = sd.assignedDesigners
+            const assignedNames = sd.assignedDesigners && sd.assignedDesigners.length > 0
                 ? sd.assignedDesigners.map(dId => DESIGNERS.find(d => d.id === dId)).filter(Boolean).map(d => d.name).join(', ')
-                : 'Unassigned';
+                : getDesignerName(project.assigned_designer_id, DESIGNERS);
 
             const designerUpdate = sd.designer_update || '—';
             const delayReason = sd.delay_reason || '—';
