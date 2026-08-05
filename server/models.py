@@ -206,3 +206,28 @@ class Session(Base):
     revoked = Column(Boolean, default=False)
 
     user = relationship("User")
+
+
+class SlackCompletionTracker(Base):
+    """Tracks pending stage completions initiated via Slack messages.
+    
+    Flow:
+    1. Designer says 'complete' in project channel → status=PENDING
+    2. Manager says 'completed/approved' → status=CONFIRMED, auto-complete stage
+    """
+    __tablename__ = "slack_completion_tracker"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    stage_index = Column(Integer, nullable=False)
+    designer_slack_user_id = Column(String, default="")
+    designer_slack_user_name = Column(String, default="")
+    designer_message = Column(Text, default="")
+    manager_slack_user_id = Column(String, default="")
+    manager_slack_user_name = Column(String, default="")
+    manager_message = Column(Text, default="")
+    status = Column(String, default="PENDING")  # PENDING | CONFIRMED | CANCELLED
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    confirmed_at = Column(DateTime, nullable=True)
+
+    project = relationship("Project")

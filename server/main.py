@@ -60,6 +60,7 @@ from .models import (
     StageReport,
     Session as SessionModel,
     ProjectManager,
+    SlackCompletionTracker,
 )
 from .schemas import (
     LoginRequest,
@@ -93,6 +94,8 @@ from .schemas import (
     DesignerPerformanceResponse,
     DesignerProjectItem,
     ProjectManagerResponse,
+    SlackCompletionTrackerResponse,
+    SlackCompletionCancelResponse,
 )
 
 # ---------- Init ----------
@@ -3187,6 +3190,52 @@ async def get_slack_channel_history(
     }
 
 
+# ---------- Slack Completion Tracker Cancel ----------
+
+
+@app.post("/api/slack/completion/{tracker_id}/cancel")
+async def cancel_slack_completion(
+    tracker_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if user.role.upper() not in ("MANAGER", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Only managers can cancel completion requests")
+
+    tracker = db.query(SlackCompletionTracker).filter(
+        SlackCompletionTracker.id == tracker_id
+    ).first()
+    if not tracker:
+        raise HTTPException(status_code=404, detail="Completion request not found")
+    if tracker.status != "PENDING":
+        raise HTTPException(status_code=400, detail=f"Completion request is already {tracker.status}")
+
+    tracker.status = "CANCELLED"
+    db.commit()
+
+    project = db.query(Project).filter(Project.id == tracker.project_id).first()
+    if project and project.slack_channel_id:
+        cancel_text = (
+            f"❌ *Completion Request Cancelled*\n\n"
+            f"Stage: {_get_current_stage_name(tracker.stage_index)}\n"
+            f"📦 Project: {project.name}\n"
+            f"Cancelled by: {user.name}"
+        )
+        try:
+            await slack_api_call(
+                db, "chat.postMessage",
+                {"channel": project.slack_channel_id, "text": cancel_text},
+            )
+        except Exception as e:
+            logger.warning("[CANCEL] Failed to post cancellation message | error=%s", e)
+
+    logger.info(
+        "[CANCEL] Completion request cancelled | tracker=%d | project=%d | by=%s",
+        tracker_id, tracker.project_id, user.name,
+    )
+    return SlackCompletionCancelResponse(success=True, message="Completion request cancelled")
+
+
 # ---------- Slack Webhook Endpoint ----------
 
 
@@ -3286,12 +3335,12 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
             blockers_match = re.search(r'(?:^|\n)Blockers:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
             update_match = re.search(r'(?:^|\n)Update:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
             progress_match = re.search(r'(?:^|\n)Progress:\s*(\d+)%?', text, re.IGNORECASE)
-            
+
             status_text = status_match.group(1).strip() if status_match else None
             blockers_text = blockers_match.group(1).strip() if blockers_match else None
             update_text = update_match.group(1).strip() if update_match else None
             progress_val = int(progress_match.group(1)) if progress_match else None
-            
+
             # Resolve user name
             user_name = ""
             try:
@@ -3300,7 +3349,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     user_name = user_result["user"]["profile"].get("real_name", "")
             except Exception:
                 pass
-            
+
             # Log the parsed message
             parsed_msg = SlackMessage(
                 project_id=project.id,
@@ -3312,7 +3361,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 raw_json={"status": status_text, "blockers": blockers_text, "update": update_text, "progress": progress_val, "raw": text},
             )
             db.add(parsed_msg)
-            
+
             # Update phase if message is from assigned designer
             if project.assigned_designer_id:
                 phases = (
@@ -3344,10 +3393,316 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             project.status = "DELAYED"
                         else:
                             project.status = "ON_TRACK"
-            
+
+            # ========== Slack Message-Based Auto-Tracking Add-On ==========
+            text_lower = text.lower()
+
+            # Get user role to determine if designer or manager
+            user_obj = db.query(User).filter(User.slack_user_id == user_id).first()
+            user_role = user_obj.role.upper() if user_obj else ""
+            is_manager = user_role in ("MANAGER", "ADMIN")
+            is_designer = user_role == "DESIGNER"
+
+            # If not a known user in our system, try to find by name match
+            if not user_obj:
+                all_users = db.query(User).all()
+                for u in all_users:
+                    if u.name and u.name.lower().replace(" ", "") in text_lower.replace(" ", "") or text_lower.replace(" ", "") in u.name.lower().replace(" ", ""):
+                        user_obj = u
+                        user_role = u.role.upper()
+                        is_manager = user_role in ("MANAGER", "ADMIN")
+                        is_designer = user_role == "DESIGNER"
+                        break
+
+            if current_phase and not is_manager:
+                # --- Auto-detect delay keywords ---
+                delay_patterns = [
+                    r'\bdelay\b', r'\bdelayed\b', r"\bwon't make it\b", r"\bbehind\b",
+                    r'\bdelay:\b', r'\bbehind schedule\b', r'\bcannot meet\b',
+                    r'\bnot on track\b', r'\bat risk\b', r'\bissue\b', r'\bblocker\b',
+                ]
+                delay_match = False
+                for pattern in delay_patterns:
+                    if re.search(pattern, text_lower):
+                        delay_match = True
+                        break
+                if delay_match:
+                    existing_delay = current_phase.delay_reason or ""
+                    if existing_delay and existing_delay not in ("On time", ""):
+                        current_phase.delay_reason = f"{existing_delay} | {text.strip()}"
+                    else:
+                        current_phase.delay_reason = text.strip()
+                    project.status = "DELAYED"
+                    logger.info(
+                        "[AUTO-TRACKING] Delay detected in message | project=%s | phase=%d | reason=%s",
+                        project.name, current_phase.stage_index, text.strip()[:100],
+                    )
+
+                # --- Auto-detect update keywords (non-structured messages) ---
+                update_patterns = [
+                    r'\bupdate\b', r'\bprogress\b', r'\bworking on\b', r'\bstatus is\b',
+                    r'\bupdate:\b', r'\bupdate -\b', r'\bupdate:\b',
+                ]
+                update_match = False
+                for pattern in update_patterns:
+                    if re.search(pattern, text_lower):
+                        update_match = True
+                        break
+                if update_match and not update_text:
+                    existing_update = current_phase.designer_update or ""
+                    if existing_update and existing_update not in ("",):
+                        current_phase.designer_update = f"{existing_update}\n{text.strip()}"
+                    else:
+                        current_phase.designer_update = text.strip()
+                    logger.info(
+                        "[AUTO-TRACKING] Update detected in message | project=%s | phase=%d",
+                        project.name, current_phase.stage_index,
+                    )
+
+                # --- Auto-detect designer completion intent ---
+                designer_complete_patterns = [
+                    r'\bcomplete\b', r'\bdone\b', r'\bfinished\b', r'\bready\b',
+                    r'\bcompleted\b', r'\bstage complete\b', r'\bstage done\b',
+                    r'\bthis stage is complete\b', r'\bcould complete\b',
+                    r'\bcould complete this\b', r'\bcan complete\b',
+                    r'\bready to move\b', r'\bready to move to\b',
+                ]
+                designer_complete_match = False
+                for pattern in designer_complete_patterns:
+                    if re.search(pattern, text_lower):
+                        designer_complete_match = True
+                        break
+                if designer_complete_match and is_designer:
+                    # Check if there's already a pending tracker for this project
+                    existing_tracker = db.query(SlackCompletionTracker).filter(
+                        SlackCompletionTracker.project_id == project.id,
+                        SlackCompletionTracker.status == "PENDING",
+                    ).first()
+                    if not existing_tracker:
+                        tracker = SlackCompletionTracker(
+                            project_id=project.id,
+                            stage_index=project.stage_index,
+                            designer_slack_user_id=user_id,
+                            designer_slack_user_name=user_name or "Unknown",
+                            designer_message=text.strip(),
+                            status="PENDING",
+                        )
+                        db.add(tracker)
+                        db.commit()
+                        logger.info(
+                            "[AUTO-TRACKING] Designer completion request | project=%s | stage=%d | designer=%s",
+                            project.name, project.stage_index, user_name or "Unknown",
+                        )
+                        # Post a message in channel asking for manager confirmation
+                        stage_name = _get_current_stage_name(project.stage_index)
+                        confirm_text = (
+                            f"🔔 *Stage Completion Request*\n\n"
+                            f"*{user_name}* requests to complete: *{stage_name}*\n"
+                            f"📦 Project: {project.name}\n\n"
+                            f"👉 Manager: Reply with 'completed', 'approved', or 'go ahead' to confirm."
+                        )
+                        try:
+                            await slack_api_call(
+                                db, "chat.postMessage",
+                                {"channel": project.slack_channel_id, "text": confirm_text},
+                            )
+                        except Exception as e:
+                            logger.warning("[AUTO-TRACKING] Failed to post confirmation request | error=%s", e)
+
+            # --- Auto-detect manager confirmation ---
+            if is_manager:
+                manager_confirm_patterns = [
+                    r'\bcompleted\b', r'\bapproved\b', r'\bgo ahead\b',
+                    r'\bproceed\b', r'\bconfirmed\b', r'\blooks good\b',
+                    r'\bgo for it\b', r'\blet\'s go\b', r'\bmove ahead\b',
+                    r'\bmove ahead\b', r'\bstage complete\b', r'\bapprove\b',
+                ]
+                manager_confirm_match = False
+                for pattern in manager_confirm_patterns:
+                    if re.search(pattern, text_lower):
+                        manager_confirm_match = True
+                        break
+                if manager_confirm_match:
+                    # Find pending tracker for this project
+                    tracker = db.query(SlackCompletionTracker).filter(
+                        SlackCompletionTracker.project_id == project.id,
+                        SlackCompletionTracker.status == "PENDING",
+                    ).first()
+                    if tracker:
+                        # Confirm the completion
+                        tracker.status = "CONFIRMED"
+                        tracker.manager_slack_user_id = user_id
+                        tracker.manager_slack_user_name = user_name or "Unknown"
+                        tracker.manager_message = text.strip()
+                        tracker.confirmed_at = datetime.utcnow()
+
+                        # Auto-complete the stage using the same logic as complete_stage endpoint
+                        phases = (
+                            db.query(Phase)
+                            .filter(Phase.project_id == project.id)
+                            .order_by(Phase.stage_index)
+                            .all()
+                        )
+                        stage_idx = tracker.stage_index
+                        if stage_idx < len(phases):
+                            # Check previous stage is completed
+                            if stage_idx > 0:
+                                prev_phase = phases[stage_idx - 1]
+                                if not prev_phase.completed_at:
+                                    logger.warning(
+                                        "[AUTO-TRACKING] Previous stage not completed | project=%s | prev_stage=%d",
+                                        project.name, stage_idx - 1,
+                                    )
+                                    try:
+                                        await slack_api_call(
+                                            db, "chat.postMessage",
+                                            {"channel": project.slack_channel_id,
+                                             "text": f"⚠️ Cannot complete stage {stage_idx + 1} — previous stage is not completed yet."},
+                                        )
+                                    except Exception:
+                                        pass
+                                    tracker.status = "CANCELLED"
+                                    db.commit()
+                                else:
+                                    # Complete the stage
+                                    now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+                                    phases[stage_idx].completed_at = now
+
+                                    total = len(phases)
+                                    completed = sum(1 for ph in phases if ph.completed_at)
+                                    project.progress = round((completed / total) * 100)
+                                    project.stage_index = min(stage_idx + 1, total - 1)
+
+                                    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+                                    if project.progress == 100:
+                                        project.status = "COMPLETED"
+                                    elif project.deadline < today_str:
+                                        project.status = "DELAYED"
+                                    else:
+                                        project.status = "ON_TRACK"
+
+                                    db.commit()
+
+                                    designer = db.query(User).filter(
+                                        User.id == project.assigned_designer_id
+                                    ).first()
+                                    designer_name = designer.name if designer else "Unassigned"
+                                    completed_stage_name = _get_current_stage_name(stage_idx)
+                                    next_stage_name = _get_current_stage_name(project.stage_index)
+
+                                    if project.progress == 100:
+                                        notify_text = (
+                                            f"🎉 *Project Completed!*\n\n"
+                                            f"*{project.name}*\n\n"
+                                            f"All {total} stages have been completed!\n"
+                                            f"👤 Designer: {designer_name}\n"
+                                            f"📊 Final Progress: 100%\n\n"
+                                            f"Great work! 🙌"
+                                        )
+                                    else:
+                                        notify_text = (
+                                            f"✅ *Stage Complete!*\n\n"
+                                            f"Stage completed: *{completed_stage_name}*\n\n"
+                                            f"📦 Project: {project.name}\n"
+                                            f"👤 Designer: {designer_name}\n"
+                                            f"📊 Progress: {project.progress}%\n"
+                                            f"🔄 Next Stage: {next_stage_name}\n\n"
+                                            f"Confirmed by: {user_name}"
+                                        )
+
+                                    try:
+                                        await slack_api_call(
+                                            db, "chat.postMessage",
+                                            {"channel": project.slack_channel_id, "text": notify_text},
+                                        )
+                                    except Exception as e:
+                                        logger.warning("[AUTO-TRACKING] Failed to post confirmation | error=%s", e)
+
+                                    # Background notification
+                                    async def _notify_stage():
+                                        with SessionLocal() as bg_db:
+                                            try:
+                                                await notify_stage_completed(bg_db, project.id, stage_idx)
+                                            except Exception:
+                                                pass
+                                    await _notify_stage()
+
+                                    logger.info(
+                                        "[AUTO-TRACKING] Stage auto-completed via message | project=%s | stage=%d | manager=%s",
+                                        project.name, stage_idx, user_name or "Unknown",
+                                    )
+                            else:
+                                # Stage 0 — no previous stage check needed
+                                now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+                                phases[stage_idx].completed_at = now
+
+                                total = len(phases)
+                                completed = sum(1 for ph in phases if ph.completed_at)
+                                project.progress = round((completed / total) * 100)
+                                project.stage_index = min(stage_idx + 1, total - 1)
+
+                                today_str = datetime.utcnow().strftime("%Y-%m-%d")
+                                if project.progress == 100:
+                                    project.status = "COMPLETED"
+                                elif project.deadline < today_str:
+                                    project.status = "DELAYED"
+                                else:
+                                    project.status = "ON_TRACK"
+
+                                db.commit()
+
+                                designer = db.query(User).filter(
+                                    User.id == project.assigned_designer_id
+                                ).first()
+                                designer_name = designer.name if designer else "Unassigned"
+                                completed_stage_name = _get_current_stage_name(stage_idx)
+                                next_stage_name = _get_current_stage_name(project.stage_index)
+
+                                if project.progress == 100:
+                                    notify_text = (
+                                        f"🎉 *Project Completed!*\n\n"
+                                        f"*{project.name}*\n\n"
+                                        f"All {total} stages have been completed!\n"
+                                        f"👤 Designer: {designer_name}\n"
+                                        f"📊 Final Progress: 100%\n\n"
+                                        f"Great work! 🙌"
+                                    )
+                                else:
+                                    notify_text = (
+                                        f"✅ *Stage Complete!*\n\n"
+                                        f"Stage completed: *{completed_stage_name}*\n\n"
+                                        f"📦 Project: {project.name}\n"
+                                        f"👤 Designer: {designer_name}\n"
+                                        f"📊 Progress: {project.progress}%\n"
+                                        f"🔄 Next Stage: {next_stage_name}\n\n"
+                                        f"Confirmed by: {user_name}"
+                                    )
+
+                                try:
+                                    await slack_api_call(
+                                        db, "chat.postMessage",
+                                        {"channel": project.slack_channel_id, "text": notify_text},
+                                    )
+                                except Exception as e:
+                                    logger.warning("[AUTO-TRACKING] Failed to post confirmation | error=%s", e)
+
+                                async def _notify_stage():
+                                    with SessionLocal() as bg_db:
+                                        try:
+                                            await notify_stage_completed(bg_db, project.id, stage_idx)
+                                        except Exception:
+                                            pass
+                                await _notify_stage()
+
+                                logger.info(
+                                    "[AUTO-TRACKING] Stage 0 auto-completed via message | project=%s | stage=%d | manager=%s",
+                                    project.name, stage_idx, user_name or "Unknown",
+                                )
+
             db.commit()
             db.refresh(parsed_msg)
-            return {"message": "OK"}
+
+        return {"message": "OK"}
 
     if not config:
         logger.warning(

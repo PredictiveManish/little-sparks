@@ -423,3 +423,29 @@ class DesignerProjectItem(BaseModel):
     completed_at: Optional[str] = None
     delay_days: int = 0
     delay_reason: str = ""
+
+
+# ---------- Slack Completion Tracker ----------
+
+
+class SlackCompletionTrackerResponse(BaseModel):
+    id: int
+    project_id: int
+    stage_index: int
+    designer_slack_user_id: str
+    designer_slack_user_name: str
+    designer_message: str
+    manager_slack_user_id: str = ""
+    manager_slack_user_name: str = ""
+    manager_message: str = ""
+    status: str
+    created_at: Optional[datetime] = None
+    confirmed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SlackCompletionCancelResponse(BaseModel):
+    success: bool
+    message: str

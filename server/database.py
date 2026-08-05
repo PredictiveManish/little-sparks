@@ -195,6 +195,25 @@ def _migrate_stage_report_completion_columns():
         )
 
 
+def _migrate_slack_completion_tracker_table():
+    """Add slack_completion_tracker table if it doesn't exist.
+    Safe to run on every startup — no-op if already present."""
+    try:
+        from sqlalchemy import inspect
+
+        inspector = inspect(engine)
+        existing_tables = {t["name"] for t in inspector.get_tables()}
+        if "slack_completion_tracker" in existing_tables:
+            return
+        logger.info("Adding slack_completion_tracker table")
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        logger.warning(
+            "Migration check for slack_completion_tracker encountered an issue (likely already applied): %s",
+            e,
+        )
+
+
 def init_db():
     """Initialize database tables, run migrations, and WAL mode."""
     try:
@@ -207,4 +226,5 @@ def init_db():
     _migrate_reminder_columns()
     _migrate_stage_reports_table()
     _migrate_stage_report_completion_columns()
+    _migrate_slack_completion_tracker_table()
     init_wal_mode()
