@@ -358,7 +358,16 @@ class WeeklyReportResponse(BaseModel):
     """Weekly report: designer/project activity for a given week."""
     week_start: str
     week_end: str
+    summary: Optional[dict] = None
     reports: List["WeeklyReportItem"] = []
+
+
+class WeeklyActivityItem(BaseModel):
+    type: str = ""
+    submitted_by: str = ""
+    submitted_at: Optional[str] = None
+    ratings: Optional[dict] = None
+    notes: Optional[str] = None
 
 
 class WeeklyReportItem(BaseModel):
@@ -374,13 +383,26 @@ class WeeklyReportItem(BaseModel):
     delay_reason: str = ""
     completed_at: Optional[str] = None
     stage_reports: List[StageReportResponse] = []
+    completed_this_week: bool = False
+    activities: List[WeeklyActivityItem] = []
+    progress_change: int = 0
+    delay_occurred: bool = False
+    delay_days: int = 0
 
 
 class MonthlyReportResponse(BaseModel):
     """Monthly report: designer/project activity for a given month."""
     month: str
     year: int
+    summary: Optional[dict] = None
     reports: List["MonthlyReportItem"] = []
+
+
+class MonthlyActivityItem(BaseModel):
+    type: str = ""
+    submitted_by: str = ""
+    date: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class MonthlyReportItem(BaseModel):
@@ -397,6 +419,12 @@ class MonthlyReportItem(BaseModel):
     designer_updates: List[str] = []
     delays: List[str] = []
     stage_reports: List[StageReportResponse] = []
+    completed_this_month: bool = False
+    submissions_count: int = 0
+    notes_count: int = 0
+    avg_ratings: Optional[dict] = None
+    rating_trends: Optional[dict] = None
+    activities: List[MonthlyActivityItem] = []
 
 
 class DesignerPerformanceResponse(BaseModel):

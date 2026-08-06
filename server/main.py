@@ -5718,25 +5718,99 @@ async def get_project_weekly_report(
         )
         .all()
     )
+    prev_week_end = (datetime.strptime(week_start, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
+    prev_week_start = (datetime.strptime(prev_week_end, "%Y-%m-%d") - timedelta(days=6)).strftime("%Y-%m-%d")
+    prev_stage_reports = (
+        db.query(StageReport)
+        .filter(
+            StageReport.project_id == project_id,
+            StageReport.submitted_at >= prev_week_start,
+            StageReport.submitted_at <= prev_week_end + "T23:59:59",
+        )
+        .all()
+    )
     designer = (
         db.query(User).filter(User.id == project.assigned_designer_id).first()
         if project.assigned_designer_id else None
     )
     
-    # Group reports by stage
     reports_by_stage = {}
     for r in stage_reports:
         reports_by_stage.setdefault(r.stage_index, []).append(StageReportResponse.model_validate(r))
     
+    prev_reports_by_stage = {}
+    for r in prev_stage_reports:
+        prev_reports_by_stage.setdefault(r.stage_index, []).append(StageReportResponse.model_validate(r))
+    
+    rating_fields = ["costing", "willingness_to_buy", "engagement_life", "durability",
+                     "age_appropriateness", "ease_of_use", "aesthetics", "easy_to_store"]
+    
     items = []
+    total_submissions = 0
+    total_delays = 0
+    total_delay_days = 0
+    stages_completed = 0
+    
     for ph in phases:
-        sr_list = reports_by_stage.get(ph.stage_index, [])
+        idx = ph.stage_index
+        sr_list = reports_by_stage.get(idx, [])
+        prev_sr_list = prev_reports_by_stage.get(idx, [])
+        
+        completed_this_week = False
+        if ph.completed_at:
+            completed_date = ph.completed_at
+            if isinstance(completed_date, str):
+                completed_date = completed_date[:10]
+            else:
+                completed_date = completed_date.strftime("%Y-%m-%d")
+            if week_start <= completed_date <= week_end:
+                completed_this_week = True
+        
+        activities = []
+        for sr in sr_list:
+            ratings_dict = {}
+            for rf in rating_fields:
+                val = getattr(sr, rf, None)
+                if val is not None:
+                    ratings_dict[rf] = val
+            activity = WeeklyActivityItem(
+                type="stage_report",
+                submitted_by=sr.submitted_by_name or sr.submitted_by_role or "Unknown",
+                submitted_at=sr.submitted_at.strftime("%Y-%m-%d %H:%M") if sr.submitted_at else None,
+                ratings=ratings_dict if ratings_dict else None,
+                notes=sr.notes or None,
+            )
+            activities.append(activity)
+        
+        current_max_stage = -1
+        if sr_list:
+            current_max_stage = max(r.stage_index for r in sr_list)
+        prev_max_stage = -1
+        if prev_sr_list:
+            prev_max_stage = max(r.stage_index for r in prev_sr_list)
+        progress_change = current_max_stage - prev_max_stage
+        
+        delay_occurred = False
+        delay_days = 0
+        if sr_list:
+            for sr in sr_list:
+                if sr.delay_days and sr.delay_days > 0:
+                    delay_occurred = True
+                    delay_days = max(delay_days, sr.delay_days)
+        
+        if completed_this_week:
+            stages_completed += 1
+        total_submissions += len(sr_list)
+        if delay_occurred:
+            total_delays += 1
+        total_delay_days += delay_days
+        
         items.append(WeeklyReportItem(
             project_id=project.id,
             project_name=project.name,
             assigned_designer=designer.name if designer else "Unassigned",
-            stage_index=ph.stage_index,
-            stage_name=_get_current_stage_name(ph.stage_index, project.phase_type),
+            stage_index=idx,
+            stage_name=_get_current_stage_name(idx, project.phase_type),
             status=project.status,
             progress=project.progress,
             deadline=ph.deadline,
@@ -5744,11 +5818,22 @@ async def get_project_weekly_report(
             delay_reason=ph.delay_reason or "",
             completed_at=ph.completed_at,
             stage_reports=sr_list,
+            completed_this_week=completed_this_week,
+            activities=activities,
+            progress_change=progress_change,
+            delay_occurred=delay_occurred,
+            delay_days=delay_days,
         ))
     
     return WeeklyReportResponse(
         week_start=week_start,
         week_end=week_end,
+        summary={
+            "stages_completed": stages_completed,
+            "total_submissions": total_submissions,
+            "total_delays": total_delays,
+            "total_delay_days": total_delay_days,
+        },
         reports=items,
     )
 
@@ -5783,6 +5868,19 @@ async def get_project_monthly_report(
     else:
         month_end = f"{year}-{month + 1:02d}-01"
     
+    # Previous month
+    if month == 1:
+        prev_year = year - 1
+        prev_month = 12
+    else:
+        prev_year = year
+        prev_month = month - 1
+    prev_month_start = f"{prev_year}-{prev_month:02d}-01"
+    if prev_month == 12:
+        prev_month_end = f"{prev_year + 1}-01-01"
+    else:
+        prev_month_end = f"{prev_year}-{prev_month + 1:02d}-01"
+    
     phases = (
         db.query(Phase)
         .filter(Phase.project_id == project_id)
@@ -5798,25 +5896,118 @@ async def get_project_monthly_report(
         )
         .all()
     )
+    prev_stage_reports = (
+        db.query(StageReport)
+        .filter(
+            StageReport.project_id == project_id,
+            StageReport.submitted_at >= prev_month_start,
+            StageReport.submitted_at < prev_month_end,
+        )
+        .all()
+    )
     designer = (
         db.query(User).filter(User.id == project.assigned_designer_id).first()
         if project.assigned_designer_id else None
     )
     
-    # Collect updates and delays per phase
-    updates_by_phase = {}
-    delays_by_phase = {}
+    rating_fields = ["costing", "willingness_to_buy", "engagement_life", "durability",
+                     "age_appropriateness", "ease_of_use", "aesthetics", "easy_to_store"]
+    
+    def calc_avg_ratings(reports):
+        avg = {}
+        for rf in rating_fields:
+            vals = [getattr(r, rf, None) for r in reports if getattr(r, rf, None) is not None]
+            avg[rf] = round(sum(vals) / len(vals), 2) if vals else None
+        return avg
+    
+    current_avg_ratings = calc_avg_ratings(stage_reports)
+    prev_avg_ratings = calc_avg_ratings(prev_stage_reports)
+    
+    rating_trends = {}
+    for rf in rating_fields:
+        if current_avg_ratings[rf] is not None and prev_avg_ratings[rf] is not None:
+            diff = current_avg_ratings[rf] - prev_avg_ratings[rf]
+            if diff > 0.3:
+                rating_trends[rf] = "improved"
+            elif diff < -0.3:
+                rating_trends[rf] = "declined"
+            else:
+                rating_trends[rf] = "stable"
+    
     reports_by_phase = {}
     for r in stage_reports:
-        idx = r.stage_index
-        updates_by_phase.setdefault(idx, []).append(r.notes or "")
-        if r.delay_days and r.delay_days > 0:
-            delays_by_phase.setdefault(idx, []).append(f"{r.delay_days} days delay on {r.stage_name}")
-        reports_by_phase.setdefault(idx, []).append(StageReportResponse.model_validate(r))
+        reports_by_phase.setdefault(r.stage_index, []).append(StageReportResponse.model_validate(r))
+    
+    prev_reports_by_phase = {}
+    for r in prev_stage_reports:
+        prev_reports_by_phase.setdefault(r.stage_index, []).append(StageReportResponse.model_validate(r))
     
     items = []
+    total_submissions = 0
+    total_notes = 0
+    total_delays = 0
+    total_delay_days = 0
+    stages_completed = 0
+    progress_delta = 0
+    
     for ph in phases:
         idx = ph.stage_index
+        sr_list = reports_by_phase.get(idx, [])
+        prev_sr_list = prev_reports_by_phase.get(idx, [])
+        
+        completed_this_month = False
+        if ph.completed_at:
+            completed_date = ph.completed_at
+            if isinstance(completed_date, str):
+                completed_date = completed_date[:10]
+            else:
+                completed_date = completed_date.strftime("%Y-%m-%d")
+            if month_start <= completed_date < month_end:
+                completed_this_month = True
+        
+        activities = []
+        for sr in sr_list:
+            activity = MonthlyActivityItem(
+                type="stage_report",
+                submitted_by=sr.submitted_by_name or sr.submitted_by_role or "Unknown",
+                date=sr.submitted_at.strftime("%Y-%m-%d") if sr.submitted_at else None,
+                notes=sr.notes or None,
+            )
+            activities.append(activity)
+        
+        submissions_count = len(sr_list)
+        notes_count = sum(1 for sr in sr_list if sr.notes and sr.notes.strip())
+        
+        phase_delay_occurred = False
+        phase_delay_days = 0
+        if sr_list:
+            for sr in sr_list:
+                if sr.delay_days and sr.delay_days > 0:
+                    phase_delay_occurred = True
+                    phase_delay_days = max(phase_delay_days, sr.delay_days)
+        
+        if completed_this_month:
+            stages_completed += 1
+        total_submissions += submissions_count
+        total_notes += notes_count
+        if phase_delay_occurred:
+            total_delays += 1
+        total_delay_days += phase_delay_days
+        
+        prev_max = -1
+        if prev_sr_list:
+            prev_max = max(r.stage_index for r in prev_sr_list)
+        curr_max = -1
+        if sr_list:
+            curr_max = max(r.stage_index for r in sr_list)
+        phase_progress_delta = curr_max - prev_max
+        if idx == max(phases[-1].stage_index if phases else [0], curr_max, prev_max):
+            progress_delta = phase_progress_delta
+        
+        phase_avg_ratings = None
+        if sr_list:
+            phase_avg_ratings = calc_avg_ratings(sr_list)
+        
         items.append(MonthlyReportItem(
             project_id=project.id,
             project_name=project.name,
@@ -5826,14 +6017,30 @@ async def get_project_monthly_report(
             status=project.status,
             progress=project.progress,
             deadline=ph.deadline,
-            designer_updates=updates_by_phase.get(idx, []),
-            delays=delays_by_phase.get(idx, []),
-            stage_reports=reports_by_phase.get(idx, []),
+            completed_at=ph.completed_at,
+            delay_days=phase_delay_days,
+            stage_reports=sr_list,
+            completed_this_month=completed_this_month,
+            submissions_count=submissions_count,
+            notes_count=notes_count,
+            avg_ratings=phase_avg_ratings,
+            rating_trends=rating_trends,
+            activities=activities,
         ))
     
     return MonthlyReportResponse(
         month=f"{month:02d}",
         year=year,
+        summary={
+            "progress_delta": progress_delta,
+            "stages_completed": stages_completed,
+            "total_submissions": total_submissions,
+            "total_notes": total_notes,
+            "total_delays": total_delays,
+            "total_delay_days": total_delay_days,
+            "avg_ratings_overall": current_avg_ratings,
+            "rating_trends": rating_trends,
+        },
         reports=items,
     )
 
@@ -6095,14 +6302,30 @@ def _weekly_report_to_csv(report: WeeklyReportResponse) -> str:
     writer = csv.writer(output)
     writer.writerow(["Week Start", "Week End"])
     writer.writerow([report.week_start, report.week_end])
-    writer.writerow([])
+    if report.summary:
+        writer.writerow(["Summary"])
+        writer.writerow(["Stages Completed", "Total Submissions", "Total Delays", "Total Delay Days"])
+        writer.writerow([
+            report.summary.get("stages_completed", 0),
+            report.summary.get("total_submissions", 0),
+            report.summary.get("total_delays", 0),
+            report.summary.get("total_delay_days", 0),
+        ])
+        writer.writerow([])
     writer.writerow(["Project", "Designer", "Stage", "Stage Index", "Status", "Progress",
-                      "Delay Reason", "Completed At"])
+                      "Completed This Week", "Activities", "Progress Change",
+                      "Delay Occurred", "Delay Days", "Delay Reason", "Completed At"])
     for item in report.reports:
+        activities_str = "; ".join(
+            f"{a.submitted_by} ({a.submitted_at}): {a.notes or 'ratings only'}"
+            for a in item.activities if a.submitted_by
+        ) if item.activities else ""
         writer.writerow([
             item.project_name, item.assigned_designer, item.stage_name,
             item.stage_index, item.status, item.progress,
-            item.designer_update or "", item.delay_reason or "",
+            item.completed_this_week, activities_str, item.progress_change,
+            item.delay_occurred, item.delay_days,
+            item.delay_reason or "",
             item.completed_at or ""
         ])
     return output.getvalue()
@@ -6113,16 +6336,40 @@ def _monthly_report_to_csv(report: MonthlyReportResponse) -> str:
     writer = csv.writer(output)
     writer.writerow(["Month", "Year"])
     writer.writerow([report.month, report.year])
-    writer.writerow([])
+    if report.summary:
+        writer.writerow(["Summary"])
+        writer.writerow(["Progress Delta", "Stages Completed", "Total Submissions", "Total Notes",
+                         "Total Delays", "Total Delay Days", "Avg Ratings Overall", "Rating Trends"])
+        avg_ratings = report.summary.get("avg_ratings_overall", {})
+        rating_trends = report.summary.get("rating_trends", {})
+        avg_ratings_str = "; ".join(f"{k}={v}" for k, v in avg_ratings.items()) if avg_ratings else ""
+        rating_trends_str = "; ".join(f"{k}={v}" for k, v in rating_trends.items()) if rating_trends else ""
+        writer.writerow([
+            report.summary.get("progress_delta", 0),
+            report.summary.get("stages_completed", 0),
+            report.summary.get("total_submissions", 0),
+            report.summary.get("total_notes", 0),
+            report.summary.get("total_delays", 0),
+            report.summary.get("total_delay_days", 0),
+            avg_ratings_str, rating_trends_str,
+        ])
+        writer.writerow([])
     writer.writerow(["Project", "Designer", "Stage", "Stage Index", "Status", "Progress",
-                      "Delays"])
+                      "Completed This Month", "Submissions", "Notes", "Avg Ratings",
+                      "Rating Trends", "Activities", "Delay Days"])
     for item in report.reports:
-        updates = "; ".join(item.designer_updates) if item.designer_updates else ""
-        delays = "; ".join(item.delays) if item.delays else ""
+        activities_str = "; ".join(
+            f"{a.submitted_by} ({a.date}): {a.notes or ''}"
+            for a in item.activities if a.submitted_by
+        ) if item.activities else ""
+        avg_ratings_str = "; ".join(f"{k}={v}" for k, v in (item.avg_ratings or {}).items()) if item.avg_ratings else ""
+        rating_trends_str = "; ".join(f"{k}={v}" for k, v in (item.rating_trends or {}).items()) if item.rating_trends else ""
         writer.writerow([
             item.project_name, item.assigned_designer, item.stage_name,
             item.stage_index, item.status, item.progress,
-            updates, delays
+            item.completed_this_month, item.submissions_count, item.notes_count,
+            avg_ratings_str, rating_trends_str, activities_str,
+            item.delay_days or 0,
         ])
     return output.getvalue()
 

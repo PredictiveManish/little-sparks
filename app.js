@@ -2480,29 +2480,47 @@ async function loadWeeklyReport() {
         currentReportData = report;
         showReportDownloadActions(`/reports/weekly/${report.reports.length > 0 ? report.reports[0].project_id : projectId}/download?week_start=${weekStart}&week_end=${weekEnd}`);
         
+        const summary = report.summary || {};
+        
         let html = `
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                 <p class="text-sm text-gray-500 mb-4">Week: ${formatDate(weekStart)} — ${formatDate(weekEnd)}</p>
-                <div class="space-y-3">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-green-50 rounded-lg p-4 text-center">
+                        <p class="text-2xl font-bold text-green-700">${summary.stages_completed || 0}</p>
+                        <p class="text-xs text-green-600 mt-1">Stages Completed</p>
+                    </div>
+                    <div class="bg-blue-50 rounded-lg p-4 text-center">
+                        <p class="text-2xl font-bold text-blue-700">${summary.total_submissions || 0}</p>
+                        <p class="text-xs text-blue-600 mt-1">Submissions</p>
+                    </div>
+                    <div class="bg-red-50 rounded-lg p-4 text-center">
+                        <p class="text-2xl font-bold text-red-700">${summary.total_delays || 0}</p>
+                        <p class="text-xs text-red-600 mt-1">Delays</p>
+                    </div>
+                    <div class="bg-amber-50 rounded-lg p-4 text-center">
+                        <p class="text-2xl font-bold text-amber-700">${summary.total_delay_days || 0}</p>
+                        <p class="text-xs text-amber-600 mt-1">Delay Days</p>
+                    </div>
+                </div>
+                <div class="space-y-4">
         `;
         
         if (report.reports.length === 0) {
             html += '<p class="text-sm text-gray-400 text-center py-4">No reports for this week.</p>';
         } else {
             report.reports.forEach(item => {
-                const delayDays = item.completed_at ? (item.delay_days || 0) : calculateDelayDays(item.deadline || '');
-                const statusBadge = item.completed_at
-                    ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">Completed</span>`
-                    : delayDays > 0
-                        ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed (${delayDays}d)</span>`
-                        : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-700">On Track</span>`;
                 html += `
                     <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center justify-between mb-3">
                             <h4 class="font-semibold text-gray-900">${item.stage_name}</h4>
-                            ${statusBadge}
+                            <div class="flex gap-2">
+                                ${item.completed_this_week ? '<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">Completed This Week</span>' : ''}
+                                ${item.activities && item.activities.length > 0 ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 text-blue-700">${item.activities.length} Activity${item.activities.length > 1 ? 'ies' : 'y'}</span>` : ''}
+                                ${(!item.completed_this_week && (!item.activities || item.activities.length === 0)) ? '<span class="text-xs font-medium px-2 py-1 rounded-full bg-gray-200 text-gray-500">No Changes</span>' : ''}
+                            </div>
                         </div>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
                             <div>
                                 <p class="text-xs text-gray-500">Designer</p>
                                 <p class="font-medium">${item.assigned_designer}</p>
@@ -2512,12 +2530,64 @@ async function loadWeeklyReport() {
                                 <p class="font-medium">${item.progress}%</p>
                             </div>
                             <div>
+                                <p class="text-xs text-gray-500">Progress Change</p>
+                                <p class="font-medium">${item.progress_change !== undefined && item.progress_change !== 0 ? (item.progress_change > 0 ? '+' + item.progress_change : item.progress_change) : '—'}</p>
+                            </div>
+                            <div>
                                 <p class="text-xs text-gray-500">Delay</p>
-                                <p class="text-gray-600 truncate">${item.delay_reason || '—'}</p>
+                                <p class="font-medium">${item.delay_days > 0 ? item.delay_days + 'd' : '—'}</p>
                             </div>
                         </div>
-                    </div>
                 `;
+                
+                if (item.delay_days > 0) {
+                    html += `
+                        <div class="mb-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                            <p class="text-sm font-medium text-red-700">⚠ Delay Detected</p>
+                            <p class="text-xs text-red-600 mt-1">${item.delay_reason || item.delay_days + ' days behind schedule'}</p>
+                        </div>
+                    `;
+                }
+                
+                if (item.activities && item.activities.length > 0) {
+                    html += '<div class="space-y-3">';
+                    item.activities.forEach(activity => {
+                        html += `
+                            <div class="bg-white rounded-lg p-3 border border-gray-200">
+                                <div class="flex items-center justify-between mb-2">
+                                    <p class="text-xs font-medium text-gray-700">${activity.submitted_by || 'Unknown'}</p>
+                                    <p class="text-xs text-gray-500">${activity.submitted_at || ''}</p>
+                                </div>
+                        `;
+                        
+                        if (activity.ratings && Object.keys(activity.ratings).length > 0) {
+                            html += '<div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">';
+                            const ratingLabels = {
+                                costing: 'Costing',
+                                willingness_to_buy: 'Willingness to Buy',
+                                engagement_life: 'Engagement Life',
+                                durability: 'Durability',
+                                age_appropriateness: 'Age Appropriateness',
+                                ease_of_use: 'Ease of Use',
+                                aesthetics: 'Aesthetics',
+                                easy_to_store: 'Easy to Store'
+                            };
+                            for (const [key, value] of Object.entries(activity.ratings)) {
+                                html += `<div class="text-center"><p class="text-xs text-gray-500">${ratingLabels[key] || key}</p><p class="text-sm font-semibold text-gray-900">${value}</p></div>`;
+                            }
+                            html += '</div>';
+                        }
+                        
+                        if (activity.notes) {
+                            html += `<p class="text-xs text-gray-600 italic">${activity.notes}</p>`;
+                        }
+                        
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                }
+                
+                html += '</div>';
             });
         }
         
@@ -2551,32 +2621,93 @@ async function loadMonthlyReport() {
         currentReportData = report;
         showReportDownloadActions(`/reports/monthly/${report.reports.length > 0 ? report.reports[0].project_id : projectId}/download?month=${month}&year=${year}`);
         
+        const summary = report.summary || {};
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const ratingLabels = {
+            costing: 'Costing',
+            willingness_to_buy: 'Willingness to Buy',
+            engagement_life: 'Engagement Life',
+            durability: 'Durability',
+            age_appropriateness: 'Age Appropriateness',
+            ease_of_use: 'Ease of Use',
+            aesthetics: 'Aesthetics',
+            easy_to_store: 'Easy to Store'
+        };
         
         let html = `
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                 <p class="text-sm text-gray-500 mb-4">Month: ${monthNames[parseInt(month) - 1]} ${year}</p>
-                <div class="space-y-3">
+                <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+                    <div class="bg-gradient-to-br from-brand-50 to-brand-100 rounded-lg p-4 text-center">
+                        <p class="text-2xl font-bold text-brand-700">${summary.progress_delta || 0}</p>
+                        <p class="text-xs text-brand-600 mt-1">Progress Delta</p>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-4 text-center">
+                        <p class="text-2xl font-bold text-green-700">${summary.stages_completed || 0}</p>
+                        <p class="text-xs text-green-600 mt-1">Stages Completed</p>
+                    </div>
+                    <div class="bg-blue-50 rounded-lg p-4 text-center">
+                        <p class="text-2xl font-bold text-blue-700">${summary.total_submissions || 0}</p>
+                        <p class="text-xs text-blue-600 mt-1">Submissions</p>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-4 text-center">
+                        <p class="text-2xl font-bold text-purple-700">${summary.total_notes || 0}</p>
+                        <p class="text-xs text-purple-600 mt-1">Notes</p>
+                    </div>
+                    <div class="bg-red-50 rounded-lg p-4 text-center">
+                        <p class="text-2xl font-bold text-red-700">${summary.total_delays || 0}</p>
+                        <p class="text-xs text-red-600 mt-1">Delays</p>
+                    </div>
+                    <div class="bg-amber-50 rounded-lg p-4 text-center">
+                        <p class="text-2xl font-bold text-amber-700">${summary.total_delay_days || 0}</p>
+                        <p class="text-xs text-amber-600 mt-1">Delay Days</p>
+                    </div>
+                </div>
         `;
+        
+        if (summary.avg_ratings_overall && Object.keys(summary.avg_ratings_overall).length > 0) {
+            html += `
+                <div class="mb-6">
+                    <h3 class="text-sm font-semibold text-gray-900 mb-3">Rating Averages & Trends</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            `;
+            for (const [key, value] of Object.entries(summary.avg_ratings_overall)) {
+                let trendHtml = '<span class="text-xs">—</span>';
+                const trend = summary.rating_trends ? summary.rating_trends[key] : null;
+                if (trend === 'improved') {
+                    trendHtml = '<span class="text-xs text-green-600 font-medium">↑ improved</span>';
+                } else if (trend === 'declined') {
+                    trendHtml = '<span class="text-xs text-red-600 font-medium">↓ declined</span>';
+                } else if (trend === 'stable') {
+                    trendHtml = '<span class="text-xs text-gray-500 font-medium">→ stable</span>';
+                }
+                html += `
+                    <div class="bg-gray-50 rounded-lg p-3 text-center">
+                        <p class="text-xs text-gray-500">${ratingLabels[key] || key}</p>
+                        <p class="text-lg font-bold text-gray-900">${value !== null && value !== undefined ? value.toFixed(2) : '—'}</p>
+                        ${trendHtml}
+                    </div>
+                `;
+            }
+            html += `</div></div>`;
+        }
+        
+        html += '<div class="space-y-4">';
         
         if (report.reports.length === 0) {
             html += '<p class="text-sm text-gray-400 text-center py-4">No reports for this month.</p>';
         } else {
             report.reports.forEach(item => {
-                const delayDays = item.completed_at ? (item.delay_days || 0) : calculateDelayDays(item.deadline);
-                const statusBadge = item.completed_at
-                    ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">Completed</span>`
-                    : delayDays > 0
-                        ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed (${delayDays}d)</span>`
-                        : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-amber-100 text-amber-700">On Track</span>`;
-                const delays = item.delays && item.delays.length > 0 ? item.delays.join('<br>') : '<span class="text-gray-400">—</span>';
                 html += `
                     <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center justify-between mb-3">
                             <h4 class="font-semibold text-gray-900">${item.stage_name}</h4>
-                            ${statusBadge}
+                            <div class="flex gap-2">
+                                ${item.completed_this_month ? '<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">Completed This Month</span>' : ''}
+                                ${item.submissions_count > 0 ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 text-blue-700">${item.submissions_count} Submission${item.submissions_count > 1 ? 's' : ''}</span>` : ''}
+                            </div>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
                             <div>
                                 <p class="text-xs text-gray-500">Designer</p>
                                 <p class="font-medium">${item.assigned_designer}</p>
@@ -2585,13 +2716,58 @@ async function loadMonthlyReport() {
                                 <p class="text-xs text-gray-500">Progress</p>
                                 <p class="font-medium">${item.progress}%</p>
                             </div>
+                            <div>
+                                <p class="text-xs text-gray-500">Submissions</p>
+                                <p class="font-medium">${item.submissions_count}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">Delay</p>
+                                <p class="font-medium">${item.delay_days > 0 ? item.delay_days + 'd' : '—'}</p>
+                            </div>
                         </div>
-                        <div class="mt-2 text-sm">
-                            <p class="text-xs text-gray-500">Delays</p>
-                            <p class="text-gray-600">${delays}</p>
-                        </div>
-                    </div>
                 `;
+                
+                if (item.delay_days > 0) {
+                    html += `
+                        <div class="mb-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                            <p class="text-sm font-medium text-red-700">⚠ Delay Detected</p>
+                            <p class="text-xs text-red-600 mt-1">${item.delay_reason || item.delay_days + ' days behind schedule'}</p>
+                        </div>
+                    `;
+                }
+                
+                if (item.avg_ratings && Object.keys(item.avg_ratings).length > 0) {
+                    html += '<div class="mb-3"><p class="text-xs text-gray-500 mb-2">Rating Breakdown</p><div class="grid grid-cols-2 md:grid-cols-4 gap-2">';
+                    for (const [key, value] of Object.entries(item.avg_ratings)) {
+                        const trend = item.rating_trends ? item.rating_trends[key] : null;
+                        let trendArrow = '';
+                        if (trend === 'improved') trendArrow = ' <span class="text-green-600">↑</span>';
+                        else if (trend === 'declined') trendArrow = ' <span class="text-red-600">↓</span>';
+                        else if (trend === 'stable') trendArrow = ' <span class="text-gray-500">→</span>';
+                        html += `<div class="text-center bg-white rounded p-2"><p class="text-xs text-gray-500">${ratingLabels[key] || key}</p><p class="text-sm font-semibold text-gray-900">${value !== null && value !== undefined ? value.toFixed(2) : '—'}${trendArrow}</p></div>`;
+                    }
+                    html += '</div></div>';
+                }
+                
+                if (item.activities && item.activities.length > 0) {
+                    html += '<div class="space-y-2">';
+                    item.activities.forEach(activity => {
+                        html += `
+                            <div class="bg-white rounded-lg p-3 border border-gray-200">
+                                <div class="flex items-center justify-between mb-1">
+                                    <p class="text-xs font-medium text-gray-700">${activity.submitted_by || 'Unknown'}</p>
+                                    <p class="text-xs text-gray-500">${activity.date || ''}</p>
+                                </div>
+                        `;
+                        if (activity.notes) {
+                            html += `<p class="text-xs text-gray-600 italic">${activity.notes}</p>`;
+                        }
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                }
+                
+                html += '</div>';
             });
         }
         
