@@ -920,8 +920,17 @@ async function saveProjectEdit() {
 async function markStageComplete(stageIndex) {
     console.log('[APP] markStageComplete: Opening delay reason modal for stage', stageIndex, 'on project', selectedProjectId);
     pendingCompleteStageIndex = stageIndex;
-    document.getElementById('delayReasonStageLabel').textContent = `Stage: ${WORKFLOW_STAGES[stageIndex]}`;
     document.getElementById('delayReasonInput').value = '';
+    
+    // Fetch project to get phase_type-aware stage name
+    try {
+        const project = await api.getProject(selectedProjectId);
+        const stages = getStagesForPhaseType(project.phase_type);
+        document.getElementById('delayReasonStageLabel').textContent = `Stage: ${stages[stageIndex]}`;
+    } catch (err) {
+        document.getElementById('delayReasonStageLabel').textContent = `Stage: ${stageIndex + 1}`;
+    }
+    
     document.getElementById('delayReasonModal').classList.remove('hidden');
 }
 
@@ -937,7 +946,15 @@ async function confirmMarkComplete() {
     try {
         await api.completeStage(selectedProjectId, pendingCompleteStageIndex, delayReason || undefined);
         populateProjectDetails();
-        showToast(`"${WORKFLOW_STAGES[pendingCompleteStageIndex]}" marked as complete!`);
+        
+        // Fetch project to get phase_type-aware stage name for toast
+        try {
+            const project = await api.getProject(selectedProjectId);
+            const stages = getStagesForPhaseType(project.phase_type);
+            showToast(`"${stages[pendingCompleteStageIndex]}" marked as complete!`);
+        } catch (err) {
+            showToast(`Stage ${pendingCompleteStageIndex + 1} marked as complete!`);
+        }
     } catch (err) {
         console.error('[APP] confirmMarkComplete: Failed to mark stage complete:', err.message);
         showToast(err.message);
@@ -951,7 +968,15 @@ async function unmarkStageComplete(stageIndex) {
     try {
         await api.unmarkStage(selectedProjectId, stageIndex);
         populateProjectDetails();
-        showToast(`"${WORKFLOW_STAGES[stageIndex]}" unmarked from complete.`);
+        
+        // Fetch project to get phase_type-aware stage name for toast
+        try {
+            const project = await api.getProject(selectedProjectId);
+            const stages = getStagesForPhaseType(project.phase_type);
+            showToast(`"${stages[stageIndex]}" unmarked from complete.`);
+        } catch (err) {
+            showToast(`Stage ${stageIndex + 1} unmarked from complete.`);
+        }
     } catch (err) {
         console.error('[APP] unmarkStageComplete: Failed to unmark stage:', err.message);
         showToast(err.message);
@@ -1270,10 +1295,15 @@ function deselectAllManagers() {
 // ============================================
 function openDesignerModal(stageIndex) {
     designerModalStageIndex = stageIndex;
-    document.getElementById('designerModalStageLabel').textContent =
-        `Stage: ${WORKFLOW_STAGES[stageIndex]}`;
     document.getElementById('designerSearchInput').value = '';
     renderDesignerChecklist();
+    
+    // Fetch project to get phase_type-aware stage name
+    api.getProject(selectedProjectId).then(project => {
+        const stages = getStagesForPhaseType(project.phase_type);
+        document.getElementById('designerModalStageLabel').textContent = `Stage: ${stages[stageIndex]}`;
+    });
+    
     document.getElementById('designerModal').classList.remove('hidden');
 }
 
@@ -1325,7 +1355,11 @@ async function saveDesignerAssignment() {
         closeDesignerModal();
         populateProjectDetails();
         const assignedCount = tempDesignerSelections.length;
-        showToast(`${assignedCount} designer${assignedCount !== 1 ? 's' : ''} assigned to "${WORKFLOW_STAGES[designerModalStageIndex]}"`);
+        
+        // Fetch project to get phase_type-aware stage name for toast
+        const project = await api.getProject(selectedProjectId);
+        const stages = getStagesForPhaseType(project.phase_type);
+        showToast(`${assignedCount} designer${assignedCount !== 1 ? 's' : ''} assigned to "${stages[designerModalStageIndex]}"`);
     } catch (err) {
         showToast('Failed to assign designers: ' + err.message);
     }
@@ -2059,12 +2093,33 @@ function openSubmitReportModalFromTable() {
             html += `<option value="${p.id}">${p.name}</option>`;
         });
         projectSelect.innerHTML = html;
+        
+        // Auto-populate stages when project is selected
+        projectSelect.onchange = function() {
+            populateModalStages(parseInt(this.value));
+        };
     });
     
-    document.getElementById('reportModalStage').value = '';
+    // Reset stage dropdown to empty
+    document.getElementById('reportModalStage').innerHTML = '<option value="">Select stage...</option>';
     document.getElementById('reportNotes').value = '';
     ['reportRatingCosting', 'reportRatingWillingness', 'reportRatingEngagement', 'reportRatingDurability', 'reportRatingAge', 'reportRatingEase', 'reportRatingAesthetics', 'reportRatingStore'].forEach(id => {
         document.getElementById(id).value = '';
+    });
+}
+
+function populateModalStages(projectId) {
+    if (!projectId) {
+        document.getElementById('reportModalStage').innerHTML = '<option value="">Select stage...</option>';
+        return;
+    }
+    api.getProject(projectId).then(project => {
+        const stages = getStagesForPhaseType(project.phase_type);
+        let html = '<option value="">Select stage...</option>';
+        stages.forEach((stage, idx) => {
+            html += `<option value="${idx}">Stage ${idx + 1} — ${stage}</option>`;
+        });
+        document.getElementById('reportModalStage').innerHTML = html;
     });
 }
 
@@ -2082,6 +2137,9 @@ async function submitReportFromWeb() {
         return;
     }
     
+    const project = await api.getProject(parseInt(projectId));
+    const stages = getStagesForPhaseType(project.phase_type);
+    
     const ratingMap = {
         costing: document.getElementById('reportRatingCosting').value,
         willingness_to_buy: document.getElementById('reportRatingWillingness').value,
@@ -2096,7 +2154,7 @@ async function submitReportFromWeb() {
     const reportData = {
         project_id: parseInt(projectId),
         stage_index: parseInt(stageIndex),
-        stage_name: WORKFLOW_STAGES[parseInt(stageIndex)] || 'Stage ' + (parseInt(stageIndex) + 1),
+        stage_name: stages[parseInt(stageIndex)] || 'Stage ' + (parseInt(stageIndex) + 1),
         submitted_by_user_id: String(CURRENT_USER?.id || ''),
         submitted_by_name: CURRENT_USER?.name || 'Unknown',
         submitted_by_role: CURRENT_USER?.role || 'USER',

@@ -1532,7 +1532,7 @@ async def update_project(
         )
         designer_name = designer.name if designer else "Unassigned"
         now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
-        current_stage = _get_current_stage_name(project.stage_index)
+        current_stage = _get_current_stage_name(project.stage_index, project.phase_type)
 
         async def _notify_update():
             with SessionLocal() as bg_db:
@@ -1651,8 +1651,8 @@ async def complete_stage(
     designer = db.query(User).filter(User.id == project.assigned_designer_id).first()
     designer_name = designer.name if designer else "Unassigned"
     now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
-    completed_stage_name = _get_current_stage_name(stage_index)
-    next_stage_name = _get_current_stage_name(project.stage_index)
+    completed_stage_name = _get_current_stage_name(stage_index, project.phase_type)
+    next_stage_name = _get_current_stage_name(project.stage_index, project.phase_type)
 
     if project.progress == 100:
         notify = (
@@ -1744,7 +1744,7 @@ async def unmark_stage(
     designer = db.query(User).filter(User.id == project.assigned_designer_id).first()
     designer_name = designer.name if designer else "Unassigned"
     now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
-    unmarked_stage_name = _get_current_stage_name(stage_index)
+    unmarked_stage_name = _get_current_stage_name(stage_index, project.phase_type)
 
     notify = (
         f"⏪ *Stage Unmarked*\n\n"
@@ -1927,18 +1927,43 @@ def _get_project_details(db, project_id):
     return project, designer, phases
 
 
-def _get_current_stage_name(stage_index):
-    stage_names = [
-        "Lock Concept",
-        "Lock UX features",
-        "Lock MRP",
-        "Lock graphics theme",
-        "Lock Production feasibility",
-        "Lock Procurement",
-        "Lock IM",
-        "Lock CCP",
-        "Final Handover",
-    ]
+IDEATION_STAGES = [
+    "Sourcing Starts",
+    "Mockup 1",
+    "Internal Discussion (Deeksha + Mentor + Rajat)",
+    "User Testing -1 Concluded",
+    "Mockup 2 - Internal Discussion",
+    "Sourcing Locked with Production",
+    "Costing Sheet Check",
+    "User Testing -2",
+    "Internal Discussion",
+    "Sales Alignment for Launch Plan",
+    "Conclusion",
+]
+
+PRODUCTION_STAGES = [
+    "Lock Concept",
+    "Lock UX features",
+    "Lock MRP",
+    "Lock graphics theme",
+    "Lock Production feasibility",
+    "Lock Procurement",
+    "Lock IM",
+    "Lock CCP",
+    "Final Handover",
+]
+
+
+def _get_stages_for_phase_type(phase_type):
+    if phase_type == "IDEATION":
+        return IDEATION_STAGES
+    return PRODUCTION_STAGES
+
+
+def _get_current_stage_name(stage_index, phase_type=None):
+    if phase_type is None:
+        phase_type = "PRODUCTION"
+    stage_names = _get_stages_for_phase_type(phase_type)
     return (
         stage_names[stage_index] if stage_index < len(stage_names) else "Unknown Stage"
     )
@@ -2357,7 +2382,7 @@ async def send_stage_update_reminder(db, project_id, kind="manual", phase=None):
     current_phase = (
         phases[project.stage_index] if project.stage_index < len(phases) else None
     )
-    stage_name = _get_current_stage_name(project.stage_index)
+    stage_name = _get_current_stage_name(project.stage_index, project.phase_type)
     designer_name = designer.name if designer else "Unassigned"
     designer_mention = (
         f"<@{designer.slack_user_id}>" if designer and designer.slack_user_id else designer_name
@@ -2452,8 +2477,8 @@ async def notify_stage_completed(db, project_id, stage_index):
     if not config:
         return
     if project.slack_channel_id:
-        completed_stage_name = _get_current_stage_name(stage_index)
-        next_stage_name = _get_current_stage_name(project.stage_index)
+        completed_stage_name = _get_current_stage_name(stage_index, project.phase_type)
+        next_stage_name = _get_current_stage_name(project.stage_index, project.phase_type)
         if project.progress == 100:
             blocks = [
                 {
@@ -2544,7 +2569,7 @@ async def notify_stage_unmarked(db, project_id, stage_index):
     if not config:
         return
     if project.slack_channel_id:
-        unmarked_stage_name = _get_current_stage_name(stage_index)
+        unmarked_stage_name = _get_current_stage_name(stage_index, project.phase_type)
         blocks = [
             {
                 "type": "header",
@@ -2609,7 +2634,7 @@ async def notify_designers_assigned(db, project_id, stage_index, designer_ids):
         return
     if not project.slack_channel_id:
         return
-    stage_name = _get_current_stage_name(stage_index)
+    stage_name = _get_current_stage_name(stage_index, project.phase_type)
     assigned_names = []
     for did in designer_ids:
         d = db.query(User).filter(User.id == did).first()
@@ -2659,7 +2684,7 @@ async def notify_designers_assigned(db, project_id, stage_index, designer_ids):
 
 
 def _build_project_block(project, designer, phases):
-    current_stage = _get_current_stage_name(project.stage_index)
+    current_stage = _get_current_stage_name(project.stage_index, project.phase_type)
     designer_name = designer.name if designer else "Unassigned"
     stages_completed = sum(1 for p in phases if p.completed_at)
     total_stages = len(phases)
@@ -3217,7 +3242,7 @@ async def cancel_slack_completion(
     if project and project.slack_channel_id:
         cancel_text = (
             f"❌ *Completion Request Cancelled*\n\n"
-            f"Stage: {_get_current_stage_name(tracker.stage_index)}\n"
+            f"Stage: {_get_current_stage_name(tracker.stage_index, tracker.project.phase_type)}\n"
             f"📦 Project: {project.name}\n"
             f"Cancelled by: {user.name}"
         )
@@ -3494,7 +3519,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             project.name, project.stage_index, user_name or "Unknown",
                         )
                         # Post a message in channel asking for manager confirmation
-                        stage_name = _get_current_stage_name(project.stage_index)
+                        stage_name = _get_current_stage_name(project.stage_index, project.phase_type)
                         confirm_text = (
                             f"🔔 *Stage Completion Request*\n\n"
                             f"*{user_name}* requests to complete: *{stage_name}*\n"
@@ -3587,8 +3612,8 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                         User.id == project.assigned_designer_id
                                     ).first()
                                     designer_name = designer.name if designer else "Unassigned"
-                                    completed_stage_name = _get_current_stage_name(stage_idx)
-                                    next_stage_name = _get_current_stage_name(project.stage_index)
+                                    completed_stage_name = _get_current_stage_name(stage_idx, project.phase_type)
+                                    next_stage_name = _get_current_stage_name(project.stage_index, project.phase_type)
 
                                     if project.progress == 100:
                                         notify_text = (
@@ -3655,8 +3680,8 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                     User.id == project.assigned_designer_id
                                 ).first()
                                 designer_name = designer.name if designer else "Unassigned"
-                                completed_stage_name = _get_current_stage_name(stage_idx)
-                                next_stage_name = _get_current_stage_name(project.stage_index)
+                                completed_stage_name = _get_current_stage_name(stage_idx, project.phase_type)
+                                next_stage_name = _get_current_stage_name(project.stage_index, project.phase_type)
 
                                 if project.progress == 100:
                                     notify_text = (
@@ -3784,7 +3809,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     if stage_idx > 0:
                         prev_phase = phases[stage_idx - 1]
                         if not prev_phase.completed_at:
-                            prev_name = _get_current_stage_name(stage_idx - 1)
+                            prev_name = _get_current_stage_name(stage_idx - 1, project.phase_type)
                             logger.info(
                                 "[SLACK WEBHOOK] Previous stage not completed | prev_stage=%s",
                                 prev_name,
@@ -3847,7 +3872,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 },
                             )
                     else:
-                        next_stage = _get_current_stage_name(project.stage_index)
+                        next_stage = _get_current_stage_name(project.stage_index, project.phase_type)
                         blocks = [
                             {
                                 "type": "header",
@@ -3899,7 +3924,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 },
                             )
                 elif action_id == "submit_report":
-                    current_stage = _get_current_stage_name(project.stage_index)
+                    current_stage = _get_current_stage_name(project.stage_index, project.phase_type)
                     report_blocks = [
                         {
                             "type": "header",
@@ -4149,7 +4174,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     today_str = datetime.utcnow().strftime("%Y-%m-%d")
                     stages_completed = sum(1 for p in phases if p.completed_at)
                     total_stages = len(phases)
-                    current_stage = _get_current_stage_name(project.stage_index)
+                    current_stage = _get_current_stage_name(project.stage_index, project.phase_type)
                     reply_text = (
                         f"📊 *Progress Report*\n\n"
                         f"Project: {project.name}\n"
@@ -4169,7 +4194,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             {"channel": project.slack_channel_id, "text": reply_text},
                         )
                 elif action_id == "stage_update":
-                    current_stage = _get_current_stage_name(project.stage_index)
+                    current_stage = _get_current_stage_name(project.stage_index, project.phase_type)
                     current_phase = (
                         phases[project.stage_index]
                         if project.stage_index < len(phases)
@@ -4355,7 +4380,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             "type": "section",
                             "text": {
                                 "type": "mrkdwn",
-                                "text": f"📝 Your note has been logged.\n📦 Project: {project.name}\n🔄 Current Stage: {_get_current_stage_name(project.stage_index)}",
+                                "text": f"📝 Your note has been logged.\n📦 Project: {project.name}\n🔄 Current Stage: {_get_current_stage_name(project.stage_index, project.phase_type)}",
                             },
                         },
                     ]
@@ -4490,7 +4515,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 slack_user_id = payload.get("user", {}).get("id", "")
                 slack_user_name = payload.get("user", {}).get("name", "")
                 channel_id = payload.get("channel", {}).get("id", "")
-                stage_name = _get_current_stage_name(stage_index)
+                stage_name = _get_current_stage_name(stage_index, project.phase_type)
                 
                 # Calculate deadline and delay
                 current_phase = phases[stage_index] if stage_index < len(phases) else None
@@ -4568,7 +4593,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 for i, phase in enumerate(phases):
                     check = "✅" if phase.completed_at else "⬜"
                     marker = " ➜" if i == new_stage_index else ""
-                    phase_name = _get_current_stage_name(i)
+                    phase_name = _get_current_stage_name(i, project.phase_type)
                     timeline_lines.append(f"{check} {i + 1}. {phase_name}{marker}")
                 timeline_text = "\n".join(timeline_lines)
                 
@@ -4588,7 +4613,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 
                 next_stage_text = ""
                 if new_stage_index < total_phases:
-                    next_stage = _get_current_stage_name(new_stage_index)
+                    next_stage = _get_current_stage_name(new_stage_index, project.phase_type)
                     next_phase = phases[new_stage_index] if new_stage_index < len(phases) else None
                     next_deadline = next_phase.deadline if next_phase else "TBD"
                     next_stage_text = f"\n🔄 *Next Stage:* {next_stage}\n📅 *New Deadline:* {next_deadline}"
@@ -5094,7 +5119,7 @@ async def send_manual_reminder(
         raise HTTPException(
             status_code=400, detail="Slack is not configured or not reachable."
         )
-    return {"message": "Reminder sent", "stage": _get_current_stage_name(project.stage_index)}
+    return {"message": "Reminder sent", "stage": _get_current_stage_name(project.stage_index, project.phase_type)}
 
 
 # ---------- Admin Data Export ----------
@@ -5194,7 +5219,7 @@ def _projects_rows(db, dt_from, dt_to):
             "assigned_designer": designer.name if designer else "",
             "created_by": creator.name if creator else "",
             "stage_index": p.stage_index,
-            "current_stage": _get_current_stage_name(p.stage_index),
+            "current_stage": _get_current_stage_name(p.stage_index, p.phase_type),
             "progress": p.progress, "status": p.status,
             "start_date": p.start_date, "deadline": p.deadline,
             "slack_channel_name": p.slack_channel_name,
@@ -5211,7 +5236,7 @@ def _projects_rows(db, dt_from, dt_to):
             rows_phase.append({
                 "project_id": p.id, "project_name": p.name,
                 "stage_index": ph.stage_index,
-                "stage_name": _get_current_stage_name(ph.stage_index),
+                "stage_name": _get_current_stage_name(ph.stage_index, p.phase_type),
                 "deadline": ph.deadline, "designer_update": ph.designer_update,
                 "delay_reason": ph.delay_reason,
                 "completed_at": ph.completed_at or "",
@@ -5529,7 +5554,7 @@ async def get_report_summary(
                 "project_name": project.name,
                 "assigned_designer": designer.name if (designer := db.query(User).filter(User.id == project.assigned_designer_id).first()) else "Unassigned",
                 "stage_index": phase.stage_index,
-                "stage_name": _get_current_stage_name(phase.stage_index),
+                "stage_name": _get_current_stage_name(phase.stage_index, project.phase_type),
                 "total_reports": total,
             }
             for field, avg_key in valid_fields:
@@ -5628,7 +5653,7 @@ async def get_project_report(
                     pass
         phase_items.append(PhaseReportItem(
             stage_index=ph.stage_index,
-            stage_name=_get_current_stage_name(ph.stage_index),
+            stage_name=_get_current_stage_name(ph.stage_index, project.phase_type),
             deadline=ph.deadline,
             completed_at=ph.completed_at,
             designer_update=ph.designer_update or "",
@@ -5711,7 +5736,7 @@ async def get_project_weekly_report(
             project_name=project.name,
             assigned_designer=designer.name if designer else "Unassigned",
             stage_index=ph.stage_index,
-            stage_name=_get_current_stage_name(ph.stage_index),
+            stage_name=_get_current_stage_name(ph.stage_index, project.phase_type),
             status=project.status,
             progress=project.progress,
             deadline=ph.deadline,
@@ -5797,7 +5822,7 @@ async def get_project_monthly_report(
             project_name=project.name,
             assigned_designer=designer.name if designer else "Unassigned",
             stage_index=idx,
-            stage_name=_get_current_stage_name(idx),
+            stage_name=_get_current_stage_name(idx, project.phase_type),
             status=project.status,
             progress=project.progress,
             deadline=ph.deadline,
@@ -5895,7 +5920,7 @@ async def get_designer_weekly_performance(
             project_id=proj.id,
             project_name=proj.name,
             stage_index=ph.stage_index,
-            stage_name=_get_current_stage_name(ph.stage_index),
+            stage_name=_get_current_stage_name(ph.stage_index, proj.phase_type),
             status=proj.status,
             progress=proj.progress,
             deadline=ph.deadline,

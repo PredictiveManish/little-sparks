@@ -29,7 +29,7 @@ function getStagesForPhaseType(phaseType) {
     return PRODUCTION_STAGES;
 }
 
-const WORKFLOW_STAGES = PRODUCTION_STAGES;
+const WORKFLOW_STAGES = (phaseType) => getStagesForPhaseType(phaseType || 'PRODUCTION');
 
 function formatDate(dateStr) {
     if (!dateStr) return '—';
