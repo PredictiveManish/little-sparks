@@ -2247,9 +2247,38 @@ async function populateReportsPage() {
         const monthlyYear = document.getElementById('monthlyYear');
         if (monthlyMonth) monthlyMonth.value = new Date().getMonth() + 1;
         if (monthlyYear) monthlyYear.value = new Date().getFullYear();
+        
+        const designerPerfMonth = document.getElementById('designerPerfMonth');
+        const designerPerfYear = document.getElementById('designerPerfYear');
+        if (designerPerfMonth) designerPerfMonth.value = new Date().getMonth() + 1;
+        if (designerPerfYear) designerPerfYear.value = new Date().getFullYear();
+        
+        const designerPerfWeekStart = document.getElementById('designerPerfWeekStart');
+        const designerPerfWeekEnd = document.getElementById('designerPerfWeekEnd');
+        if (designerPerfWeekStart || designerPerfWeekEnd) {
+            const today = new Date();
+            const day = today.getDay() || 7;
+            const monday = new Date(today);
+            monday.setDate(today.getDate() - day + 1);
+            if (designerPerfWeekStart) designerPerfWeekStart.value = monday.toISOString().split('T')[0];
+            if (designerPerfWeekEnd) designerPerfWeekEnd.value = today.toISOString().split('T')[0];
+        }
     } catch (err) {
         console.error('[APP] populateReportsPage: Failed:', err.message);
         showToast('Failed to load reports page: ' + err.message);
+    }
+}
+
+function toggleDesignerPerfDateInputs() {
+    const period = document.getElementById('designerPerfPeriod').value;
+    const weeklyInputs = document.getElementById('designerPerfWeeklyInputs');
+    const monthlyInputs = document.getElementById('designerPerfMonthlyInputs');
+    if (period === 'weekly') {
+        weeklyInputs.classList.remove('hidden');
+        monthlyInputs.classList.add('hidden');
+    } else {
+        weeklyInputs.classList.add('hidden');
+        monthlyInputs.classList.remove('hidden');
     }
 }
 
@@ -2795,13 +2824,21 @@ async function loadDesignerPerformance() {
         let endpoint;
         
         if (period === 'weekly') {
-            const weekStart = document.getElementById('weeklyWeekStart').value || new Date().toISOString().split('T')[0];
-            const weekEnd = document.getElementById('weeklyWeekEnd').value || new Date().toISOString().split('T')[0];
+            const weekStart = document.getElementById('designerPerfWeekStart').value;
+            const weekEnd = document.getElementById('designerPerfWeekEnd').value;
+            if (!weekStart || !weekEnd) {
+                showToast('Please select week dates');
+                return;
+            }
             report = await api.getDesignerWeeklyPerformance(parseInt(designerId), weekStart, weekEnd);
             endpoint = `/reports/designer/${designerId}/performance/download?period=weekly&week_start=${weekStart}&week_end=${weekEnd}`;
         } else {
-            const month = document.getElementById('monthlyMonth').value;
-            const year = document.getElementById('monthlyYear').value;
+            const month = document.getElementById('designerPerfMonth').value;
+            const year = document.getElementById('designerPerfYear').value;
+            if (!month || !year) {
+                showToast('Please select month and year');
+                return;
+            }
             report = await api.getDesignerMonthlyPerformance(parseInt(designerId), parseInt(month), parseInt(year));
             endpoint = `/reports/designer/${designerId}/performance/download?period=monthly&month=${month}&year=${year}`;
         }

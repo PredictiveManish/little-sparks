@@ -944,13 +944,54 @@
                 </div>
                 <div>
                     <label class="block text-xs font-medium text-gray-500 mb-1">Period</label>
-                    <select id="designerPerfPeriod" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white">
+                    <select id="designerPerfPeriod" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white" onchange="toggleDesignerPerfDateInputs()">
                         <option value="weekly">Weekly</option>
                         <option value="monthly">Monthly</option>
                     </select>
                 </div>
                 <div class="flex items-end">
                     <button onclick="loadDesignerPerformance()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors w-full">Generate Report</button>
+                </div>
+            </div>
+            <div id="designerPerfDateInputs" class="mt-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="designerPerfWeeklyInputs">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Week Start</label>
+                        <input type="date" id="designerPerfWeekStart" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Week End</label>
+                        <input type="date" id="designerPerfWeekEnd" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="loadDesignerPerformance()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors w-full">Generate Report</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 hidden" id="designerPerfMonthlyInputs">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Month</label>
+                        <select id="designerPerfMonth" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white">
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Year</label>
+                        <input type="number" id="designerPerfYear" min="2020" max="2030" value="2025" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none">
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="loadDesignerPerformance()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors w-full">Generate Report</button>
+                    </div>
                 </div>
             </div>
         </div>

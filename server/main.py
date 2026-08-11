@@ -6019,6 +6019,7 @@ async def get_project_monthly_report(
             deadline=ph.deadline,
             completed_at=ph.completed_at,
             delay_days=phase_delay_days,
+            delay_reason=ph.delay_reason or "",
             stage_reports=sr_list,
             completed_this_month=completed_this_month,
             submissions_count=submissions_count,
@@ -6085,6 +6086,8 @@ async def get_designer_weekly_performance(
         .filter(
             Phase.project_id.in_(project_ids),
             Phase.completed_at.isnot(None),
+            Phase.completed_at >= week_start,
+            Phase.completed_at <= week_end + "T23:59:59",
         )
         .all()
     )
@@ -6195,6 +6198,8 @@ async def get_designer_monthly_performance(
         .filter(
             Phase.project_id.in_(project_ids),
             Phase.completed_at.isnot(None),
+            Phase.completed_at >= month_start,
+            Phase.completed_at < month_end,
         )
         .all()
     )
@@ -6237,7 +6242,7 @@ async def get_designer_monthly_performance(
             project_id=proj.id,
             project_name=proj.name,
             stage_index=ph.stage_index,
-            stage_name=_get_current_stage_name(ph.stage_index),
+            stage_name=_get_current_stage_name(ph.stage_index, proj.phase_type),
             status=proj.status,
             progress=proj.progress,
             deadline=ph.deadline,

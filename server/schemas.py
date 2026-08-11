@@ -416,6 +416,7 @@ class MonthlyReportItem(BaseModel):
     deadline: str = ""
     completed_at: Optional[str] = None
     delay_days: Optional[int] = 0
+    delay_reason: str = ""
     designer_updates: List[str] = []
     delays: List[str] = []
     stage_reports: List[StageReportResponse] = []
