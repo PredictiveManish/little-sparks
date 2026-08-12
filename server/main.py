@@ -237,7 +237,7 @@ def verify_password(password: str, hashed: str) -> bool:
 
 def create_jwt_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.now(IST) + timedelta(hours=24)
+    expire = datetime.now(IST).replace(tzinfo=None) + timedelta(hours=24)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -251,7 +251,7 @@ def create_session_token() -> str:
 
 def create_session(user_id: int, db: Session) -> SessionModel:
     token = create_session_token()
-    expires = datetime.now(IST) + timedelta(days=SESSION_LIFETIME_DAYS)
+    expires = datetime.now(IST).replace(tzinfo=None) + timedelta(days=SESSION_LIFETIME_DAYS)
     session = SessionModel(
         session_token=token,
         user_id=user_id,
@@ -285,7 +285,7 @@ def get_session_from_token(token: str, db: Session) -> Optional[SessionModel]:
     if not session:
         logger.warning("Session not found for token: %s...", token[:20])
         return None
-    if session.expires_at and session.expires_at < datetime.now(IST): # pyright: ignore[reportGeneralTypeIssues]
+    if session.expires_at and session.expires_at < datetime.now(IST).replace(tzinfo=None): # pyright: ignore[reportGeneralTypeIssues]
         session.revoked = True # pyright: ignore[reportAttributeAccessIssue]
         db.commit()
         logger.warning(
@@ -512,7 +512,7 @@ async def refresh_slack_token(db):
             if new_refresh_token:
                 config.refresh_token = encrypt_token(new_refresh_token)
             if expires_in:
-                config.token_expires_at = datetime.now(IST) + timedelta(
+                config.token_expires_at = datetime.now(IST).replace(tzinfo=None) + timedelta(
                     seconds=expires_in
                 )
             db.commit()
@@ -539,7 +539,7 @@ def _is_token_expiring_soon(token_expires_at):
             token_expires_at = datetime.strptime(token_expires_at, "%Y-%m-%d %H:%M:%S")
         except ValueError:
             return False
-    now = datetime.now(IST)
+    now = datetime.now(IST).replace(tzinfo=None)
     return (token_expires_at - now) < timedelta(minutes=10)
 
 
@@ -625,7 +625,7 @@ _slack_jwks_timestamp = 0
 
 async def get_slack_jwks():
     global _slack_jwks_cache, _slack_jwks_timestamp
-    now = datetime.now(IST).timestamp()
+    now = datetime.now(IST).replace(tzinfo=None).timestamp()
     if _slack_jwks_cache and (now - _slack_jwks_timestamp) < 3600:
         logger.debug(
             "[SLACK OIDC] Using cached JWKS (age=%.1fs)", now - _slack_jwks_timestamp
@@ -752,7 +752,7 @@ def verify_slack_id_token(
 
 def _get_slack_jwks_sync():
     global _slack_jwks_cache, _slack_jwks_timestamp
-    now = datetime.now(IST).timestamp()
+    now = datetime.now(IST).replace(tzinfo=None).timestamp()
     if _slack_jwks_cache and (now - _slack_jwks_timestamp) < 3600:
         return _slack_jwks_cache
     return _slack_jwks_cache
@@ -1535,7 +1535,7 @@ async def update_project(
             db.query(User).filter(User.id == project.assigned_designer_id).first()
         )
         designer_name = designer.name if designer else "Unassigned"
-        now_str = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
+        now_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M")
         current_stage = _get_current_stage_name(project.stage_index, project.phase_type)
 
         async def _notify_update():
@@ -1634,7 +1634,7 @@ async def complete_stage(
         else:
             phases[stage_index].delay_reason = delay_reason
 
-    now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
+    now = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
     phases[stage_index].completed_at = now
 
     total = len(phases)
@@ -1642,7 +1642,7 @@ async def complete_stage(
     project.progress = round((completed / total) * 100)
     project.stage_index = min(stage_index + 1, total - 1)
 
-    today_str = datetime.now(IST).strftime("%Y-%m-%d")
+    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
     if project.progress == 100:
         project.status = "COMPLETED"
     elif project.deadline < today_str:
@@ -1654,7 +1654,7 @@ async def complete_stage(
 
     designer = db.query(User).filter(User.id == project.assigned_designer_id).first()
     designer_name = designer.name if designer else "Unassigned"
-    now_str = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
+    now_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M")
     completed_stage_name = _get_current_stage_name(stage_index, project.phase_type)
     next_stage_name = _get_current_stage_name(project.stage_index, project.phase_type)
 
@@ -1735,7 +1735,7 @@ async def unmark_stage(
     completed = sum(1 for ph in phases if ph.completed_at)
     project.progress = round((completed / total) * 100)
 
-    today_str = datetime.now(IST).strftime("%Y-%m-%d")
+    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
     if project.progress == 100:
         project.status = "COMPLETED"
     elif project.deadline < today_str:
@@ -1747,7 +1747,7 @@ async def unmark_stage(
 
     designer = db.query(User).filter(User.id == project.assigned_designer_id).first()
     designer_name = designer.name if designer else "Unassigned"
-    now_str = datetime.now(IST).strftime("%Y-%m-%d %H:%M")
+    now_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M")
     unmarked_stage_name = _get_current_stage_name(stage_index, project.phase_type)
 
     notify = (
@@ -1986,7 +1986,7 @@ def verify_slack_signature(timestamp, signature, body, signing_secret):
         return False
     try:
         ts_int = int(timestamp)
-        current_ts = int(datetime.now(IST).timestamp())
+        current_ts = int(datetime.now(IST).replace(tzinfo=None).timestamp())
         diff = abs(current_ts - ts_int)
         if diff > 60 * 5:
             logger.warning(
@@ -2692,7 +2692,7 @@ def _build_project_block(project, designer, phases):
     designer_name = designer.name if designer else "Unassigned"
     stages_completed = sum(1 for p in phases if p.completed_at)
     total_stages = len(phases)
-    today_str = datetime.now(IST).strftime("%Y-%m-%d")
+    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
     days_left = (datetime.strptime(project.deadline, "%Y-%m-%d") - datetime.now()).days
 
     return {
@@ -2964,7 +2964,7 @@ async def slack_install_callback(
             config.refresh_token = encrypt_token(refresh_token)
             logger.info("[SLACK INSTALL] Stored refresh_token (token rotation enabled)")
         if expires_in:
-            config.token_expires_at = datetime.now(IST) + timedelta(seconds=expires_in)
+            config.token_expires_at = datetime.now(IST).replace(tzinfo=None) + timedelta(seconds=expires_in)
             logger.info("[SLACK INSTALL] Token expires at: %s", config.token_expires_at)
         # Signing secret is app-level (from Basic Information), not returned by oauth.v2.access.
         # Only set it if it hasn't been configured yet and we have one from env.
@@ -2990,7 +2990,7 @@ async def slack_install_callback(
             config.refresh_token = encrypt_token(refresh_token)
             logger.info("[SLACK INSTALL] Stored refresh_token (token rotation enabled)")
         if expires_in:
-            config.token_expires_at = datetime.now(IST) + timedelta(seconds=expires_in)
+            config.token_expires_at = datetime.now(IST).replace(tzinfo=None) + timedelta(seconds=expires_in)
             logger.info("[SLACK INSTALL] Token expires at: %s", config.token_expires_at)
         db.add(config)
         db.commit()
@@ -3418,7 +3418,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         project.progress = progress_val
                         if progress_val == 100:
                             project.status = "COMPLETED"
-                        elif project.deadline < datetime.now(IST).strftime("%Y-%m-%d"):
+                        elif project.deadline < datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d"):
                             project.status = "DELAYED"
                         else:
                             project.status = "ON_TRACK"
@@ -3563,7 +3563,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         tracker.manager_slack_user_id = user_id
                         tracker.manager_slack_user_name = user_name or "Unknown"
                         tracker.manager_message = text.strip()
-                        tracker.confirmed_at = datetime.now(IST)
+                        tracker.confirmed_at = datetime.now(IST).replace(tzinfo=None)
 
                         # Auto-complete the stage using the same logic as complete_stage endpoint
                         phases = (
@@ -3594,7 +3594,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                     db.commit()
                                 else:
                                     # Complete the stage
-                                    now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
+                                    now = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
                                     phases[stage_idx].completed_at = now
 
                                     total = len(phases)
@@ -3602,7 +3602,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                     project.progress = round((completed / total) * 100)
                                     project.stage_index = min(stage_idx + 1, total - 1)
 
-                                    today_str = datetime.now(IST).strftime("%Y-%m-%d")
+                                    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
                                     if project.progress == 100:
                                         project.status = "COMPLETED"
                                     elif project.deadline < today_str:
@@ -3662,7 +3662,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                     )
                             else:
                                 # Stage 0 — no previous stage check needed
-                                now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
+                                now = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
                                 phases[stage_idx].completed_at = now
 
                                 total = len(phases)
@@ -3670,7 +3670,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 project.progress = round((completed / total) * 100)
                                 project.stage_index = min(stage_idx + 1, total - 1)
 
-                                today_str = datetime.now(IST).strftime("%Y-%m-%d")
+                                today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
                                 if project.progress == 100:
                                     project.status = "COMPLETED"
                                 elif project.deadline < today_str:
@@ -3827,13 +3827,13 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                     }
                                 ],
                             }
-                    now = datetime.now(IST).strftime("%Y-%m-%dT%H:%M:%S")
+                    now = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
                     phases[stage_idx].completed_at = now
                     total = len(phases)
                     completed = sum(1 for ph in phases if ph.completed_at)
                     project.progress = round((completed / total) * 100)
                     project.stage_index = min(stage_idx + 1, total - 1)
-                    today_str = datetime.now(IST).strftime("%Y-%m-%d")
+                    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
                     if project.progress == 100:
                         project.status = "COMPLETED"
                     elif project.deadline < today_str:
@@ -4175,7 +4175,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             },
                         )
                 elif action_id == "view_progress":
-                    today_str = datetime.now(IST).strftime("%Y-%m-%d")
+                    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
                     stages_completed = sum(1 for p in phases if p.completed_at)
                     total_stages = len(phases)
                     current_stage = _get_current_stage_name(project.stage_index, project.phase_type)
@@ -4524,7 +4524,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 # Calculate deadline and delay
                 current_phase = phases[stage_index] if stage_index < len(phases) else None
                 deadline = current_phase.deadline if current_phase else "N/A"
-                today_str = datetime.now(IST).strftime("%Y-%m-%d")
+                today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
                 actual_completion = today_str
                 delay_days = 0
                 if deadline != "N/A":
@@ -4573,7 +4573,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 new_stage_index = min(stage_index + 1, total_phases - 1)
                 project.stage_index = new_stage_index
                 project.progress = round(((completed_stages + 1) / total_phases) * 100)
-                project.updated_at = datetime.now(IST)
+                project.updated_at = datetime.now(IST).replace(tzinfo=None)
                 
                 if project.progress == 100:
                     project.status = "COMPLETED"
@@ -5021,7 +5021,7 @@ async def run_reminder_tick(db):
             ok = await send_stage_update_reminder(db, project.id, kind="daily")
             if ok:
                 project.last_daily_reminder_date = today_str
-                project.last_reminder_sent_at = datetime.now(IST)
+                project.last_reminder_sent_at = datetime.now(IST).replace(tzinfo=None)
                 db.commit()
                 sent_daily += 1
 
@@ -5304,7 +5304,7 @@ def export_data(
     if format not in ("csv", "pdf"):
         raise HTTPException(status_code=400, detail="format must be csv or pdf")
     dt_from, dt_to = _parse_export_range(from_, to)
-    stamp = datetime.now(IST).strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(IST).replace(tzinfo=None).strftime("%Y%m%d-%H%M%S")
 
     if entity == "designers":
         fieldnames, rows = _users_rows(db, ["DESIGNER"], dt_from, dt_to)
@@ -5409,7 +5409,7 @@ async def create_stage_report(
         )
         .first()
     )
-    now_str = datetime.now(IST).strftime("%Y-%m-%d")
+    now_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
     
     # Calculate deadline and delay
     current_phase = phases[report.stage_index] if report.stage_index < len(phases) else None
@@ -5436,7 +5436,7 @@ async def create_stage_report(
         existing.easy_to_store = report.easy_to_store
         existing.notes = report.notes or ""
         existing.submitted_by_name = report.submitted_by_name
-        existing.submitted_at = datetime.now(IST)
+        existing.submitted_at = datetime.now(IST).replace(tzinfo=None)
         existing.actual_completion_date = report.actual_completion_date or now_str
         existing.delay_days = delay_days
         existing.stage_completed = True
@@ -5451,7 +5451,7 @@ async def create_stage_report(
         new_stage_index = min(report.stage_index + 1, total_phases - 1)
         project.stage_index = new_stage_index
         project.progress = round(((completed_stages + 1) / total_phases) * 100)
-        project.updated_at = datetime.now(IST)
+        project.updated_at = datetime.now(IST).replace(tzinfo=None)
         if project.progress == 100:
             project.status = "COMPLETED"
         elif now_str > project.deadline:
@@ -5501,7 +5501,7 @@ async def create_stage_report(
     new_stage_index = min(report.stage_index + 1, total_phases - 1)
     project.stage_index = new_stage_index
     project.progress = round(((completed_stages + 1) / total_phases) * 100)
-    project.updated_at = datetime.now(IST)
+    project.updated_at = datetime.now(IST).replace(tzinfo=None)
     if project.progress == 100:
         project.status = "COMPLETED"
     elif now_str > project.deadline:
@@ -5721,7 +5721,7 @@ async def get_project_report(
         phases=phase_items,
         stage_reports=[StageReportResponse.model_validate(r) for r in stage_reports],
         manager_notes=project.manager_notes or "",
-        generated_at=datetime.now(IST).isoformat(),
+        generated_at=datetime.now(IST).replace(tzinfo=None).isoformat(),
     )
 
 
