@@ -111,7 +111,7 @@ const api = {
     getDesignerMonthlyPerformance: (designerId, month, year) =>
         apiFetch(`/designers/${designerId}/performance/monthly?month=${month}&year=${year}`),
 
-    // Report downloads (CSV / Excel) via fetch+blob
+    // Report downloads (CSV / PDF) via fetch+blob
     downloadReportCSV: async (endpoint) => {
         const url = `${API_BASE}${endpoint}`;
         const response = await fetch(url, { credentials: 'include' });
@@ -133,7 +133,7 @@ const api = {
         window.URL.revokeObjectURL(blobUrl);
     },
 
-    downloadReportExcel: async (endpoint) => {
+    downloadReportPDF: async (endpoint) => {
         const url = `${API_BASE}${endpoint}`;
         const response = await fetch(url, { credentials: 'include' });
         if (!response.ok) {
@@ -142,7 +142,7 @@ const api = {
         }
         const disposition = response.headers.get('Content-Disposition') || '';
         const match = disposition.match(/filename="?([^"]+)"?/);
-        const filename = match ? match[1] : 'report.xlsx';
+        const filename = match ? match[1] : 'report.pdf';
         const blob = await response.blob();
         const blobUrl = window.URL.createObjectURL(blob);
         const a = document.createElement('a');

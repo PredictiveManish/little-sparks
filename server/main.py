@@ -5159,23 +5159,6 @@ def _rows_to_csv_bytes(fieldnames, rows):
     return buf.getvalue().encode("utf-8")
 
 
-def _sheets_to_xlsx_bytes(sheets):
-    """sheets: dict of {sheet_name: (fieldnames, rows)}"""
-    from openpyxl import Workbook
-
-    wb = Workbook()
-    wb.remove(wb.active)
-    for sheet_name, (fieldnames, rows) in sheets.items():
-        ws = wb.create_sheet(title=sheet_name[:31])
-        ws.append(fieldnames)
-        for row in rows:
-            ws.append([row.get(f, "") for f in fieldnames])
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return buf.read()
-
-
 def _users_rows(db, roles, dt_from, dt_to):
     q = db.query(User)
     if roles:
@@ -5246,6 +5229,65 @@ def _projects_rows(db, dt_from, dt_to):
     return (fieldnames, rows), (fieldnames_phase, rows_phase)
 
 
+def _sheets_to_pdf_bytes(sheets):
+    """sheets: dict of {sheet_name: (fieldnames, rows)}"""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from io import BytesIO
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=letter,
+        leftMargin=0.6*inch, rightMargin=0.6*inch,
+        topMargin=0.6*inch, bottomMargin=0.6*inch,
+        title="Little Sparks Export",
+        author="Little Sparks"
+    )
+    styles = getSampleStyleSheet()
+    table_heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=8, fontName="Helvetica-Bold", textColor=colors.white)
+    cell_style = ParagraphStyle("TableCell", parent=styles["Normal"], fontSize=7, leading=9)
+    heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=13, spaceBefore=10, spaceAfter=6, textColor=colors.HexColor("#2c5282"))
+
+    elements = []
+    max_width = letter[0] - inch  # available width
+
+    for sheet_idx, (sheet_name, (fieldnames, rows)) in enumerate(sheets.items()):
+        if sheet_idx > 0:
+            elements.append(PageBreak())
+        elements.append(Paragraph(sheet_name, heading_style))
+
+        col_count = len(fieldnames)
+        if col_count <= 4:
+            col_widths = [max_width / col_count] * col_count
+        elif col_count <= 8:
+            col_widths = [max_width / col_count * 0.9] * col_count
+        else:
+            col_widths = [max_width / col_count * 0.7] * col_count
+
+        header_data = [[Paragraph(f"<b>{f}</b>", table_heading_style) for f in fieldnames]]
+        row_data = []
+        for row in rows:
+            row_data.append([Paragraph(str(row.get(f, ""))[:50], cell_style) for f in fieldnames])
+
+        table = Table(header_data + row_data, colWidths=col_widths)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
+        ]))
+        elements.append(table)
+
+    doc.build(elements)
+    return buffer.getvalue()
+
+
 @app.get("/api/admin/export/{entity}")
 def export_data(
     entity: str,
@@ -5256,9 +5298,9 @@ def export_data(
     db: Session = Depends(get_db),
 ):
     """Admin-only data export. entity: designers | managers | projects | all.
-    format: csv | xlsx. If from/to are omitted, exports the whole dataset."""
-    if format not in ("csv", "xlsx"):
-        raise HTTPException(status_code=400, detail="format must be csv or xlsx")
+    format: csv | pdf. If from/to are omitted, exports the whole dataset."""
+    if format not in ("csv", "pdf"):
+        raise HTTPException(status_code=400, detail="format must be csv or pdf")
     dt_from, dt_to = _parse_export_range(from_, to)
     stamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
 
@@ -5289,10 +5331,10 @@ def export_data(
             detail="Unknown entity. Use designers, managers, projects, or all.",
         )
 
-    if format == "xlsx":
-        content = _sheets_to_xlsx_bytes(sheets)
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        filename += ".xlsx"
+    if format == "pdf":
+        content = _sheets_to_pdf_bytes(sheets)
+        media_type = "application/pdf"
+        filename += ".pdf"
     else:
         if len(sheets) == 1:
             fieldnames, rows = next(iter(sheets.values()))
@@ -6266,7 +6308,7 @@ async def get_designer_monthly_performance(
     )
 
 
-# ---------- Report download endpoints (CSV / Excel) ----------
+# ---------- Report download endpoints (CSV / PDF) ----------
 
 
 def _project_report_to_csv(report: ProjectReportResponse) -> str:
@@ -6302,6 +6344,137 @@ def _project_report_to_csv(report: ProjectReportResponse) -> str:
             sr.notes or ""
         ])
     return output.getvalue()
+
+
+def _draw_project_report_pdf(report: ProjectReportResponse):
+    """Create a project report PDF as bytes."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from io import BytesIO
+
+    buffer = BytesIO()
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle("ReportTitle", parent=styles["Heading1"], fontSize=18, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"))
+    subtitle_style = ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, spaceAfter=12, textColor=colors.HexColor("#666666"))
+    heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=13, spaceBefore=10, spaceAfter=6, textColor=colors.HexColor("#2c5282"))
+    table_heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=8, fontName="Helvetica-Bold", textColor=colors.white)
+    cell_style = ParagraphStyle("TableCell", parent=styles["Normal"], fontSize=7.5, leading=10)
+
+    elements = []
+    elements.append(Paragraph("Project Report", title_style))
+    elements.append(Paragraph(f"<b>Project:</b> {report.project_name}", subtitle_style))
+    elements.append(Spacer(1, 6))
+
+    header_data = [
+        [Paragraph("<b>Designer</b>", table_heading_style),
+         Paragraph("<b>Start Date</b>", table_heading_style),
+         Paragraph("<b>Deadline</b>", table_heading_style),
+         Paragraph("<b>Status</b>", table_heading_style),
+         Paragraph("<b>Progress</b>", table_heading_style),
+         Paragraph("<b>Stage Index</b>", table_heading_style)],
+        [Paragraph(report.assigned_designer, cell_style),
+         Paragraph(report.start_date, cell_style),
+         Paragraph(report.deadline, cell_style),
+         Paragraph(report.status, cell_style),
+         Paragraph(str(report.progress) + "%", cell_style),
+         Paragraph(str(report.stage_index), cell_style)]
+    ]
+    header_table = Table(header_data, colWidths=[2.5*inch, 1.3*inch, 1.2*inch, 1.2*inch, 1*inch, 1.2*inch])
+    header_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elements.append(header_table)
+    elements.append(Spacer(1, 12))
+
+    elements.append(Paragraph("Phases", heading_style))
+    phase_header = [
+        [Paragraph("<b>Phase</b>", table_heading_style),
+         Paragraph("<b>Stage</b>", table_heading_style),
+         Paragraph("<b>Deadline</b>", table_heading_style),
+         Paragraph("<b>Completed</b>", table_heading_style),
+         Paragraph("<b>Designer Update</b>", table_heading_style),
+         Paragraph("<b>Delay Reason</b>", table_heading_style)]
+    ]
+    phase_rows = []
+    for p in report.phases:
+        phase_rows.append([
+            Paragraph(p.stage_name, cell_style),
+            Paragraph(str(p.stage_index), cell_style),
+            Paragraph(p.deadline, cell_style),
+            Paragraph(p.completed_at or "", cell_style),
+            Paragraph(p.designer_update or "", cell_style),
+            Paragraph(p.delay_reason or "", cell_style)
+        ])
+    if phase_rows:
+        phase_table = Table(phase_header + phase_rows, colWidths=[2*inch, 0.7*inch, 1.2*inch, 1.3*inch, 2.3*inch, 1.8*inch])
+        phase_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
+        ]))
+        elements.append(phase_table)
+    elements.append(Spacer(1, 12))
+
+    elements.append(Paragraph("Stage Reports", heading_style))
+    sr_header = [
+        [Paragraph("<b>Stage</b>", table_heading_style),
+         Paragraph("<b>Submitted By</b>", table_heading_style),
+         Paragraph("<b>Date</b>", table_heading_style),
+         Paragraph("<b>Costing</b>", table_heading_style),
+         Paragraph("<b>Willingness</b>", table_heading_style),
+         Paragraph("<b>Engagement</b>", table_heading_style),
+         Paragraph("<b>Durability</b>", table_heading_style),
+         Paragraph("<b>Age Appr.</b>", table_heading_style),
+         Paragraph("<b>Notes</b>", table_heading_style)]
+    ]
+    sr_rows = []
+    for sr in report.stage_reports:
+        sr_rows.append([
+            Paragraph(sr.stage_name, cell_style),
+            Paragraph(sr.submitted_by_name or "", cell_style),
+            Paragraph(sr.submitted_at.strftime("%Y-%m-%d %H:%M") if sr.submitted_at else "", cell_style),
+            Paragraph(str(sr.costing) if sr.costing else "", cell_style),
+            Paragraph(str(sr.willingness_to_buy) if sr.willingness_to_buy else "", cell_style),
+            Paragraph(str(sr.engagement_life) if sr.engagement_life else "", cell_style),
+            Paragraph(str(sr.durability) if sr.durability else "", cell_style),
+            Paragraph(str(sr.age_appropriateness) if sr.age_appropriateness else "", cell_style),
+            Paragraph((sr.notes or "")[:60], cell_style)
+        ])
+    if sr_rows:
+        sr_table = Table(sr_header + sr_rows, colWidths=[1.3*inch, 1.3*inch, 1.3*inch, 0.8*inch, 0.9*inch, 0.9*inch, 0.9*inch, 0.8*inch, 1.8*inch])
+        sr_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
+        ]))
+        elements.append(sr_table)
+
+    doc = SimpleDocTemplate(
+        buffer, pagesize=letter,
+        leftMargin=0.6*inch, rightMargin=0.6*inch,
+        topMargin=0.6*inch, bottomMargin=0.6*inch,
+        title=f"Project Report: {report.project_name}",
+        author="Little Sparks"
+    )
+    doc.build(elements)
+    return buffer.getvalue()
 
 
 def _weekly_report_to_csv(report: WeeklyReportResponse) -> str:
@@ -6403,15 +6576,20 @@ def _designer_performance_to_csv(report: DesignerPerformanceResponse) -> str:
 @app.get("/api/reports/project/{project_id}/download")
 async def download_project_report_csv(
     project_id: int,
-    format: str = Query("csv", regex="^(csv|xlsx)$"),
+    format: str = Query("csv", regex="^(csv|pdf)$"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     report = await get_project_report(project_id, user, db)
-    csv_content = _project_report_to_csv(report)
-    if format == "xlsx":
-        return JSONResponse(content={"message": "Excel export for project reports — use CSV for now"})
     project_name_slug = report.project_name.replace(" ", "-").replace("&", "and").lower()
+    if format == "pdf":
+        pdf_bytes = _draw_project_report_pdf(report)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{project_name_slug}-project-report.pdf"'},
+        )
+    csv_content = _project_report_to_csv(report)
     return StreamingResponse(
         io.StringIO(csv_content),
         media_type="text/csv",
@@ -6424,16 +6602,21 @@ async def download_weekly_report_csv(
     project_id: int,
     week_start: str = Query(...),
     week_end: str = Query(...),
-    format: str = Query("csv", regex="^(csv|xlsx)$"),
+    format: str = Query("csv", regex="^(csv|pdf)$"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     report = await get_project_weekly_report(project_id, week_start, week_end, user, db)
-    csv_content = _weekly_report_to_csv(report)
-    if format == "xlsx":
-        return JSONResponse(content={"message": "Excel export for weekly reports — use CSV for now"})
     first_project = report.reports[0].project_name if report.reports else f"project-{project_id}"
     project_slug = first_project.replace(" ", "-").replace("&", "and").lower()
+    if format == "pdf":
+        pdf_bytes = _weekly_report_to_pdf_bytes(report)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="weekly-report-{project_slug}-{week_start}-to-{week_end}.pdf"'},
+        )
+    csv_content = _weekly_report_to_csv(report)
     return StreamingResponse(
         io.StringIO(csv_content),
         media_type="text/csv",
@@ -6446,16 +6629,21 @@ async def download_monthly_report_csv(
     project_id: int,
     month: int = Query(...),
     year: int = Query(...),
-    format: str = Query("csv", regex="^(csv|xlsx)$"),
+    format: str = Query("csv", regex="^(csv|pdf)$"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     report = await get_project_monthly_report(project_id, month, year, user, db)
-    csv_content = _monthly_report_to_csv(report)
-    if format == "xlsx":
-        return JSONResponse(content={"message": "Excel export for monthly reports — use CSV for now"})
     first_project = report.reports[0].project_name if report.reports else f"project-{project_id}"
     project_slug = first_project.replace(" ", "-").replace("&", "and").lower()
+    if format == "pdf":
+        pdf_bytes = _monthly_report_to_pdf_bytes(report)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="monthly-report-{project_slug}-{month:02d}-{year}.pdf"'},
+        )
+    csv_content = _monthly_report_to_csv(report)
     return StreamingResponse(
         io.StringIO(csv_content),
         media_type="text/csv",
@@ -6471,7 +6659,7 @@ async def download_designer_performance_csv(
     week_end: Optional[str] = Query(None),
     month: Optional[int] = Query(None),
     year: Optional[int] = Query(None),
-    format: str = Query("csv", regex="^(csv|xlsx)$"),
+    format: str = Query("csv", regex="^(csv|pdf)$"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -6479,14 +6667,19 @@ async def download_designer_performance_csv(
         report = await get_designer_weekly_performance(designer_id, week_start, week_end, user, db)
     else:
         report = await get_designer_monthly_performance(designer_id, month, year, user, db)
-    csv_content = _designer_performance_to_csv(report)
-    if format == "xlsx":
-        return JSONResponse(content={"message": "Excel export for designer performance — use CSV for now"})
     designer_slug = report.designer_name.replace(" ", "-").replace("&", "and").lower()
     if period == "weekly":
         date_part = f"{week_start}-to-{week_end}" if week_start else "weekly"
     else:
         date_part = f"{month:02d}-{year}" if month else f"{year}"
+    if format == "pdf":
+        pdf_bytes = _designer_performance_to_pdf_bytes(report)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{designer_slug}-performance-{period}-{date_part}.pdf"'},
+        )
+    csv_content = _designer_performance_to_csv(report)
     return StreamingResponse(
         io.StringIO(csv_content),
         media_type="text/csv",

@@ -1002,8 +1002,8 @@
         <button onclick="downloadReportCSV()" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
             📄 Download CSV
         </button>
-        <button onclick="downloadReportExcel()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors">
-            📊 Download Excel
+        <button onclick="downloadReportPDF()" class="px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600 transition-colors">
+            📊 Download PDF
         </button>
     </div>
 
@@ -1040,7 +1040,7 @@
                 <p class="text-xs text-gray-500 mb-4 flex-1">All designer accounts.</p>
                 <div class="flex gap-2">
                     <button onclick="runExport('designers','csv')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">CSV</button>
-                    <button onclick="runExport('designers','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100">Excel</button>
+                    <button onclick="runExport('designers','pdf')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100">PDF</button>
                 </div>
             </div>
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
@@ -1048,7 +1048,7 @@
                 <p class="text-xs text-gray-500 mb-4 flex-1">Admin & manager accounts.</p>
                 <div class="flex gap-2">
                     <button onclick="runExport('managers','csv')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">CSV</button>
-                    <button onclick="runExport('managers','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100">Excel</button>
+                    <button onclick="runExport('managers','pdf')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100">PDF</button>
                 </div>
             </div>
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
@@ -1056,7 +1056,7 @@
                 <p class="text-xs text-gray-500 mb-4 flex-1">Projects + every stage/phase.</p>
                 <div class="flex gap-2">
                     <button onclick="runExport('projects','csv')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">CSV</button>
-                    <button onclick="runExport('projects','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100">Excel</button>
+                    <button onclick="runExport('projects','pdf')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100">PDF</button>
                 </div>
             </div>
             <div class="bg-white rounded-xl border border-brand-300 shadow-sm p-5 flex flex-col bg-brand-50/30">
@@ -1064,7 +1064,7 @@
                 <p class="text-xs text-gray-500 mb-4 flex-1">Designers, managers, projects & phases together.</p>
                 <div class="flex gap-2">
                     <button onclick="runExport('all','csv')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">CSV (.zip)</button>
-                    <button onclick="runExport('all','xlsx')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-400 bg-brand-500 text-white hover:bg-brand-600">Excel</button>
+                    <button onclick="runExport('all','pdf')" class="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-brand-400 bg-brand-500 text-white hover:bg-brand-600">PDF</button>
                 </div>
             </div>
         </div>

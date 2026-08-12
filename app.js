@@ -2924,13 +2924,13 @@ function downloadReportCSV() {
         .catch(err => showToast('Download failed: ' + err.message));
 }
 
-function downloadReportExcel() {
+function downloadReportPDF() {
     if (!currentReportEndpoint) {
         showToast('No report loaded to download');
         return;
     }
-    api.downloadReportExcel(currentReportEndpoint + (currentReportEndpoint.includes('?') ? '&' : '?') + 'format=xlsx')
-        .then(() => showToast('Excel downloaded successfully'))
+    api.downloadReportPDF(currentReportEndpoint + (currentReportEndpoint.includes('?') ? '&' : '?') + 'format=pdf')
+        .then(() => showToast('PDF downloaded successfully'))
         .catch(err => showToast('Download failed: ' + err.message));
 }
 
