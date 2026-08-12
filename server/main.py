@@ -6348,11 +6348,12 @@ def _project_report_to_csv(report: ProjectReportResponse) -> str:
 
 def _draw_project_report_pdf(report: ProjectReportResponse):
     """Create a project report PDF as bytes."""
-    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.pagesizes import letter, landscape
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
     from io import BytesIO
 
     buffer = BytesIO()
@@ -6361,15 +6362,18 @@ def _draw_project_report_pdf(report: ProjectReportResponse):
     title_style = ParagraphStyle("ReportTitle", parent=styles["Heading1"], fontSize=18, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"))
     subtitle_style = ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, spaceAfter=12, textColor=colors.HexColor("#666666"))
     heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=13, spaceBefore=10, spaceAfter=6, textColor=colors.HexColor("#2c5282"))
-    table_heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=8, fontName="Helvetica-Bold", textColor=colors.white)
-    cell_style = ParagraphStyle("TableCell", parent=styles["Normal"], fontSize=7.5, leading=10)
+    table_heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=7, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
+    cell_style = ParagraphStyle("TableCell", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_LEFT)
+    cell_center = ParagraphStyle("TableCellCenter", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_CENTER)
+    cell_right = ParagraphStyle("TableCellRight", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_RIGHT)
 
     elements = []
     elements.append(Paragraph("Project Report", title_style))
     elements.append(Paragraph(f"<b>Project:</b> {report.project_name}", subtitle_style))
     elements.append(Spacer(1, 6))
 
-    header_data = [
+    # --- Overview Table ---
+    overview_data = [
         [Paragraph("<b>Designer</b>", table_heading_style),
          Paragraph("<b>Start Date</b>", table_heading_style),
          Paragraph("<b>Deadline</b>", table_heading_style),
@@ -6380,23 +6384,26 @@ def _draw_project_report_pdf(report: ProjectReportResponse):
          Paragraph(report.start_date, cell_style),
          Paragraph(report.deadline, cell_style),
          Paragraph(report.status, cell_style),
-         Paragraph(str(report.progress) + "%", cell_style),
-         Paragraph(str(report.stage_index), cell_style)]
+         Paragraph(str(report.progress) + "%", cell_center),
+         Paragraph(str(report.stage_index), cell_center)]
     ]
-    header_table = Table(header_data, colWidths=[2.5*inch, 1.3*inch, 1.2*inch, 1.2*inch, 1*inch, 1.2*inch])
+    avail = letter[0] - 2 * 0.6 * inch
+    col_widths_overview = [avail * 0.22, avail * 0.15, avail * 0.15, avail * 0.15, avail * 0.13, avail * 0.10]
+    header_table = Table(overview_data, colWidths=col_widths_overview, repeatRows=1)
     header_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
         ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
     ]))
     elements.append(header_table)
-    elements.append(Spacer(1, 12))
+    elements.append(Spacer(1, 10))
 
+    # --- Phases Table ---
     elements.append(Paragraph("Phases", heading_style))
-    phase_header = [
+    phase_data = [
         [Paragraph("<b>Phase</b>", table_heading_style),
          Paragraph("<b>Stage</b>", table_heading_style),
          Paragraph("<b>Deadline</b>", table_heading_style),
@@ -6404,32 +6411,33 @@ def _draw_project_report_pdf(report: ProjectReportResponse):
          Paragraph("<b>Designer Update</b>", table_heading_style),
          Paragraph("<b>Delay Reason</b>", table_heading_style)]
     ]
-    phase_rows = []
     for p in report.phases:
-        phase_rows.append([
+        phase_data.append([
             Paragraph(p.stage_name, cell_style),
-            Paragraph(str(p.stage_index), cell_style),
+            Paragraph(str(p.stage_index), cell_center),
             Paragraph(p.deadline, cell_style),
             Paragraph(p.completed_at or "", cell_style),
             Paragraph(p.designer_update or "", cell_style),
             Paragraph(p.delay_reason or "", cell_style)
         ])
-    if phase_rows:
-        phase_table = Table(phase_header + phase_rows, colWidths=[2*inch, 0.7*inch, 1.2*inch, 1.3*inch, 2.3*inch, 1.8*inch])
+    if phase_data:
+        col_widths_phase = [avail * 0.22, avail * 0.08, avail * 0.15, avail * 0.15, avail * 0.22, avail * 0.18]
+        phase_table = Table(phase_data, colWidths=col_widths_phase, repeatRows=1)
         phase_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
             ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
         ]))
         elements.append(phase_table)
-    elements.append(Spacer(1, 12))
+    elements.append(Spacer(1, 10))
 
+    # --- Stage Reports Table (split into two pages if needed) ---
     elements.append(Paragraph("Stage Reports", heading_style))
-    sr_header = [
+    sr_data = [
         [Paragraph("<b>Stage</b>", table_heading_style),
          Paragraph("<b>Submitted By</b>", table_heading_style),
          Paragraph("<b>Date</b>", table_heading_style),
@@ -6440,37 +6448,390 @@ def _draw_project_report_pdf(report: ProjectReportResponse):
          Paragraph("<b>Age Appr.</b>", table_heading_style),
          Paragraph("<b>Notes</b>", table_heading_style)]
     ]
-    sr_rows = []
     for sr in report.stage_reports:
-        sr_rows.append([
+        sr_data.append([
             Paragraph(sr.stage_name, cell_style),
             Paragraph(sr.submitted_by_name or "", cell_style),
             Paragraph(sr.submitted_at.strftime("%Y-%m-%d %H:%M") if sr.submitted_at else "", cell_style),
-            Paragraph(str(sr.costing) if sr.costing else "", cell_style),
-            Paragraph(str(sr.willingness_to_buy) if sr.willingness_to_buy else "", cell_style),
-            Paragraph(str(sr.engagement_life) if sr.engagement_life else "", cell_style),
-            Paragraph(str(sr.durability) if sr.durability else "", cell_style),
-            Paragraph(str(sr.age_appropriateness) if sr.age_appropriateness else "", cell_style),
-            Paragraph((sr.notes or "")[:60], cell_style)
+            Paragraph(str(sr.costing) if sr.costing else "", cell_center),
+            Paragraph(str(sr.willingness_to_buy) if sr.willingness_to_buy else "", cell_center),
+            Paragraph(str(sr.engagement_life) if sr.engagement_life else "", cell_center),
+            Paragraph(str(sr.durability) if sr.durability else "", cell_center),
+            Paragraph(str(sr.age_appropriateness) if sr.age_appropriateness else "", cell_center),
+            Paragraph((sr.notes or "")[:80], cell_style)
         ])
-    if sr_rows:
-        sr_table = Table(sr_header + sr_rows, colWidths=[1.3*inch, 1.3*inch, 1.3*inch, 0.8*inch, 0.9*inch, 0.9*inch, 0.9*inch, 0.8*inch, 1.8*inch])
-        sr_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
-            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
-        ]))
-        elements.append(sr_table)
+    if sr_data:
+        # Split into two tables: ratings (left) and info (right)
+        left_cols = [avail * 0.20, avail * 0.20, avail * 0.18, avail * 0.10, avail * 0.10]
+        left_header = [
+            Paragraph("<b>Stage</b>", table_heading_style),
+            Paragraph("<b>Submitted By</b>", table_heading_style),
+            Paragraph("<b>Date</b>", table_heading_style),
+            Paragraph("<b>Costing</b>", table_heading_style),
+            Paragraph("<b>Willingness</b>", table_heading_style)
+        ]
+        left_rows = []
+        for sr in report.stage_reports:
+            left_rows.append([
+                Paragraph(sr.stage_name, cell_style),
+                Paragraph(sr.submitted_by_name or "", cell_style),
+                Paragraph(sr.submitted_at.strftime("%Y-%m-%d %H:%M") if sr.submitted_at else "", cell_style),
+                Paragraph(str(sr.costing) if sr.costing else "", cell_center),
+                Paragraph(str(sr.willingness_to_buy) if sr.willingness_to_buy else "", cell_center)
+            ])
+
+        right_cols = [avail * 0.12, avail * 0.12, avail * 0.12, avail * 0.12, avail * 0.12]
+        right_header = [
+            Paragraph("<b>Engage.</b>", table_heading_style),
+            Paragraph("<b>Durab.</b>", table_heading_style),
+            Paragraph("<b>Age Appr.</b>", table_heading_style),
+            Paragraph("<b>Easy Store</b>", table_heading_style),
+            Paragraph("<b>Notes</b>", table_heading_style)
+        ]
+        right_rows = []
+        for sr in report.stage_reports:
+            right_rows.append([
+                Paragraph(str(sr.engagement_life) if sr.engagement_life else "", cell_center),
+                Paragraph(str(sr.durability) if sr.durability else "", cell_center),
+                Paragraph(str(sr.age_appropriateness) if sr.age_appropriateness else "", cell_center),
+                Paragraph(str(sr.easy_to_store) if sr.easy_to_store else "", cell_center),
+                Paragraph((sr.notes or "")[:60], cell_style)
+            ])
+
+        for header, rows, cols in [(left_header, left_rows, left_cols), (right_header, right_rows, right_cols)]:
+            tdata = [header] + rows
+            tbl = Table(tdata, colWidths=cols, repeatRows=1)
+            tbl.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('TOPPADDING', (0, 0), (-1, -1), 2),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
+            ]))
+            elements.append(tbl)
+            elements.append(Spacer(1, 4))
 
     doc = SimpleDocTemplate(
         buffer, pagesize=letter,
         leftMargin=0.6*inch, rightMargin=0.6*inch,
         topMargin=0.6*inch, bottomMargin=0.6*inch,
         title=f"Project Report: {report.project_name}",
+        author="Little Sparks"
+    )
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+def _weekly_report_to_pdf_bytes(report: WeeklyReportResponse) -> bytes:
+    """Convert a WeeklyReportResponse to PDF bytes."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER
+    from io import BytesIO
+
+    buffer = BytesIO()
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle("ReportTitle", parent=styles["Heading1"], fontSize=18, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"))
+    subtitle_style = ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, spaceAfter=12, textColor=colors.HexColor("#666666"))
+    heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=13, spaceBefore=10, spaceAfter=6, textColor=colors.HexColor("#2c5282"))
+    table_heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=7, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
+    cell_style = ParagraphStyle("TableCell", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_LEFT)
+    cell_center = ParagraphStyle("TableCellCenter", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_CENTER)
+
+    elements = []
+    elements.append(Paragraph("Weekly Report", title_style))
+    elements.append(Paragraph(f"<b>Week:</b> {report.week_start} to {report.week_end}", subtitle_style))
+    elements.append(Spacer(1, 6))
+
+    avail = letter[0] - 2 * 0.6 * inch
+
+    if report.summary:
+        elements.append(Paragraph("Summary", heading_style))
+        summary_data = [
+            [Paragraph("<b>Stages Completed</b>", table_heading_style),
+             Paragraph("<b>Total Submissions</b>", table_heading_style),
+             Paragraph("<b>Total Delays</b>", table_heading_style),
+             Paragraph("<b>Delay Days</b>", table_heading_style)],
+            [Paragraph(str(report.summary.get("stages_completed", 0)), cell_center),
+             Paragraph(str(report.summary.get("total_submissions", 0)), cell_center),
+             Paragraph(str(report.summary.get("total_delays", 0)), cell_center),
+             Paragraph(str(report.summary.get("total_delay_days", 0)), cell_center)]
+        ]
+        col_widths = [avail * 0.25, avail * 0.25, avail * 0.25, avail * 0.25]
+        summary_table = Table(summary_data, colWidths=col_widths, repeatRows=1)
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 10))
+
+    elements.append(Paragraph("Projects & Stages", heading_style))
+    proj_header = [
+        [Paragraph("<b>Project</b>", table_heading_style),
+         Paragraph("<b>Designer</b>", table_heading_style),
+         Paragraph("<b>Stage</b>", table_heading_style),
+         Paragraph("<b>Status</b>", table_heading_style),
+         Paragraph("<b>Progress</b>", table_heading_style),
+         Paragraph("<b>Activities</b>", table_heading_style),
+         Paragraph("<b>Delay Days</b>", table_heading_style),
+         Paragraph("<b>Delay Reason</b>", table_heading_style)]
+    ]
+    proj_rows = []
+    for item in report.reports:
+        activities_str = "; ".join(
+            f"{a.submitted_by} ({a.submitted_at}): {a.notes or 'ratings only'}"
+            for a in item.activities if a.submitted_by
+        ) if item.activities else ""
+        proj_rows.append([
+            Paragraph(item.project_name, cell_style),
+            Paragraph(item.assigned_designer, cell_style),
+            Paragraph(f"{item.stage_name} (S{item.stage_index})", cell_style),
+            Paragraph(item.status, cell_style),
+            Paragraph(str(item.progress) + "%", cell_center),
+            Paragraph(activities_str[:80], cell_style),
+            Paragraph(str(item.delay_days), cell_center),
+            Paragraph(item.delay_reason or "", cell_style)
+        ])
+    if proj_rows:
+        col_widths = [avail * 0.20, avail * 0.18, avail * 0.18, avail * 0.12, avail * 0.08, avail * 0.16, avail * 0.06, avail * 0.02]
+        proj_table = Table(proj_header + proj_rows, colWidths=col_widths, repeatRows=1)
+        proj_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
+        ]))
+        elements.append(proj_table)
+
+    doc = SimpleDocTemplate(
+        buffer, pagesize=letter,
+        leftMargin=0.6*inch, rightMargin=0.6*inch,
+        topMargin=0.6*inch, bottomMargin=0.6*inch,
+        title=f"Weekly Report: {report.week_start} to {report.week_end}",
+        author="Little Sparks"
+    )
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+def _monthly_report_to_pdf_bytes(report: MonthlyReportResponse) -> bytes:
+    """Convert a MonthlyReportResponse to PDF bytes."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER
+    from io import BytesIO
+
+    buffer = BytesIO()
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle("ReportTitle", parent=styles["Heading1"], fontSize=18, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"))
+    subtitle_style = ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, spaceAfter=12, textColor=colors.HexColor("#666666"))
+    heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=13, spaceBefore=10, spaceAfter=6, textColor=colors.HexColor("#2c5282"))
+    table_heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=7, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
+    cell_style = ParagraphStyle("TableCell", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_LEFT)
+    cell_center = ParagraphStyle("TableCellCenter", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_CENTER)
+
+    elements = []
+    elements.append(Paragraph("Monthly Report", title_style))
+    elements.append(Paragraph(f"<b>Month:</b> {report.month}/{report.year}", subtitle_style))
+    elements.append(Spacer(1, 6))
+
+    avail = letter[0] - 2 * 0.6 * inch
+
+    if report.summary:
+        elements.append(Paragraph("Summary", heading_style))
+        avg_ratings = report.summary.get("avg_ratings_overall", {})
+        rating_trends = report.summary.get("rating_trends", {})
+        avg_ratings_str = "; ".join(f"{k}={v}" for k, v in avg_ratings.items()) if avg_ratings else ""
+        rating_trends_str = "; ".join(f"{k}={v}" for k, v in rating_trends.items()) if rating_trends else ""
+
+        summary_data = [
+            [Paragraph("<b>Progress Delta</b>", table_heading_style),
+             Paragraph("<b>Stages Completed</b>", table_heading_style),
+             Paragraph("<b>Total Submissions</b>", table_heading_style),
+             Paragraph("<b>Total Notes</b>", table_heading_style),
+             Paragraph("<b>Total Delays</b>", table_heading_style),
+             Paragraph("<b>Delay Days</b>", table_heading_style)],
+            [Paragraph(str(report.summary.get("progress_delta", 0)), cell_center),
+             Paragraph(str(report.summary.get("stages_completed", 0)), cell_center),
+             Paragraph(str(report.summary.get("total_submissions", 0)), cell_center),
+             Paragraph(str(report.summary.get("total_notes", 0)), cell_center),
+             Paragraph(str(report.summary.get("total_delays", 0)), cell_center),
+             Paragraph(str(report.summary.get("total_delay_days", 0)), cell_center)]
+        ]
+        col_widths = [avail * 0.167] * 6
+        summary_table = Table(summary_data, colWidths=col_widths, repeatRows=1)
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 6))
+        elements.append(Paragraph(f"<b>Avg Ratings:</b> {avg_ratings_str or 'N/A'}", cell_style))
+        elements.append(Spacer(1, 2))
+        elements.append(Paragraph(f"<b>Rating Trends:</b> {rating_trends_str or 'N/A'}", cell_style))
+        elements.append(Spacer(1, 10))
+
+    elements.append(Paragraph("Projects & Stages", heading_style))
+    proj_header = [
+        [Paragraph("<b>Project</b>", table_heading_style),
+         Paragraph("<b>Designer</b>", table_heading_style),
+         Paragraph("<b>Stage</b>", table_heading_style),
+         Paragraph("<b>Status</b>", table_heading_style),
+         Paragraph("<b>Progress</b>", table_heading_style),
+         Paragraph("<b>Submissions</b>", table_heading_style),
+         Paragraph("<b>Notes</b>", table_heading_style),
+         Paragraph("<b>Delay Days</b>", table_heading_style),
+         Paragraph("<b>Delay Reason</b>", table_heading_style)]
+    ]
+    proj_rows = []
+    for item in report.reports:
+        proj_rows.append([
+            Paragraph(item.project_name, cell_style),
+            Paragraph(item.assigned_designer, cell_style),
+            Paragraph(f"{item.stage_name} (S{item.stage_index})", cell_style),
+            Paragraph(item.status, cell_style),
+            Paragraph(str(item.progress) + "%", cell_center),
+            Paragraph(str(item.submissions_count), cell_center),
+            Paragraph(str(item.notes_count), cell_center),
+            Paragraph(str(item.delay_days or 0), cell_center),
+            Paragraph(item.delay_reason or "", cell_style)
+        ])
+    if proj_rows:
+        col_widths = [avail * 0.18, avail * 0.15, avail * 0.15, avail * 0.12, avail * 0.08, avail * 0.08, avail * 0.08, avail * 0.07, avail * 0.09]
+        proj_table = Table(proj_header + proj_rows, colWidths=col_widths, repeatRows=1)
+        proj_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
+        ]))
+        elements.append(proj_table)
+
+    doc = SimpleDocTemplate(
+        buffer, pagesize=letter,
+        leftMargin=0.6*inch, rightMargin=0.6*inch,
+        topMargin=0.6*inch, bottomMargin=0.6*inch,
+        title=f"Monthly Report: {report.month}/{report.year}",
+        author="Little Sparks"
+    )
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+def _designer_performance_to_pdf_bytes(report) -> bytes:
+    """Convert a designer performance report to PDF bytes."""
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER
+    from io import BytesIO
+
+    buffer = BytesIO()
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle("ReportTitle", parent=styles["Heading1"], fontSize=18, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"))
+    subtitle_style = ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, spaceAfter=12, textColor=colors.HexColor("#666666"))
+    heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=13, spaceBefore=10, spaceAfter=6, textColor=colors.HexColor("#2c5282"))
+    table_heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=7, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
+    cell_style = ParagraphStyle("TableCell", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_LEFT)
+    cell_center = ParagraphStyle("TableCellCenter", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_CENTER)
+
+    elements = []
+    elements.append(Paragraph("Designer Performance Report", title_style))
+    elements.append(Paragraph(f"<b>Designer:</b> {report.designer_name}", subtitle_style))
+    elements.append(Paragraph(f"<b>Period:</b> {report.period_start} to {report.period_end}", subtitle_style))
+    elements.append(Spacer(1, 6))
+
+    avail = letter[0] - 2 * 0.6 * inch
+
+    elements.append(Paragraph("Overview", heading_style))
+    overview_data = [
+        [Paragraph("<b>Total Updates</b>", table_heading_style),
+         Paragraph("<b>Total Delays</b>", table_heading_style),
+         Paragraph("<b>Total Projects</b>", table_heading_style)],
+        [Paragraph(str(report.total_updates), cell_center),
+         Paragraph(str(report.total_delays), cell_center),
+         Paragraph(str(len(report.projects)), cell_center)]
+    ]
+    col_widths = [avail * 0.334] * 3
+    overview_table = Table(overview_data, colWidths=col_widths, repeatRows=1)
+    overview_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(overview_table)
+    elements.append(Spacer(1, 10))
+
+    elements.append(Paragraph("Project Breakdown", heading_style))
+    proj_header = [
+        [Paragraph("<b>Project</b>", table_heading_style),
+         Paragraph("<b>Stage</b>", table_heading_style),
+         Paragraph("<b>Status</b>", table_heading_style),
+         Paragraph("<b>Updates</b>", table_heading_style),
+         Paragraph("<b>Delays</b>", table_heading_style),
+         Paragraph("<b>Delay Days</b>", table_heading_style),
+         Paragraph("<b>Deadline</b>", table_heading_style)]
+    ]
+    proj_rows = []
+    for p in report.projects:
+        proj_rows.append([
+            Paragraph(p.project_name, cell_style),
+            Paragraph(f"{p.stage_name} (S{p.stage_index})", cell_style),
+            Paragraph(p.status, cell_style),
+            Paragraph(str(p.updates_count), cell_center),
+            Paragraph(str(p.delays_count), cell_center),
+            Paragraph(str(p.delay_days), cell_center),
+            Paragraph(p.deadline or "", cell_style)
+        ])
+    if proj_rows:
+        col_widths = [avail * 0.22, avail * 0.20, avail * 0.15, avail * 0.10, avail * 0.10, avail * 0.10, avail * 0.13]
+        proj_table = Table(proj_header + proj_rows, colWidths=col_widths, repeatRows=1)
+        proj_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
+        ]))
+        elements.append(proj_table)
+
+    doc = SimpleDocTemplate(
+        buffer, pagesize=letter,
+        leftMargin=0.6*inch, rightMargin=0.6*inch,
+        topMargin=0.6*inch, bottomMargin=0.6*inch,
+        title=f"Designer Performance: {report.designer_name}",
         author="Little Sparks"
     )
     doc.build(elements)
