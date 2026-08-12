@@ -92,6 +92,8 @@ from .schemas import (
     MonthlyReportResponse,
     MonthlyReportItem,
     DesignerPerformanceResponse,
+    WeeklyActivityItem,
+    MonthlyActivityItem,
     DesignerProjectItem,
     ProjectManagerResponse,
     SlackCompletionTrackerResponse,
@@ -203,7 +205,7 @@ try:
         print(f"Admin user created: {ADMIN_EMAIL}")
     else:
         if existing.role.upper() != "ADMIN":
-            existing.role = "ADMIN"
+            existing.role = "ADMIN" # type: ignore[assignment]
             db.commit()
             print(f"Admin role corrected: {ADMIN_EMAIL}")
         else:
@@ -281,8 +283,8 @@ def get_session_from_token(token: str, db: Session) -> Optional[SessionModel]:
     if not session:
         logger.warning("Session not found for token: %s...", token[:20])
         return None
-    if session.expires_at and session.expires_at < datetime.utcnow():
-        session.revoked = True
+    if session.expires_at and session.expires_at < datetime.utcnow(): # pyright: ignore[reportGeneralTypeIssues]
+        session.revoked = True # pyright: ignore[reportAttributeAccessIssue]
         db.commit()
         logger.warning(
             "Session expired: user_id=%s, session_id=%s, expired_at=%s",
@@ -446,7 +448,7 @@ def encrypt_token(plaintext: str) -> str:
     return fernet.encrypt(plaintext.encode()).decode()
 
 
-def decrypt_token(encrypted: str) -> str:
+def decrypt_token(encrypted: str) -> Optional[str]:
     try:
         return fernet.decrypt(encrypted.encode()).decode()
     except InvalidToken:
@@ -675,9 +677,9 @@ def _jwk_to_rsa_key(jwk):
 def verify_slack_id_token(
     id_token: str, expected_audience: str, expected_nonce: str = None
 ):
-    try:
-        from jose import jwt as jose_jwt
+    from jose import jwt as jose_jwt
 
+    try:
         header = jose_jwt.get_unverified_header(id_token)
         kid = header.get("kid")
         alg = header.get("alg", "unknown")
@@ -702,7 +704,7 @@ def verify_slack_id_token(
             )
             return None
         public_key = _jwk_to_rsa_key(jwk)
-        payload = jose_jwt.decode(
+        payload = jose_jwt.decode(  # pyright: ignore[reportArgumentType]
             id_token,
             key=public_key,
             algorithms=["RS256"],

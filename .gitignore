@@ -15,6 +15,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+pyrightconfig*
 lib64/
 parts/
 sdist/
