@@ -15,6 +15,67 @@ let tempManagerSelections = [];
 let MANAGERS = [];
 
 // ============================================
+// CHARTS
+// ============================================
+const chartInstances = {};
+
+function renderChart(canvasId, config) {
+    if (chartInstances[canvasId]) {
+        chartInstances[canvasId].destroy();
+        delete chartInstances[canvasId];
+    }
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+    chartInstances[canvasId] = new Chart(ctx, config);
+}
+
+function destroyAllCharts() {
+    Object.keys(chartInstances).forEach(id => {
+        chartInstances[id].destroy();
+    });
+    Object.keys(chartInstances).forEach(id => {
+        delete chartInstances[id];
+    });
+}
+
+const chartColors = {
+    brand: '#F47920',
+    brandLight: 'rgba(244, 121, 32, 0.15)',
+    green: '#22C55E',
+    greenBg: 'rgba(34, 197, 94, 0.75)',
+    red: '#EF4444',
+    redBg: 'rgba(239, 68, 68, 0.75)',
+    amber: '#F59E0B',
+    amberBg: 'rgba(245, 158, 11, 0.75)',
+    blue: '#3B82F6',
+    blueBg: 'rgba(59, 130, 246, 0.75)',
+    purple: '#A855F7',
+    purpleBg: 'rgba(168, 85, 247, 0.75)',
+    gray: '#9CA3AF',
+    grayBg: 'rgba(156, 163, 175, 0.75)',
+};
+
+const defaultChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+        legend: {
+            labels: {
+                font: { family: 'Inter', size: 12, weight: '500' },
+                padding: 16,
+                usePointStyle: true,
+                pointStyleWidth: 10,
+            }
+        }
+    }
+};
+
+const defaultScaleConfig = {
+    grid: { color: 'rgba(0, 0, 0, 0.05)', drawBorder: false },
+    ticks: { font: { family: 'Inter', size: 11 } }
+};
+
+// ============================================
 // AUTH
 // ============================================
 
@@ -553,6 +614,66 @@ async function loadDashboard() {
             }
         } else {
             document.getElementById('pendingRequestsCard').classList.add('hidden');
+        }
+
+        // Dashboard Charts
+        try {
+            const statusChartEl = document.getElementById('dashboardStatusChart');
+            const delayChartEl = document.getElementById('dashboardDelayChart');
+            if (statusChartEl) {
+                renderChart('dashboardStatusChart', {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['On Time', 'Delayed', 'Completed', 'At Risk'],
+                        datasets: [{
+                            data: [stats.on_time, stats.delayed, stats.completed, stats.active_projects - stats.on_time - stats.delayed - stats.completed],
+                            backgroundColor: [chartColors.greenBg, chartColors.redBg, chartColors.greenBg, chartColors.amberBg],
+                            borderWidth: 0,
+                            hoverOffset: 8,
+                        }]
+                    },
+                    options: {
+                        ...defaultChartOptions,
+                        cutout: '65%',
+                        plugins: {
+                            ...defaultChartOptions.plugins,
+                            legend: {
+                                ...defaultChartOptions.plugins.legend,
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            }
+            if (delayChartEl) {
+                const delayData = await api.getDashboardStats();
+                renderChart('dashboardDelayChart', {
+                    type: 'bar',
+                    data: {
+                        labels: ['On Time', 'Delayed', 'Completed', 'At Risk'],
+                        datasets: [{
+                            label: 'Projects',
+                            data: [delayData.on_time, delayData.delayed, delayData.completed, delayData.active_projects - delayData.on_time - delayData.delayed - delayData.completed],
+                            backgroundColor: [chartColors.greenBg, chartColors.redBg, chartColors.greenBg, chartColors.amberBg],
+                            borderRadius: 6,
+                            borderSkipped: false,
+                        }]
+                    },
+                    options: {
+                        ...defaultChartOptions,
+                        scales: {
+                            x: { ...defaultScaleConfig, grid: { display: false } },
+                            y: { ...defaultScaleConfig, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }
+                        },
+                        plugins: {
+                            ...defaultChartOptions.plugins,
+                            legend: { display: false }
+                        }
+                    }
+                });
+            }
+        } catch (chartErr) {
+            console.warn('[APP] loadDashboard: Failed to render charts:', chartErr.message);
         }
     } catch (err) {
         console.error('[APP] loadDashboard: Failed to load dashboard:', err.message);
@@ -2481,9 +2602,130 @@ async function loadProjectReport() {
         }
         
         content.innerHTML = html;
+
+        // Show charts container
+        const chartsContainer = document.getElementById('projectReportCharts');
+        if (chartsContainer) chartsContainer.classList.remove('hidden');
+
+        // Render Project Report Charts
+        try {
+            // Rating averages bar chart
+            const ratingLabels = ['Costing', 'Willingness', 'Engagement', 'Durability', 'Age Appr.', 'Ease', 'Aesthetics', 'Store'];
+            const ratingKeys = ['costing', 'willingness_to_buy', 'engagement_life', 'durability', 'age_appropriateness', 'ease_of_use', 'aesthetics', 'easy_to_store'];
+            const ratingData = report.stage_reports
+                ? ratingKeys.map(key => {
+                    const vals = report.stage_reports.map(r => r[key]).filter(v => v != null);
+                    return vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+                })
+                : [0, 0, 0, 0, 0, 0, 0, 0];
+
+            renderChart('projectRatingChart', {
+                type: 'bar',
+                data: {
+                    labels: ratingLabels,
+                    datasets: [{
+                        label: 'Avg Rating',
+                        data: ratingData.map(v => Math.round(v * 100) / 100),
+                        backgroundColor: ratingData.map(v => v >= 4 ? chartColors.greenBg : v >= 3 ? chartColors.amberBg : chartColors.redBg),
+                        borderRadius: 6,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    ...defaultChartOptions,
+                    scales: {
+                        x: { ...defaultScaleConfig, grid: { display: false } },
+                        y: { ...defaultScaleConfig, beginAtZero: true, max: 5, ticks: { ...defaultScaleConfig.ticks, stepSize: 1 } }
+                    },
+                    plugins: {
+                        ...defaultChartOptions.plugins,
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `Avg: ${ctx.parsed.y.toFixed(2)} / 5`
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Delay analysis by stage
+            const delayLabels = report.phases.map(p => p.stage_name);
+            const delayValues = report.phases.map(p => p.delay_days);
+            renderChart('projectDelayChart', {
+                type: 'bar',
+                data: {
+                    labels: delayLabels,
+                    datasets: [{
+                        label: 'Delay Days',
+                        data: delayValues,
+                        backgroundColor: delayValues.map(v => v > 0 ? chartColors.redBg : chartColors.grayBg),
+                        borderRadius: 6,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    ...defaultChartOptions,
+                    indexAxis: 'y',
+                    scales: {
+                        x: { ...defaultScaleConfig, beginAtZero: true },
+                        y: { ...defaultScaleConfig, grid: { display: false } }
+                    },
+                    plugins: {
+                        ...defaultChartOptions.plugins,
+                        legend: { display: false }
+                    }
+                }
+            });
+
+            // Phase progress horizontal bar
+            const progressLabels = report.phases.map(p => p.stage_name);
+            const progressData = report.phases.map(p => {
+                if (p.completed_at) return 100;
+                if (p.is_current) {
+                    const start = new Date(p.deadline);
+                    start.setDate(start.getDate() - 7);
+                    return 50;
+                }
+                return 0;
+            });
+            renderChart('projectProgressChart', {
+                type: 'bar',
+                data: {
+                    labels: progressLabels,
+                    datasets: [{
+                        label: 'Completion %',
+                        data: progressData,
+                        backgroundColor: progressData.map((v, i) => {
+                            if (v === 100) return chartColors.greenBg;
+                            if (v > 0) return chartColors.brand;
+                            return chartColors.grayBg;
+                        }),
+                        borderRadius: 6,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    ...defaultChartOptions,
+                    indexAxis: 'y',
+                    scales: {
+                        x: { ...defaultScaleConfig, beginAtZero: true, max: 100, ticks: { ...defaultScaleConfig.ticks, callback: v => v + '%' } },
+                        y: { ...defaultScaleConfig, grid: { display: false } }
+                    },
+                    plugins: {
+                        ...defaultChartOptions.plugins,
+                        legend: { display: false }
+                    }
+                }
+            });
+        } catch (chartErr) {
+            console.warn('[APP] loadProjectReport: Failed to render charts:', chartErr.message);
+        }
     } catch (err) {
         console.error('[APP] loadProjectReport: Failed:', err.message);
         content.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-red-500">Failed to load report: ' + err.message + '</div>';
+        const chartsContainer = document.getElementById('projectReportCharts');
+        if (chartsContainer) chartsContainer.classList.add('hidden');
     }
 }
 
@@ -2622,9 +2864,86 @@ async function loadWeeklyReport() {
         
         html += '</div></div>';
         content.innerHTML = html;
+
+        // Show charts container
+        const chartsContainer = document.getElementById('weeklyReportCharts');
+        if (chartsContainer) chartsContainer.classList.remove('hidden');
+
+        // Render Weekly Report Charts
+        try {
+            if (report.reports.length > 0) {
+                // Delay days by stage
+                renderChart('weeklyDelayChart', {
+                    type: 'bar',
+                    data: {
+                        labels: report.reports.map(r => r.stage_name),
+                        datasets: [{
+                            label: 'Delay Days',
+                            data: report.reports.map(r => r.delay_days),
+                            backgroundColor: report.reports.map(r => r.delay_days > 0 ? chartColors.redBg : chartColors.grayBg),
+                            borderRadius: 6,
+                            borderSkipped: false,
+                        }]
+                    },
+                    options: {
+                        ...defaultChartOptions,
+                        scales: {
+                            x: { ...defaultScaleConfig, grid: { display: false } },
+                            y: { ...defaultScaleConfig, beginAtZero: true }
+                        },
+                        plugins: {
+                            ...defaultChartOptions.plugins,
+                            legend: { display: false }
+                        }
+                    }
+                });
+
+                // Activity summary
+                renderChart('weeklyActivityChart', {
+                    type: 'bar',
+                    data: {
+                        labels: report.reports.map(r => r.stage_name),
+                        datasets: [
+                            {
+                                label: 'Completed',
+                                data: report.reports.map(r => r.completed_this_week ? 1 : 0),
+                                backgroundColor: chartColors.greenBg,
+                                borderRadius: 4,
+                                borderSkipped: false,
+                            },
+                            {
+                                label: 'Submissions',
+                                data: report.reports.map(r => (r.activities || []).length),
+                                backgroundColor: chartColors.blueBg,
+                                borderRadius: 4,
+                                borderSkipped: false,
+                            },
+                            {
+                                label: 'Delayed',
+                                data: report.reports.map(r => r.delay_days > 0 ? 1 : 0),
+                                backgroundColor: chartColors.redBg,
+                                borderRadius: 4,
+                                borderSkipped: false,
+                            }
+                        ]
+                    },
+                    options: {
+                        ...defaultChartOptions,
+                        scales: {
+                            x: { ...defaultScaleConfig, grid: { display: false } },
+                            y: { ...defaultScaleConfig, beginAtZero: true }
+                        }
+                    }
+                });
+            }
+        } catch (chartErr) {
+            console.warn('[APP] loadWeeklyReport: Failed to render charts:', chartErr.message);
+        }
     } catch (err) {
         console.error('[APP] loadWeeklyReport: Failed:', err.message);
         content.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-red-500">Failed to load report: ' + err.message + '</div>';
+        const chartsContainer = document.getElementById('weeklyReportCharts');
+        if (chartsContainer) chartsContainer.classList.add('hidden');
     }
 }
 
@@ -2802,9 +3121,117 @@ async function loadMonthlyReport() {
         
         html += '</div></div>';
         content.innerHTML = html;
+
+        // Show charts container
+        const chartsContainer = document.getElementById('monthlyReportCharts');
+        if (chartsContainer) chartsContainer.classList.remove('hidden');
+
+        // Render Monthly Report Charts
+        try {
+            if (report.reports.length > 0) {
+                // Rating trends line chart
+                const ratingKeys = ['costing', 'willingness_to_buy', 'engagement_life', 'durability', 'age_appropriateness', 'ease_of_use', 'aesthetics', 'easy_to_store'];
+                const ratingLabels = ['Costing', 'Willingness', 'Engagement', 'Durability', 'Age Appr.', 'Ease', 'Aesthetics', 'Store'];
+                const trendColors = [chartColors.brand, chartColors.green, chartColors.blue, chartColors.purple, chartColors.amber, chartColors.red, chartColors.gray, '#06B6D4'];
+
+                const datasets = ratingKeys.map((key, i) => ({
+                    label: ratingLabels[i],
+                    data: report.reports.map(r => {
+                        const val = (r.avg_ratings && r.avg_ratings[key]) !== null && r.avg_ratings[key] !== undefined ? r.avg_ratings[key] : null;
+                        return val !== null ? Math.round(val * 100) / 100 : null;
+                    }),
+                    borderColor: trendColors[i],
+                    backgroundColor: trendColors[i] + '20',
+                    borderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    fill: false,
+                    tension: 0.3,
+                }));
+
+                renderChart('monthlyRatingTrendChart', {
+                    type: 'line',
+                    data: {
+                        labels: report.reports.map(r => r.stage_name),
+                        datasets,
+                    },
+                    options: {
+                        ...defaultChartOptions,
+                        scales: {
+                            x: { ...defaultScaleConfig, grid: { display: false } },
+                            y: { ...defaultScaleConfig, beginAtZero: true, max: 5, ticks: { ...defaultScaleConfig.ticks, stepSize: 1 } }
+                        }
+                    }
+                });
+
+                // Delay analysis bar chart
+                renderChart('monthlyDelayChart', {
+                    type: 'bar',
+                    data: {
+                        labels: report.reports.map(r => r.stage_name),
+                        datasets: [{
+                            label: 'Delay Days',
+                            data: report.reports.map(r => r.delay_days),
+                            backgroundColor: report.reports.map(r => r.delay_days > 0 ? chartColors.redBg : chartColors.grayBg),
+                            borderRadius: 6,
+                            borderSkipped: false,
+                        }]
+                    },
+                    options: {
+                        ...defaultChartOptions,
+                        scales: {
+                            x: { ...defaultScaleConfig, grid: { display: false } },
+                            y: { ...defaultScaleConfig, beginAtZero: true }
+                        },
+                        plugins: {
+                            ...defaultChartOptions.plugins,
+                            legend: { display: false }
+                        }
+                    }
+                });
+
+                // Rating averages by stage - grouped bar
+                const stagesWithRatings = report.reports.filter(r => r.avg_ratings && Object.keys(r.avg_ratings).length > 0);
+                if (stagesWithRatings.length > 0) {
+                    const topRatings = ['costing', 'durability', 'aesthetics', 'ease_of_use'];
+                    const topLabels = ['Costing', 'Durability', 'Aesthetics', 'Ease'];
+                    const topColors = [chartColors.brand, chartColors.green, chartColors.purple, chartColors.blue];
+
+                    const ratingDatasets = topRatings.map((key, i) => ({
+                        label: topLabels[i],
+                        data: stagesWithRatings.map(r => {
+                            const val = (r.avg_ratings && r.avg_ratings[key]) !== null && r.avg_ratings[key] !== undefined ? r.avg_ratings[key] : 0;
+                            return Math.round(val * 100) / 100;
+                        }),
+                        backgroundColor: topColors[i] + 'CC',
+                        borderRadius: 4,
+                        borderSkipped: false,
+                    }));
+
+                    renderChart('monthlyRatingBarChart', {
+                        type: 'bar',
+                        data: {
+                            labels: stagesWithRatings.map(r => r.stage_name),
+                            datasets: ratingDatasets,
+                        },
+                        options: {
+                            ...defaultChartOptions,
+                            scales: {
+                                x: { ...defaultScaleConfig, grid: { display: false } },
+                                y: { ...defaultScaleConfig, beginAtZero: true, max: 5 }
+                            }
+                        }
+                    });
+                }
+            }
+        } catch (chartErr) {
+            console.warn('[APP] loadMonthlyReport: Failed to render charts:', chartErr.message);
+        }
     } catch (err) {
         console.error('[APP] loadMonthlyReport: Failed:', err.message);
         content.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-red-500">Failed to load report: ' + err.message + '</div>';
+        const chartsContainer = document.getElementById('monthlyReportCharts');
+        if (chartsContainer) chartsContainer.classList.add('hidden');
     }
 }
 
@@ -2908,9 +3335,91 @@ async function loadDesignerPerformance() {
         `;
         
         content.innerHTML = html;
+
+        // Show charts container
+        const chartsContainer = document.getElementById('designerPerfCharts');
+        if (chartsContainer) chartsContainer.classList.remove('hidden');
+
+        // Render Designer Performance Charts
+        try {
+            if (report.projects.length > 0) {
+                // On Time vs Delayed stacked bar
+                renderChart('designerStatusChart', {
+                    type: 'bar',
+                    data: {
+                        labels: report.projects.map(p => p.project_name),
+                        datasets: [
+                            {
+                                label: 'On Time',
+                                data: report.projects.map(p => p.delay_days <= 0 ? 1 : 0),
+                                backgroundColor: chartColors.greenBg,
+                                borderRadius: 4,
+                                borderSkipped: false,
+                            },
+                            {
+                                label: 'Delayed',
+                                data: report.projects.map(p => p.delay_days > 0 ? 1 : 0),
+                                backgroundColor: chartColors.redBg,
+                                borderRadius: 4,
+                                borderSkipped: false,
+                            }
+                        ]
+                    },
+                    options: {
+                        ...defaultChartOptions,
+                        scales: {
+                            x: { ...defaultScaleConfig, grid: { display: false } },
+                            y: { ...defaultScaleConfig, beginAtZero: true, max: 1, ticks: { ...defaultScaleConfig.ticks, stepSize: 1 } }
+                        }
+                    }
+                });
+
+                // Performance by project - grouped bar (stages, on-time, delays)
+                renderChart('designerProjectChart', {
+                    type: 'bar',
+                    data: {
+                        labels: report.projects.map(p => p.project_name),
+                        datasets: [
+                            {
+                                label: 'Total Stages',
+                                data: report.projects.map(() => 1),
+                                backgroundColor: chartColors.blueBg,
+                                borderRadius: 4,
+                                borderSkipped: false,
+                            },
+                            {
+                                label: 'On Time',
+                                data: report.projects.map(p => p.delay_days <= 0 ? 1 : 0),
+                                backgroundColor: chartColors.greenBg,
+                                borderRadius: 4,
+                                borderSkipped: false,
+                            },
+                            {
+                                label: 'Delayed',
+                                data: report.projects.map(p => p.delay_days > 0 ? 1 : 0),
+                                backgroundColor: chartColors.redBg,
+                                borderRadius: 4,
+                                borderSkipped: false,
+                            }
+                        ]
+                    },
+                    options: {
+                        ...defaultChartOptions,
+                        scales: {
+                            x: { ...defaultScaleConfig, grid: { display: false } },
+                            y: { ...defaultScaleConfig, beginAtZero: true }
+                        }
+                    }
+                });
+            }
+        } catch (chartErr) {
+            console.warn('[APP] loadDesignerPerformance: Failed to render charts:', chartErr.message);
+        }
     } catch (err) {
         console.error('[APP] loadDesignerPerformance: Failed:', err.message);
         content.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-red-500">Failed to load report: ' + err.message + '</div>';
+        const chartsContainer = document.getElementById('designerPerfCharts');
+        if (chartsContainer) chartsContainer.classList.add('hidden');
     }
 }
 
