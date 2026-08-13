@@ -2622,7 +2622,7 @@ async function loadProjectReport() {
 
         // Render Project Report Charts
         try {
-            // Rating averages bar chart
+                // Rating averages radar chart
             const ratingLabels = ['Costing', 'Willingness', 'Engagement', 'Durability', 'Age Appr.', 'Ease', 'Aesthetics', 'Store'];
             const ratingKeys = ['costing', 'willingness_to_buy', 'engagement_life', 'durability', 'age_appropriateness', 'ease_of_use', 'aesthetics', 'easy_to_store'];
             const ratingData = report.stage_reports
@@ -2633,29 +2633,40 @@ async function loadProjectReport() {
                 : [0, 0, 0, 0, 0, 0, 0, 0];
 
             renderChart('projectRatingChart', {
-                type: 'bar',
+                type: 'radar',
                 data: {
                     labels: ratingLabels,
                     datasets: [{
                         label: 'Avg Rating',
                         data: ratingData.map(v => Math.round(v * 100) / 100),
-                        backgroundColor: ratingData.map(v => v >= 4 ? chartColors.greenBg : v >= 3 ? chartColors.amberBg : chartColors.redBg),
-                        borderRadius: 6,
-                        borderSkipped: false,
+                        backgroundColor: 'rgba(244, 121, 32, 0.2)',
+                        borderColor: chartColors.brand,
+                        borderWidth: 2,
+                        pointBackgroundColor: ratingData.map(v => v >= 4 ? chartColors.green : v >= 3 ? chartColors.amber : chartColors.red),
+                        pointBorderColor: 'transparent',
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
                     }]
                 },
                 options: {
                     ...defaultChartOptions,
                     scales: {
-                        x: { ...defaultScaleConfig, grid: { display: false } },
-                        y: { ...defaultScaleConfig, beginAtZero: true, max: 5, ticks: { ...defaultScaleConfig.ticks, stepSize: 1 } }
+                        r: {
+                            ...defaultScaleConfig,
+                            beginAtZero: true,
+                            max: 5,
+                            ticks: { ...defaultScaleConfig.ticks, stepSize: 1 },
+                            pointLabels: { font: { size: 11, weight: '500' } },
+                            grid: { color: 'rgba(0,0,0,0.07)' },
+                            angleLines: { color: 'rgba(0,0,0,0.07)' },
+                        }
                     },
                     plugins: {
                         ...defaultChartOptions.plugins,
-                        legend: { display: false },
+                        legend: { position: 'bottom', labels: { font: { size: 11 } } },
                         tooltip: {
                             callbacks: {
-                                label: (ctx) => `Avg: ${ctx.parsed.y.toFixed(2)} / 5`
+                                label: (ctx) => `Avg: ${ctx.parsed.r.toFixed(2)} / 5`
                             }
                         }
                     }
@@ -2918,44 +2929,6 @@ async function loadWeeklyReport() {
                         }
                     }
                 });
-
-                // Activity summary
-                renderChart('weeklyActivityChart', {
-                    type: 'bar',
-                    data: {
-                        labels: report.reports.map(r => r.stage_name),
-                        datasets: [
-                            {
-                                label: 'Completed',
-                                data: report.reports.map(r => r.completed_this_week ? 1 : 0),
-                                backgroundColor: chartColors.greenBg,
-                                borderRadius: 4,
-                                borderSkipped: false,
-                            },
-                            {
-                                label: 'Submissions',
-                                data: report.reports.map(r => (r.activities || []).length),
-                                backgroundColor: chartColors.blueBg,
-                                borderRadius: 4,
-                                borderSkipped: false,
-                            },
-                            {
-                                label: 'Delayed',
-                                data: report.reports.map(r => r.delay_days > 0 ? 1 : 0),
-                                backgroundColor: chartColors.redBg,
-                                borderRadius: 4,
-                                borderSkipped: false,
-                            }
-                        ]
-                    },
-                    options: {
-                        ...defaultChartOptions,
-                        scales: {
-                            x: { ...defaultScaleConfig, grid: { display: false } },
-                            y: { ...defaultScaleConfig, beginAtZero: true }
-                        }
-                    }
-                });
             }
         } catch (chartErr) {
             console.warn('[APP] loadWeeklyReport: Failed to render charts:', chartErr.message);
@@ -3150,37 +3123,56 @@ async function loadMonthlyReport() {
         // Render Monthly Report Charts
         try {
             if (report.reports.length > 0) {
-                // Rating trends line chart
+                // Rating averages radar chart
                 const ratingKeys = ['costing', 'willingness_to_buy', 'engagement_life', 'durability', 'age_appropriateness', 'ease_of_use', 'aesthetics', 'easy_to_store'];
                 const ratingLabels = ['Costing', 'Willingness', 'Engagement', 'Durability', 'Age Appr.', 'Ease', 'Aesthetics', 'Store'];
-                const trendColors = [chartColors.brand, chartColors.green, chartColors.blue, chartColors.purple, chartColors.amber, chartColors.red, chartColors.gray, '#06B6D4'];
 
-                const datasets = ratingKeys.map((key, i) => ({
-                    label: ratingLabels[i],
-                    data: report.reports.map(r => {
-                        const val = (r.avg_ratings && r.avg_ratings[key]) !== null && r.avg_ratings[key] !== undefined ? r.avg_ratings[key] : null;
-                        return val !== null ? Math.round(val * 100) / 100 : null;
-                    }),
-                    borderColor: trendColors[i],
-                    backgroundColor: trendColors[i] + '20',
-                    borderWidth: 2,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                    fill: false,
-                    tension: 0.3,
-                }));
+                // Aggregate ratings across all stages in this month
+                const avgRatings = ratingKeys.map(key => {
+                    const vals = report.reports
+                        .map(r => (r.avg_ratings && r.avg_ratings[key]) !== null && (r.avg_ratings && r.avg_ratings[key]) !== undefined ? r.avg_ratings[key] : null)
+                        .filter(v => v !== null);
+                    if (vals.length === 0) return 0;
+                    return vals.reduce((a, b) => a + b, 0) / vals.length;
+                });
 
                 renderChart('monthlyRatingTrendChart', {
-                    type: 'line',
+                    type: 'radar',
                     data: {
-                        labels: report.reports.map(r => r.stage_name),
-                        datasets,
+                        labels: ratingLabels,
+                        datasets: [{
+                            label: 'Avg Rating',
+                            data: avgRatings.map(v => Math.round(v * 100) / 100),
+                            backgroundColor: 'rgba(244, 121, 32, 0.2)',
+                            borderColor: chartColors.brand,
+                            borderWidth: 2,
+                            pointBackgroundColor: avgRatings.map(v => v >= 4 ? chartColors.green : v >= 3 ? chartColors.amber : chartColors.red),
+                            pointBorderColor: 'transparent',
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                        }]
                     },
                     options: {
                         ...defaultChartOptions,
                         scales: {
-                            x: { ...defaultScaleConfig, grid: { display: false } },
-                            y: { ...defaultScaleConfig, beginAtZero: true, max: 5, ticks: { ...defaultScaleConfig.ticks, stepSize: 1 } }
+                            r: {
+                                ...defaultScaleConfig,
+                                beginAtZero: true,
+                                max: 5,
+                                ticks: { ...defaultScaleConfig.ticks, stepSize: 1 },
+                                pointLabels: { font: { size: 11, weight: '500' } },
+                                grid: { color: 'rgba(0,0,0,0.07)' },
+                                angleLines: { color: 'rgba(0,0,0,0.07)' },
+                            }
+                        },
+                        plugins: {
+                            ...defaultChartOptions.plugins,
+                            legend: { position: 'bottom', labels: { font: { size: 11 } } },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => `Avg: ${ctx.parsed.r.toFixed(2)} / 5`
+                                }
+                            }
                         }
                     }
                 });
@@ -3210,40 +3202,6 @@ async function loadMonthlyReport() {
                         }
                     }
                 });
-
-                // Rating averages by stage - grouped bar
-                const stagesWithRatings = report.reports.filter(r => r.avg_ratings && Object.keys(r.avg_ratings).length > 0);
-                if (stagesWithRatings.length > 0) {
-                    const topRatings = ['costing', 'durability', 'aesthetics', 'ease_of_use'];
-                    const topLabels = ['Costing', 'Durability', 'Aesthetics', 'Ease'];
-                    const topColors = [chartColors.brand, chartColors.green, chartColors.purple, chartColors.blue];
-
-                    const ratingDatasets = topRatings.map((key, i) => ({
-                        label: topLabels[i],
-                        data: stagesWithRatings.map(r => {
-                            const val = (r.avg_ratings && r.avg_ratings[key]) !== null && r.avg_ratings[key] !== undefined ? r.avg_ratings[key] : 0;
-                            return Math.round(val * 100) / 100;
-                        }),
-                        backgroundColor: topColors[i] + 'CC',
-                        borderRadius: 4,
-                        borderSkipped: false,
-                    }));
-
-                    renderChart('monthlyRatingBarChart', {
-                        type: 'bar',
-                        data: {
-                            labels: stagesWithRatings.map(r => r.stage_name),
-                            datasets: ratingDatasets,
-                        },
-                        options: {
-                            ...defaultChartOptions,
-                            scales: {
-                                x: { ...defaultScaleConfig, grid: { display: false } },
-                                y: { ...defaultScaleConfig, beginAtZero: true, max: 5 }
-                            }
-                        }
-                    });
-                }
             }
         } catch (chartErr) {
             console.warn('[APP] loadMonthlyReport: Failed to render charts:', chartErr.message);
@@ -3364,63 +3322,31 @@ async function loadDesignerPerformance() {
         // Render Designer Performance Charts
         try {
             if (report.projects.length > 0) {
-                // On Time vs Delayed stacked bar
-                renderChart('designerStatusChart', {
-                    type: 'bar',
-                    data: {
-                        labels: report.projects.map(p => p.project_name),
-                        datasets: [
-                            {
-                                label: 'On Time',
-                                data: report.projects.map(p => p.delay_days <= 0 ? 1 : 0),
-                                backgroundColor: chartColors.greenBg,
-                                borderRadius: 4,
-                                borderSkipped: false,
-                            },
-                            {
-                                label: 'Delayed',
-                                data: report.projects.map(p => p.delay_days > 0 ? 1 : 0),
-                                backgroundColor: chartColors.redBg,
-                                borderRadius: 4,
-                                borderSkipped: false,
-                            }
-                        ]
-                    },
-                    options: {
-                        ...defaultChartOptions,
-                        scales: {
-                            x: { ...defaultScaleConfig, grid: { display: false } },
-                            y: { ...defaultScaleConfig, beginAtZero: true, max: 1, ticks: { ...defaultScaleConfig.ticks, stepSize: 1 } }
-                        }
-                    }
-                });
+                // Delay days per project — bar chart (real signal: which projects, how late)
+                const projectNames = report.projects.map(p => p.project_name);
+                const delayDays = report.projects.map(p => p.delay_days);
+                const workLogged = report.projects.map(p => p.work_logged_days || 0);
 
-                // Performance by project - grouped bar (stages, on-time, delays)
-                renderChart('designerProjectChart', {
+                renderChart('designerDelayTrendChart', {
                     type: 'bar',
                     data: {
-                        labels: report.projects.map(p => p.project_name),
+                        labels: projectNames,
                         datasets: [
                             {
-                                label: 'Total Stages',
-                                data: report.projects.map(() => 1),
+                                label: 'Delay Days',
+                                data: delayDays,
+                                backgroundColor: delayDays.map(v => v > 0 ? chartColors.redBg : chartColors.grayBg),
+                                borderRadius: 6,
+                                borderSkipped: false,
+                                order: 2,
+                            },
+                            {
+                                label: 'Work Logged (days)',
+                                data: workLogged,
                                 backgroundColor: chartColors.blueBg,
-                                borderRadius: 4,
+                                borderRadius: 6,
                                 borderSkipped: false,
-                            },
-                            {
-                                label: 'On Time',
-                                data: report.projects.map(p => p.delay_days <= 0 ? 1 : 0),
-                                backgroundColor: chartColors.greenBg,
-                                borderRadius: 4,
-                                borderSkipped: false,
-                            },
-                            {
-                                label: 'Delayed',
-                                data: report.projects.map(p => p.delay_days > 0 ? 1 : 0),
-                                backgroundColor: chartColors.redBg,
-                                borderRadius: 4,
-                                borderSkipped: false,
+                                order: 1,
                             }
                         ]
                     },
@@ -3429,6 +3355,10 @@ async function loadDesignerPerformance() {
                         scales: {
                             x: { ...defaultScaleConfig, grid: { display: false } },
                             y: { ...defaultScaleConfig, beginAtZero: true }
+                        },
+                        plugins: {
+                            ...defaultChartOptions.plugins,
+                            legend: { position: 'bottom', labels: { font: { size: 11 } } },
                         }
                     }
                 });

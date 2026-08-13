@@ -884,7 +884,7 @@
                 </div>
             </div>
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                <h3 class="text-sm font-semibold text-gray-700 mb-4">Phase Progress Overview</h3>
+                <h3 class="text-sm font-semibold text-gray-700 mb-4">Phase Progress: Time Elapsed vs Work Reported</h3>
                 <div class="relative" style="height: 250px;">
                     <canvas id="projectProgressChart"></canvas>
                 </div>
@@ -919,18 +919,10 @@
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">Select a project and week to generate a report.</div>
         </div>
         <div id="weeklyReportCharts" class="space-y-6 hidden">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                    <h3 class="text-sm font-semibold text-gray-700 mb-4">Delay Days by Stage</h3>
-                    <div class="relative" style="height: 280px;">
-                        <canvas id="weeklyDelayChart"></canvas>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                    <h3 class="text-sm font-semibold text-gray-700 mb-4">Weekly Activity Summary</h3>
-                    <div class="relative" style="height: 280px;">
-                        <canvas id="weeklyActivityChart"></canvas>
-                    </div>
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                <h3 class="text-sm font-semibold text-gray-700 mb-4">Delay Days by Stage</h3>
+                <div class="relative" style="height: 280px;">
+                    <canvas id="weeklyDelayChart"></canvas>
                 </div>
             </div>
         </div>
@@ -978,8 +970,8 @@
         <div id="monthlyReportCharts" class="space-y-6 hidden">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                    <h3 class="text-sm font-semibold text-gray-700 mb-4">Rating Trends</h3>
-                    <div class="relative" style="height: 280px;">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-4">Rating Averages by Category</h3>
+                    <div class="relative" style="height: 300px;">
                         <canvas id="monthlyRatingTrendChart"></canvas>
                     </div>
                 </div>
@@ -988,12 +980,6 @@
                     <div class="relative" style="height: 280px;">
                         <canvas id="monthlyDelayChart"></canvas>
                     </div>
-                </div>
-            </div>
-            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                <h3 class="text-sm font-semibold text-gray-700 mb-4">Rating Averages by Stage</h3>
-                <div class="relative" style="height: 250px;">
-                    <canvas id="monthlyRatingBarChart"></canvas>
                 </div>
             </div>
         </div>
@@ -1063,18 +1049,10 @@
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400">Select a designer and period to generate a report.</div>
         </div>
         <div id="designerPerfCharts" class="space-y-6 hidden">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                    <h3 class="text-sm font-semibold text-gray-700 mb-4">On Time vs Delayed</h3>
-                    <div class="relative" style="height: 280px;">
-                        <canvas id="designerStatusChart"></canvas>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                    <h3 class="text-sm font-semibold text-gray-700 mb-4">Performance by Project</h3>
-                    <div class="relative" style="height: 280px;">
-                        <canvas id="designerProjectChart"></canvas>
-                    </div>
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+                <h3 class="text-sm font-semibold text-gray-700 mb-4">Delay Trend (Last 6 Months)</h3>
+                <div class="relative" style="height: 300px;">
+                    <canvas id="designerDelayTrendChart"></canvas>
                 </div>
             </div>
         </div>
