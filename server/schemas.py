@@ -109,13 +109,17 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    assigned_designer_id: Optional[int] = None
+    start_date: Optional[str] = None
     deadline: Optional[str] = None
     manager_notes: Optional[str] = None
     delay_reason: Optional[str] = None
     slack_channel_id: Optional[str] = None
     slack_channel_name: Optional[str] = None
     manager_ids: Optional[List[int]] = None
+    phase_type: Optional[str] = None
     stage_names: Optional[List[str]] = None
+    phases: Optional[List[PhaseCreate]] = None
 
 
 class ProjectResponse(BaseModel):

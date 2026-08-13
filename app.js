@@ -12,6 +12,8 @@ let DESIGNERS = [];
 let CURRENT_USER = null;
 let USER_ROLE = null;
 let tempManagerSelections = [];
+let tempEditManagerSelections = [];
+let _editProjectCache = null;
 let MANAGERS = [];
 
 // ============================================
@@ -626,7 +628,8 @@ async function loadDashboard() {
                 try {
                     const trend = await api.getDelayTrend();
                     if (trend.length > 0) {
-                        const months = trend.map(t => {
+                        const sortedTrend = [...trend].sort((a, b) => a.month.localeCompare(b.month));
+                        const months = sortedTrend.map(t => {
                             const [y, m] = t.month.split('-');
                             return new Date(y, m - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' });
                         });
@@ -636,7 +639,7 @@ async function loadDashboard() {
                                 labels: months,
                                 datasets: [{
                                     label: 'Total Delay Days',
-                                    data: trend.map(t => t.total_delay_days),
+                                    data: sortedTrend.map(t => t.total_delay_days),
                                     borderColor: chartColors.red,
                                     backgroundColor: 'rgba(239, 68, 68, 0.1)',
                                     fill: true,
@@ -646,7 +649,7 @@ async function loadDashboard() {
                                     borderWidth: 2,
                                 }, {
                                     label: 'Delayed Projects',
-                                    data: trend.map(t => t.delayed_projects),
+                                    data: sortedTrend.map(t => t.delayed_projects),
                                     borderColor: chartColors.amber,
                                     backgroundColor: 'rgba(245, 158, 11, 0.1)',
                                     fill: true,
@@ -660,7 +663,7 @@ async function loadDashboard() {
                             options: {
                                 ...defaultChartOptions,
                                 scales: {
-                                    x: { ...defaultScaleConfig, grid: { display: false } },
+                                    x: { ...defaultScaleConfig, grid: { display: false }, reverse: false },
                                     y: { ...defaultScaleConfig, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, title: { display: true, text: 'Delay Days', font: { size: 11 } } },
                                     y1: { ...defaultScaleConfig, beginAtZero: true, position: 'right', grid: { display: false }, title: { display: true, text: 'Projects', font: { size: 11 } } }
                                 },
@@ -760,7 +763,7 @@ async function populateProjectsTable() {
                     </td>
                     <td class="px-5 py-4 text-right" onclick="event.stopPropagation()">
                         <button onclick="navigateTo('project-details', ${p.id})" class="text-brand-600 hover:text-brand-700 font-medium text-xs mr-3 transition-colors">View</button>
-                        <button onclick="navigateTo('edit-project')" class="text-gray-500 hover:text-gray-700 font-medium text-xs transition-colors">Edit</button>
+                        <button onclick="navigateTo('edit-project', ${p.id})" class="text-gray-500 hover:text-gray-700 font-medium text-xs transition-colors">Edit</button>
                     </td>
                 </tr>
             `;
@@ -999,18 +1002,57 @@ async function runExport(entity, format) {
 async function populateEditProject() {
     console.log('[APP] populateEditProject: Loading edit form for project', selectedProjectId);
     try {
+        DESIGNERS = await api.getDesigners();
+        MANAGERS = await api.getManagers();
         const project = await api.getProject(selectedProjectId);
         console.log('[APP] populateEditProject: Project data received', project);
+        
+        // Project Name
         const nameInput = document.getElementById('editProjectName');
         if (nameInput) nameInput.value = project.name;
-        const priorityInput = document.getElementById('editProjectPriority');
-        if (priorityInput) priorityInput.value = project.priority.toLowerCase();
+        
+        // Designer Select
+        const designerSelect = document.getElementById('editDesignerSelect');
+        if (designerSelect) {
+            let html = '<option value="">Select a designer</option>';
+            DESIGNERS.forEach(d => {
+                const sel = d.id === project.assigned_designer_id ? 'selected' : '';
+                html += `<option value="${d.id}" ${sel}>${d.name}</option>`;
+            });
+            designerSelect.innerHTML = html;
+        }
+        
+        // Start Date
+        const startDateInput = document.getElementById('editProjectStartDate');
+        if (startDateInput) startDateInput.value = project.start_date || '';
+        
+        // Deadline
         const dateInput = document.getElementById('editProjectDeadline');
         if (dateInput) dateInput.value = project.deadline;
+        
+        // Description
         const descInput = document.getElementById('editProjectDescription');
-        if (descInput) descInput.value = project.description;
+        if (descInput) descInput.value = project.description || '';
+        
+        // Phase Type
+        const phaseTypeRadio = document.querySelector(`input[name="editPhaseType"][value="${project.phase_type || 'PRODUCTION'}"]`);
+        if (phaseTypeRadio) phaseTypeRadio.checked = true;
+        
+        // Manager Notes
         const notesInput = document.getElementById('editProjectManagerNotes');
-        if (notesInput) notesInput.value = project.manager_notes;
+        if (notesInput) notesInput.value = project.manager_notes || '';
+        
+        // Manager Selection
+        populateEditManagerSelect(project.managers ? project.managers.map(m => m.id) : []);
+        
+        // Cache project for phase type changes
+        _editProjectCache = project;
+        
+        // Phase Deadlines
+        renderEditPhaseDeadlines(project);
+        
+        // Read-only info panels
+        populateEditReadOnlyInfo(project);
     } catch (err) {
         console.error('[APP] populateEditProject: Failed to load project:', err.message);
         showToast('Failed to load project: ' + err.message);
@@ -1021,18 +1063,41 @@ async function saveProjectEdit() {
     console.log('[APP] saveProjectEdit: Saving project', selectedProjectId);
     try {
         const nameInput = document.getElementById('editProjectName');
-        const priorityInput = document.getElementById('editProjectPriority');
+        const designerSelect = document.getElementById('editDesignerSelect');
+        const startDateInput = document.getElementById('editProjectStartDate');
         const dateInput = document.getElementById('editProjectDeadline');
         const descInput = document.getElementById('editProjectDescription');
         const notesInput = document.getElementById('editProjectManagerNotes');
 
-        await api.updateProject(selectedProjectId, {
+        const phaseDeadlineInputs = document.querySelectorAll('#editPhaseDeadlinesContainer .phase-deadline-input');
+        const phaseNameInputs = document.querySelectorAll('#editPhaseDeadlinesContainer .phase-name-input');
+        const phaseDeadlines = [];
+        const phaseNames = [];
+        phaseDeadlineInputs.forEach(input => phaseDeadlines.push(input.value));
+        phaseNameInputs.forEach(input => phaseNames.push(input.value));
+
+        const phases = phaseDeadlines.map((deadline, index) => ({
+            stage_index: index,
+            deadline: deadline || dateInput?.value || ''
+        }));
+
+        const ideationRadio = document.querySelector('input[name="editPhaseType"][value="IDEATION"]');
+        const phaseType = ideationRadio && ideationRadio.checked ? 'IDEATION' : 'PRODUCTION';
+
+        const updateData = {
             name: nameInput ? nameInput.value : null,
-            priority: priorityInput ? priorityInput.value.toUpperCase() : null,
+            assigned_designer_id: designerSelect ? parseInt(designerSelect.value) : null,
+            start_date: startDateInput ? startDateInput.value : null,
             deadline: dateInput ? dateInput.value : null,
             description: descInput ? descInput.value : null,
             manager_notes: notesInput ? notesInput.value : null,
-        });
+            phase_type: phaseType,
+            stage_names: phaseNames.length ? phaseNames : null,
+            phases: phaseDeadlines.length ? phases : null,
+            manager_ids: tempEditManagerSelections && tempEditManagerSelections.length ? tempEditManagerSelections : null,
+        };
+
+        await api.updateProject(selectedProjectId, updateData);
 
         showToast('Project updated successfully!');
         navigateTo('project-details');
@@ -1608,6 +1673,172 @@ function deselectAllManagers() {
     document.querySelectorAll('#managerSelectContainer input[type="checkbox"]').forEach(cb => {
         cb.checked = cb.value == CURRENT_USER?.id;
     });
+}
+
+// ============================================
+// EDIT PROJECT FORM HELPERS
+// ============================================
+function onEditPhaseTypeChange() {
+    const ideationRadio = document.querySelector('input[name="editPhaseType"][value="IDEATION"]');
+    const ideationCard = document.getElementById('editIdeationCard');
+    const productionCard = document.getElementById('editProductionCard');
+    
+    if (ideationRadio && ideationRadio.checked) {
+        ideationCard.className = 'phase-type-card border-2 border-brand-500 bg-brand-50 rounded-xl p-4 text-center transition-all';
+        ideationCard.querySelector('div.w-10').className = 'w-10 h-10 rounded-lg bg-brand-500 text-white flex items-center justify-center mx-auto mb-2';
+        ideationCard.querySelector('p.text-sm').className = 'text-sm font-semibold text-brand-700';
+        
+        productionCard.className = 'phase-type-card border-2 border-gray-200 bg-white rounded-xl p-4 text-center transition-all hover:border-gray-300';
+        productionCard.querySelector('div.w-10').className = 'w-10 h-10 rounded-lg bg-gray-500 text-white flex items-center justify-center mx-auto mb-2';
+        productionCard.querySelector('p.text-sm').className = 'text-sm font-semibold text-gray-700';
+    } else {
+        productionCard.className = 'phase-type-card border-2 border-brand-500 bg-brand-50 rounded-xl p-4 text-center transition-all';
+        productionCard.querySelector('div.w-10').className = 'w-10 h-10 rounded-lg bg-brand-500 text-white flex items-center justify-center mx-auto mb-2';
+        productionCard.querySelector('p.text-sm').className = 'text-sm font-semibold text-brand-700';
+        
+        ideationCard.className = 'phase-type-card border-2 border-gray-200 bg-white rounded-xl p-4 text-center transition-all hover:border-gray-300';
+        ideationCard.querySelector('div.w-10').className = 'w-10 h-10 rounded-lg bg-gray-500 text-white flex items-center justify-center mx-auto mb-2';
+        ideationCard.querySelector('p.text-sm').className = 'text-sm font-semibold text-gray-700';
+    }
+    
+    if (_editProjectCache) {
+        renderEditPhaseDeadlines(_editProjectCache);
+    }
+}
+
+function renderEditPhaseDeadlines(project) {
+    const container = document.getElementById('editPhaseDeadlinesContainer');
+    if (!container || !project) return;
+    
+    const deadline = project.deadline || '';
+    const existingInputs = document.querySelectorAll('#editPhaseDeadlinesContainer .phase-deadline-input');
+    const existingValues = {};
+    existingInputs.forEach(input => {
+        existingValues[input.dataset.phaseIndex] = input.value;
+    });
+    const existingNames = {};
+    const existingNameInputs = document.querySelectorAll('#editPhaseDeadlinesContainer .phase-name-input');
+    existingNameInputs.forEach(input => {
+        existingNames[input.dataset.phaseIndex] = input.value;
+    });
+    
+    const ideationRadio = document.querySelector('input[name="editPhaseType"][value="IDEATION"]');
+    const phaseType = ideationRadio && ideationRadio.checked ? 'IDEATION' : (project.phase_type || 'PRODUCTION');
+    const stages = getStagesForPhaseType(phaseType);
+    const phases = project.phases || [];
+    
+    let html = '';
+    stages.forEach((stage, index) => {
+        const phaseData = phases.find(p => p.stage_index === index);
+        const minDate = index === 0 ? '' : (index > 0 ? `min="${phases[index - 1]?.deadline || ''}"` : '');
+        const existingValue = existingValues[index] || (phaseData ? phaseData.deadline : deadline);
+        const existingName = existingNames[index] || (project.stage_names && project.stage_names[index]) || stage;
+        
+        html += `
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3" data-phase-index="${index}">
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <span class="w-6 h-6 rounded-full ${index === 0 ? 'bg-brand-500' : 'bg-gray-400'} text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${index + 1}</span>
+                </div>
+                <div class="flex-1">
+                    <input type="text"
+                        class="phase-name-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors"
+                        data-phase-index="${index}"
+                        value="${existingName}"
+                        placeholder="Phase name"
+                    />
+                </div>
+                <div class="flex-1">
+                    <input type="date"
+                        class="phase-deadline-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors"
+                        data-phase-index="${index}"
+                        ${minDate}
+                        value="${existingValue}"
+                    />
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+function populateEditManagerSelect(selectedIds) {
+    const container = document.getElementById('editManagerSelectContainer');
+    if (!container) return;
+    let html = '';
+    MANAGERS.forEach(m => {
+        const checked = selectedIds.includes(m.id) ? 'checked' : '';
+        html += `
+            <label class="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                <input type="checkbox" value="${m.id}" ${checked ? 'checked' : ''} onchange="toggleEditManagerSelection(${m.id}, this.checked)" class="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-400">
+                <div class="w-7 h-7 rounded-full ${m.color} flex items-center justify-center text-white font-bold text-xs flex-shrink-0">${m.initials}</div>
+                <span class="text-sm font-medium text-gray-700">${m.name}</span>
+                <span class="text-xs text-gray-400 ml-auto">${m.role}</span>
+            </label>
+        `;
+    });
+    html += `
+        <div class="flex gap-2 mt-2 pt-2 border-t border-gray-100">
+            <button onclick="selectAllEditManagers()" class="text-xs text-brand-600 hover:text-brand-700 font-medium">Select All</button>
+            <button onclick="deselectAllEditManagers()" class="text-xs text-gray-500 hover:text-gray-700 font-medium">Deselect All</button>
+        </div>
+    `;
+    container.innerHTML = html;
+    if (!tempEditManagerSelections || tempEditManagerSelections.length === 0) {
+        tempEditManagerSelections = selectedIds.length ? [...selectedIds] : [CURRENT_USER?.id];
+    }
+}
+
+function toggleEditManagerSelection(managerId, isChecked) {
+    if (isChecked) {
+        if (!tempEditManagerSelections.includes(managerId)) tempEditManagerSelections.push(managerId);
+    } else {
+        tempEditManagerSelections = tempEditManagerSelections.filter(id => id !== managerId);
+    }
+}
+
+function selectAllEditManagers() {
+    tempEditManagerSelections = MANAGERS.map(m => m.id);
+    document.querySelectorAll('#editManagerSelectContainer input[type="checkbox"]').forEach(cb => cb.checked = true);
+}
+
+function deselectAllEditManagers() {
+    tempEditManagerSelections = [CURRENT_USER?.id];
+    document.querySelectorAll('#editManagerSelectContainer input[type="checkbox"]').forEach(cb => {
+        cb.checked = cb.value == CURRENT_USER?.id;
+    });
+}
+
+function populateEditReadOnlyInfo(project) {
+    const designerUpdateEl = document.getElementById('editDesignerUpdate');
+    const delayReasonEl = document.getElementById('editDelayReason');
+    const completionTimestampEl = document.getElementById('editCompletionTimestamp');
+    
+    if (designerUpdateEl) {
+        const currentPhase = project.phases && project.phases[project.stage_index];
+        if (currentPhase && currentPhase.designer_update) {
+            designerUpdateEl.textContent = currentPhase.designer_update;
+        } else {
+            designerUpdateEl.textContent = '—';
+        }
+    }
+    
+    if (delayReasonEl) {
+        const currentPhase = project.phases && project.phases[project.stage_index];
+        if (currentPhase && currentPhase.delay_reason && currentPhase.delay_reason !== 'On time') {
+            delayReasonEl.textContent = currentPhase.delay_reason;
+        } else {
+            delayReasonEl.textContent = 'No delays reported.';
+        }
+    }
+    
+    if (completionTimestampEl) {
+        const currentPhase = project.phases && project.phases[project.stage_index];
+        if (currentPhase && currentPhase.completed_at) {
+            completionTimestampEl.textContent = formatDateTime(currentPhase.completed_at);
+        } else {
+            completionTimestampEl.textContent = '—';
+        }
+    }
 }
 
 // ============================================
@@ -3589,7 +3820,8 @@ async function loadDesignerPerformance() {
             try {
                 const trendData = await api.getDesignerPerformanceTrend(parseInt(designerId));
                 if (trendData && trendData.length > 0) {
-                    const trendMonths = trendData.map(t => {
+                    const sortedTrend = [...trendData].sort((a, b) => a.month.localeCompare(b.month));
+                    const trendMonths = sortedTrend.map(t => {
                         const [y, m] = t.month.split('-');
                         return new Date(y, m - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' });
                     });
@@ -3599,7 +3831,7 @@ async function loadDesignerPerformance() {
                             labels: trendMonths,
                             datasets: [{
                                 label: 'On-Time Rate (%)',
-                                data: trendData.map(t => t.on_time_rate),
+                                data: sortedTrend.map(t => t.on_time_rate),
                                 borderColor: chartColors.green,
                                 backgroundColor: 'rgba(34, 197, 94, 0.1)',
                                 fill: true,

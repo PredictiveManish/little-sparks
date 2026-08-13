@@ -1539,15 +1539,60 @@ async def update_project(
     if data.description is not None and data.description != project.description:
         changes.append(f"Description updated")
         project.description = data.description
+    if data.assigned_designer_id is not None and data.assigned_designer_id != project.assigned_designer_id:
+        changes.append(f"Designer updated")
+        project.assigned_designer_id = data.assigned_designer_id
+    if data.start_date is not None and data.start_date != project.start_date:
+        changes.append(f"Start date: {project.start_date} → {data.start_date}")
+        project.start_date = data.start_date
     if data.deadline is not None and data.deadline != project.deadline:
         changes.append(f"Deadline: {project.deadline} → {data.deadline}")
         project.deadline = data.deadline
     if data.manager_notes is not None and data.manager_notes != project.manager_notes:
         changes.append(f"Manager notes updated")
         project.manager_notes = data.manager_notes
+    if data.phase_type is not None and data.phase_type != project.phase_type:
+        changes.append(f"Phase type updated")
+        project.phase_type = data.phase_type
+        # Rebuild phases when phase_type changes
+        default_stages = _get_stages_for_phase_type(data.phase_type)
+        existing_phases = (
+            db.query(Phase)
+            .filter(Phase.project_id == project_id)
+            .order_by(Phase.stage_index)
+            .all()
+        )
+        old_count = len(existing_phases)
+        new_count = len(default_stages)
+        # Remove excess phases
+        if new_count < old_count:
+            for p in existing_phases[new_count:]:
+                db.delete(p)
+        # Update phase names and preserve existing deadlines
+        for i, stage_name in enumerate(default_stages):
+            if i < len(existing_phases):
+                existing_phases[i].stage_index = i
+                # Preserve existing deadline, only update stage_names later
+            else:
+                new_phase = Phase(project_id=project_id, stage_index=i, deadline=data.deadline or project.deadline)
+                db.add(new_phase)
+        # Commit phase rebuild changes before continuing
+        db.flush()
     if data.stage_names is not None and data.stage_names != project.stage_names:
         changes.append(f"Phase names updated")
         project.stage_names = data.stage_names
+    if data.phases is not None:
+        # Update phase deadlines
+        for phase_data in data.phases:
+            phase = (
+                db.query(Phase)
+                .filter(Phase.project_id == project_id, Phase.stage_index == phase_data.stage_index)
+                .first()
+            )
+            if phase and phase_data.deadline:
+                old_deadline = phase.deadline
+                phase.deadline = phase_data.deadline
+                changes.append(f"Phase {phase_data.stage_index + 1} deadline: {old_deadline} → {phase_data.deadline}")
     if data.delay_reason is not None:
         # Update delay_reason on the current active phase
         current_phase = (
