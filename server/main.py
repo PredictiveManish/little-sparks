@@ -1241,24 +1241,35 @@ def overdue_projects(
 def delay_trend(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    reports = (
-        db.query(StageReport)
-        .filter(StageReport.delay_days > 0)
-        .order_by(StageReport.submitted_at)
+    projects = get_user_owned_project_query(db, user).all()
+    project_ids = {p.id for p in projects}
+    phases = (
+        db.query(Phase)
+        .filter(Phase.project_id.in_(project_ids), Phase.completed_at.isnot(None))
         .all()
     )
     monthly = {}
-    for r in reports:
-        try:
-            month = r.submitted_at.strftime("%Y-%m") if r.submitted_at else None
-        except Exception:
-            month = None
-        if not month:
+    for ph in phases:
+        completed_dt = None
+        for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]:
+            try:
+                completed_dt = datetime.strptime(ph.completed_at, fmt)
+                break
+            except ValueError:
+                pass
+        if not completed_dt:
             continue
-        if month not in monthly:
-            monthly[month] = {"total_delay_days": 0, "delayed_projects": 0}
-        monthly[month]["total_delay_days"] += r.delay_days
-        monthly[month]["delayed_projects"] += 1
+        try:
+            deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+            delay_days = max(0, (completed_dt.date() - deadline_dt.date()).days)
+            if delay_days > 0:
+                month = completed_dt.strftime("%Y-%m")
+                if month not in monthly:
+                    monthly[month] = {"total_delay_days": 0, "delayed_projects": 0}
+                monthly[month]["total_delay_days"] += delay_days
+                monthly[month]["delayed_projects"] += 1
+        except Exception:
+            continue
     result = []
     for month in sorted(monthly.keys()):
         result.append(DelayTrendPoint(
@@ -1704,22 +1715,20 @@ async def complete_stage(
 
     if project.progress == 100:
         notify = (
-            f"🎉 *Project Completed!*\n\n"
+            f"*Project Completed!*\n\n"
             f"*{project.name}*\n\n"
             f"All {total} stages have been completed!\n"
-            f"👤 Designer: {designer_name}\n"
-            f"📊 Final Progress: 100%\n\n"
-            f"Great work! 🙌"
+            f"*Designer:* {designer_name}\n"
+            f"*Progress:* 100%"
         )
     else:
         notify = (
-            f"✅ *Stage Complete!*\n\n"
+            f"*Stage Complete!*\n\n"
             f"Stage completed: *{completed_stage_name}*\n\n"
-            f"📦 Project: {project.name}\n"
-            f"👤 Designer: {designer_name}\n"
-            f"📊 Progress: {project.progress}%\n"
-            f"🔄 Next Stage: {next_stage_name}\n\n"
-            f"Reply with 'stage update' for more details."
+            f"*Project:* {project.name}\n"
+            f"*Designer:* {designer_name}\n"
+            f"*Progress:* {project.progress}%\n"
+            f"*Next Stage:* {next_stage_name}"
         )
 
     async def _notify_stage():
@@ -1795,13 +1804,12 @@ async def unmark_stage(
     unmarked_stage_name = _get_current_stage_name(stage_index, project.phase_type)
 
     notify = (
-        f"⏪ *Stage Unmarked*\n\n"
+        f"*Stage Unmarked*\n\n"
         f"Stage unmarked: *{unmarked_stage_name}*\n\n"
-        f"📦 Project: {project.name}\n"
-        f"👤 Designer: {designer_name}\n"
-        f"📊 Progress: {project.progress}%\n"
-        f"🔄 Current Stage: {unmarked_stage_name}\n\n"
-        f"Please complete this stage to continue."
+        f"*Project:* {project.name}\n"
+        f"*Designer:* {designer_name}\n"
+        f"*Progress:* {project.progress}%\n"
+        f"*Current Stage:* {unmarked_stage_name}"
     )
 
     async def _notify_unmark():
@@ -2343,7 +2351,8 @@ async def notify_project_created(
         manager_name = "Admin"
     stage_list = ""
     for i, phase in enumerate(phases):
-        stage_list += f"  {i + 1}. *{phase.deadline}*\n"
+        stage_name = _get_current_stage_name(i, project.phase_type)
+        stage_list += f"{i + 1}. *{stage_name}*\n   _Deadline: {phase.deadline}_\n"
     description_text = (
         project.description if project.description else "No description provided."
     )
@@ -2352,7 +2361,7 @@ async def notify_project_created(
             "type": "header",
             "text": {
                 "type": "plain_text",
-                "text": f"📦 New Project Created: {project.name}",
+                "text": f"New Project: {project.name}",
             },
         },
         {
@@ -2360,16 +2369,13 @@ async def notify_project_created(
             "text": {
                 "type": "mrkdwn",
                 "text": (
-                    f"*Why this channel?*\n"
-                    f"This channel was created to coordinate work on *{project.name}*.\n"
-                    f"All project updates, stage completions, and designer assignments will be posted here.\n\n"
-                    f"*Project Details*\n"
-                    f"📝 *Description:* {description_text}\n"
-                    f"👤 *Assigned Designer:* {designer_name}\n"
-                    f"👷 *Manager:* {manager_name}\n"
-                    f"📅 *Start Date:* {project.start_date}\n"
-                    f"📅 *Expected Completion:* {project.deadline}\n"
-                    f"📊 *Status:* {project.status.replace('_', ' ')}"
+                    f"*Project:* {project.name}\n"
+                    f"*Description:* {description_text}\n\n"
+                    f"*Designer:* {designer_name}\n"
+                    f"*Manager:* {manager_name}\n\n"
+                    f"*Start:* {project.start_date}\n"
+                    f"*Deadline:* {project.deadline}\n"
+                    f"*Status:* {project.status.replace('_', ' ')}"
                 ),
             },
         },
@@ -2387,19 +2393,19 @@ async def notify_project_created(
             "elements": [
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "📋 View Project"},
+                    "text": {"type": "plain_text", "text": "View Project"},
                     "action_id": "view_project",
                     "value": str(project.id),
                 },
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "✅ Accept"},
+                    "text": {"type": "plain_text", "text": "Accept"},
                     "action_id": "accept_project",
                     "value": str(project.id),
                 },
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "❓ Clarify"},
+                    "text": {"type": "plain_text", "text": "Clarify"},
                     "action_id": "clarify_project",
                     "value": str(project.id),
                 },
@@ -2407,7 +2413,7 @@ async def notify_project_created(
         },
     ]
     await send_slack_notification(
-        db, project_id, f"📦 New project: {project.name}", blocks, channel_id
+        db, project_id, f"New project: {project.name}", blocks, channel_id
     )
 
 
@@ -2437,12 +2443,12 @@ async def send_stage_update_reminder(db, project_id, kind="manual", phase=None):
     )
 
     headers = {
-        "daily": "☀️ Daily Update Check-in",
-        "deadline": "⏰ Deadline Reminder",
-        "manual": "🔔 Update Requested",
+        "daily": "Daily Check-in",
+        "deadline": "Deadline Reminder",
+        "manual": "Update Requested",
     }
     intros = {
-        "daily": f"Good morning {designer_mention}! Here's your daily check-in for *{project.name}*.",
+        "daily": f"Morning {designer_mention}! Here's your daily check-in for *{project.name}*.",
         "deadline": (
             f"{designer_mention}, today ({phase.deadline if phase else project.deadline}) "
             f"is the deadline for *{stage_name}* on *{project.name}*."
@@ -2453,7 +2459,7 @@ async def send_stage_update_reminder(db, project_id, kind="manual", phase=None):
     blocks = [
         {
             "type": "header",
-            "text": {"type": "plain_text", "text": headers.get(kind, "🔔 Update Requested")},
+            "text": {"type": "plain_text", "text": headers.get(kind, "Update Requested")},
         },
         {
             "type": "section",
@@ -2461,10 +2467,10 @@ async def send_stage_update_reminder(db, project_id, kind="manual", phase=None):
                 "type": "mrkdwn",
                 "text": (
                     f"{intros.get(kind, intros['manual'])}\n\n"
-                    f"🔄 *Current Stage:* {stage_name}\n"
-                    f"📊 *Progress:* {project.progress}%\n"
-                    f"📅 *Stage Deadline:* {current_phase.deadline if current_phase else 'N/A'}\n\n"
-                    f"Please share where things stand using the button below."
+                    f"*Stage:* {stage_name}\n"
+                    f"*Progress:* {project.progress}%\n"
+                    f"*Deadline:* {current_phase.deadline if current_phase else 'N/A'}\n\n"
+                    f"Please share where things stand."
                 ),
             },
         },
@@ -2474,20 +2480,20 @@ async def send_stage_update_reminder(db, project_id, kind="manual", phase=None):
             "elements": [
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "📊 Submit Report"},
+                    "text": {"type": "plain_text", "text": "Submit Report"},
                     "action_id": "submit_report",
                     "value": str(project.id),
                     "style": "primary",
                 },
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "📝 Post Update"},
+                    "text": {"type": "plain_text", "text": "Post Update"},
                     "action_id": "update_notes",
                     "value": str(project.id),
                 },
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "⚠️ Report Delay"},
+                    "text": {"type": "plain_text", "text": "Report Delay"},
                     "action_id": "report_delay",
                     "value": str(project.id),
                 },
@@ -2511,7 +2517,7 @@ async def notify_project_updated(db, project_id):
         await send_slack_notification(
             db,
             project_id,
-            f"📝 Project updated: {project.name}",
+            f"Project updated: {project.name}",
             blocks,
             project.slack_channel_id,
         )
@@ -2527,86 +2533,85 @@ async def notify_stage_completed(db, project_id, stage_index):
     if project.slack_channel_id:
         completed_stage_name = _get_current_stage_name(stage_index, project.phase_type)
         next_stage_name = _get_current_stage_name(project.stage_index, project.phase_type)
-        if project.progress == 100:
-            blocks = [
-                {
-                    "type": "header",
-                    "text": {"type": "plain_text", "text": "🎉 Project Completed!"},
+    if project.progress == 100:
+        blocks = [
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": "Project Completed"},
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"*{project.name}*\n\n"
+                        f"All {len(phases)} stages completed!\n"
+                        f"*Designer:* {designer.name if designer else 'Unassigned'}\n"
+                        f"*Progress:* 100%"
+                    ),
                 },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": (
-                            f"*{project.name}*\n\n"
-                            f"All {len(phases)} stages have been completed!\n"
-                            f"👤 Designer: {designer.name if designer else 'Unassigned'}\n"
-                            f"📊 Final Progress: 100%\n\n"
-                            f"Great work! 🙌"
-                        ),
+            },
+        ]
+        await send_slack_notification(
+            db,
+            project_id,
+            f"Project completed: {project.name}",
+            blocks,
+            project.slack_channel_id,
+        )
+    else:
+        blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f"Stage Complete: {completed_stage_name}",
+                },
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"*Project:* {project.name}\n"
+                        f"*Designer:* {designer.name if designer else 'Unassigned'}\n"
+                        f"*Progress:* {project.progress}%\n"
+                        f"*Next Stage:* {next_stage_name}"
+                    ),
+                },
+            },
+            {"type": "divider"},
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Progress"},
+                        "action_id": "view_progress",
+                        "value": str(project.id),
                     },
-                },
-            ]
-            await send_slack_notification(
-                db,
-                project_id,
-                f"🎉 Project completed: {project.name}",
-                blocks,
-                project.slack_channel_id,
-            )
-        else:
-            blocks = [
-                {
-                    "type": "header",
-                    "text": {
-                        "type": "plain_text",
-                        "text": f"✅ Stage Complete: {completed_stage_name}",
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Project Info"},
+                        "action_id": "view_project",
+                        "value": str(project.id),
                     },
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": (
-                            f"📦 *Project:* {project.name}\n"
-                            f"👤 *Designer:* {designer.name if designer else 'Unassigned'}\n"
-                            f"📊 *Progress:* {project.progress}%\n"
-                            f"🔄 *Next Stage:* {next_stage_name}\n"
-                        ),
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Stage Update"},
+                        "action_id": "stage_update",
+                        "value": str(project.id),
                     },
-                },
-                {"type": "divider"},
-                {
-                    "type": "actions",
-                    "elements": [
-                        {
-                            "type": "button",
-                            "text": {"type": "plain_text", "text": "📊 Progress"},
-                            "action_id": "view_progress",
-                            "value": str(project.id),
-                        },
-                        {
-                            "type": "button",
-                            "text": {"type": "plain_text", "text": "📦 Project Info"},
-                            "action_id": "view_project",
-                            "value": str(project.id),
-                        },
-                        {
-                            "type": "button",
-                            "text": {"type": "plain_text", "text": "🔄 Stage Update"},
-                            "action_id": "stage_update",
-                            "value": str(project.id),
-                        },
-                    ],
-                },
-            ]
-            await send_slack_notification(
-                db,
-                project_id,
-                f"✅ Stage completed: {completed_stage_name}",
-                blocks,
-                project.slack_channel_id,
-            )
+                ],
+            },
+        ]
+        await send_slack_notification(
+            db,
+            project_id,
+            f"Stage completed: {completed_stage_name}",
+            blocks,
+            project.slack_channel_id,
+        )
 
 
 async def notify_stage_unmarked(db, project_id, stage_index):
@@ -2623,7 +2628,7 @@ async def notify_stage_unmarked(db, project_id, stage_index):
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": f"⏪ Stage Unmarked: {unmarked_stage_name}",
+                    "text": f"Stage Unmarked: {unmarked_stage_name}",
                 },
             },
             {
@@ -2631,11 +2636,10 @@ async def notify_stage_unmarked(db, project_id, stage_index):
                 "text": {
                     "type": "mrkdwn",
                     "text": (
-                        f"📦 *Project:* {project.name}\n"
-                        f"👤 *Designer:* {designer.name if designer else 'Unassigned'}\n"
-                        f"📊 *Progress:* {project.progress}%\n"
-                        f"🔄 *Current Stage:* {unmarked_stage_name}\n\n"
-                        f"Please complete this stage to continue."
+                        f"*Project:* {project.name}\n"
+                        f"*Designer:* {designer.name if designer else 'Unassigned'}\n"
+                        f"*Progress:* {project.progress}%\n"
+                        f"*Current Stage:* {unmarked_stage_name}"
                     ),
                 },
             },
@@ -2645,19 +2649,19 @@ async def notify_stage_unmarked(db, project_id, stage_index):
                 "elements": [
                     {
                         "type": "button",
-                        "text": {"type": "plain_text", "text": "📊 Progress"},
+                        "text": {"type": "plain_text", "text": "Progress"},
                         "action_id": "view_progress",
                         "value": str(project.id),
                     },
                     {
                         "type": "button",
-                        "text": {"type": "plain_text", "text": "✅ Complete Stage"},
+                        "text": {"type": "plain_text", "text": "Complete Stage"},
                         "action_id": "complete_stage",
                         "value": str(stage_index),
                     },
                     {
                         "type": "button",
-                        "text": {"type": "plain_text", "text": "📦 Project Info"},
+                        "text": {"type": "plain_text", "text": "Project Info"},
                         "action_id": "view_project",
                         "value": str(project.id),
                     },
@@ -2667,7 +2671,7 @@ async def notify_stage_unmarked(db, project_id, stage_index):
         await send_slack_notification(
             db,
             project_id,
-            f"⏪ Stage unmarked: {unmarked_stage_name}",
+            f"Stage unmarked: {unmarked_stage_name}",
             blocks,
             project.slack_channel_id,
         )
@@ -2694,7 +2698,7 @@ async def notify_designers_assigned(db, project_id, stage_index, designer_ids):
             "type": "header",
             "text": {
                 "type": "plain_text",
-                "text": f"👥 Designers Assigned: {stage_name}",
+                "text": f"Designers Assigned: {stage_name}",
             },
         },
         {
@@ -2702,10 +2706,9 @@ async def notify_designers_assigned(db, project_id, stage_index, designer_ids):
             "text": {
                 "type": "mrkdwn",
                 "text": (
-                    f"📦 *Project:* {project.name}\n"
-                    f"🔄 *Stage:* {stage_name}\n"
-                    f"👤 *Assigned Designers:* {names_text}\n\n"
-                    f"The assigned designers have been added to this channel."
+                    f"*Project:* {project.name}\n"
+                    f"*Stage:* {stage_name}\n"
+                    f"*Assigned Designers:* {names_text}"
                 ),
             },
         },
@@ -2715,7 +2718,7 @@ async def notify_designers_assigned(db, project_id, stage_index, designer_ids):
             "elements": [
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "📋 View Project"},
+                    "text": {"type": "plain_text", "text": "View Project"},
                     "action_id": "view_project",
                     "value": str(project.id),
                 },
@@ -2725,7 +2728,7 @@ async def notify_designers_assigned(db, project_id, stage_index, designer_ids):
     await send_slack_notification(
         db,
         project_id,
-        f"👥 Designers assigned to {stage_name}: {project.name}",
+        f"Designers assigned to {stage_name}: {project.name}",
         blocks,
         project.slack_channel_id,
     )
@@ -2745,12 +2748,12 @@ def _build_project_block(project, designer, phases):
             "type": "mrkdwn",
             "text": (
                 f"*{project.name}*\n"
-                f"👤 *Designer:* {designer_name}\n"
-                f"📊 *Progress:* {project.progress}%\n"
-                f"🔄 *Current Stage:* {current_stage}\n"
-                f"📅 *Deadline:* {project.deadline} ({days_left} days left)\n"
-                f"📌 *Status:* {project.status.replace('_', ' ')}\n"
-                f"✅ *Stages:* {stages_completed}/{total_stages} completed"
+                f"*Designer:* {designer_name}\n"
+                f"*Progress:* {project.progress}%\n"
+                f"*Current Stage:* {current_stage}\n"
+                f"*Deadline:* {project.deadline} ({days_left} days left)\n"
+                f"*Status:* {project.status.replace('_', ' ')}\n"
+                f"*Stages:* {stages_completed}/{total_stages} completed"
             ),
         },
     }
@@ -2761,19 +2764,19 @@ def _build_project_attachment(project, designer, phases):
     actions = [
         {
             "type": "button",
-            "text": {"type": "plain_text", "text": "✅ Complete Stage"},
+            "text": {"type": "plain_text", "text": "Complete Stage"},
             "action_id": "complete_stage",
             "value": str(project.stage_index),
         },
         {
             "type": "button",
-            "text": {"type": "plain_text", "text": "⚠️ Report Delay"},
+            "text": {"type": "plain_text", "text": "Report Delay"},
             "action_id": "report_delay",
             "value": str(project.stage_index),
         },
         {
             "type": "button",
-            "text": {"type": "plain_text", "text": "📊 Progress"},
+            "text": {"type": "plain_text", "text": "Progress"},
             "action_id": "view_progress",
             "value": str(project.id),
         },
@@ -2786,7 +2789,7 @@ def _build_project_card(project, designer, phases):
     blocks = [
         {
             "type": "header",
-            "text": {"type": "plain_text", "text": f"📦 {project.name}"},
+            "text": {"type": "plain_text", "text": project.name},
         },
         _build_project_block(project, designer, phases),
         {"type": "divider"},
@@ -2795,25 +2798,25 @@ def _build_project_card(project, designer, phases):
             "elements": [
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "✅ Complete Stage"},
+                    "text": {"type": "plain_text", "text": "Complete Stage"},
                     "action_id": "complete_stage",
                     "value": str(project.stage_index),
                 },
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "⚠️ Report Delay"},
+                    "text": {"type": "plain_text", "text": "Report Delay"},
                     "action_id": "report_delay",
                     "value": str(project.stage_index),
                 },
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "📊 Progress"},
+                    "text": {"type": "plain_text", "text": "Progress"},
                     "action_id": "view_progress",
                     "value": str(project.id),
                 },
                 {
                     "type": "button",
-                    "text": {"type": "plain_text", "text": "📝 Update Notes"},
+                    "text": {"type": "plain_text", "text": "Update Notes"},
                     "action_id": "update_notes",
                     "value": str(project.stage_index),
                 },
@@ -3291,7 +3294,7 @@ async def cancel_slack_completion(
         cancel_text = (
             f"❌ *Completion Request Cancelled*\n\n"
             f"Stage: {_get_current_stage_name(tracker.stage_index, tracker.project.phase_type)}\n"
-            f"📦 Project: {project.name}\n"
+            f"*Project:* {project.name}\n"
             f"Cancelled by: {user.name}"
         )
         try:
@@ -3569,10 +3572,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         # Post a message in channel asking for manager confirmation
                         stage_name = _get_current_stage_name(project.stage_index, project.phase_type)
                         confirm_text = (
-                            f"🔔 *Stage Completion Request*\n\n"
+                            f"*Stage Completion Request*\n\n"
                             f"*{user_name}* requests to complete: *{stage_name}*\n"
-                            f"📦 Project: {project.name}\n\n"
-                            f"👉 Manager: Reply with 'completed', 'approved', or 'go ahead' to confirm."
+                            f"*Project:* {project.name}\n\n"
+                            f"Manager: Reply with 'completed', 'approved', or 'go ahead' to confirm."
                         )
                         try:
                             await slack_api_call(
@@ -3629,8 +3632,8 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                     try:
                                         await slack_api_call(
                                             db, "chat.postMessage",
-                                            {"channel": project.slack_channel_id,
-                                             "text": f"⚠️ Cannot complete stage {stage_idx + 1} — previous stage is not completed yet."},
+                                             {"channel": project.slack_channel_id,
+                                              "text": f"Cannot complete stage {stage_idx + 1} — previous stage is not completed yet."},
                                         )
                                     except Exception:
                                         pass
@@ -3665,21 +3668,20 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
 
                                     if project.progress == 100:
                                         notify_text = (
-                                            f"🎉 *Project Completed!*\n\n"
+                                            f"*Project Completed!*\n\n"
                                             f"*{project.name}*\n\n"
                                             f"All {total} stages have been completed!\n"
-                                            f"👤 Designer: {designer_name}\n"
-                                            f"📊 Final Progress: 100%\n\n"
-                                            f"Great work! 🙌"
+                                            f"*Designer:* {designer_name}\n"
+                                            f"*Progress:* 100%"
                                         )
                                     else:
                                         notify_text = (
-                                            f"✅ *Stage Complete!*\n\n"
+                                            f"*Stage Complete!*\n\n"
                                             f"Stage completed: *{completed_stage_name}*\n\n"
-                                            f"📦 Project: {project.name}\n"
-                                            f"👤 Designer: {designer_name}\n"
-                                            f"📊 Progress: {project.progress}%\n"
-                                            f"🔄 Next Stage: {next_stage_name}\n\n"
+                                            f"*Project:* {project.name}\n"
+                                            f"*Designer:* {designer_name}\n"
+                                            f"*Progress:* {project.progress}%\n"
+                                            f"*Next Stage:* {next_stage_name}\n\n"
                                             f"Confirmed by: {user_name}"
                                         )
 
@@ -3733,21 +3735,20 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
 
                                 if project.progress == 100:
                                     notify_text = (
-                                        f"🎉 *Project Completed!*\n\n"
+                                        f"*Project Completed!*\n\n"
                                         f"*{project.name}*\n\n"
                                         f"All {total} stages have been completed!\n"
-                                        f"👤 Designer: {designer_name}\n"
-                                        f"📊 Final Progress: 100%\n\n"
-                                        f"Great work! 🙌"
+                                        f"*Designer:* {designer_name}\n"
+                                        f"*Progress:* 100%"
                                     )
                                 else:
                                     notify_text = (
-                                        f"✅ *Stage Complete!*\n\n"
+                                        f"*Stage Complete!*\n\n"
                                         f"Stage completed: *{completed_stage_name}*\n\n"
-                                        f"📦 Project: {project.name}\n"
-                                        f"👤 Designer: {designer_name}\n"
-                                        f"📊 Progress: {project.progress}%\n"
-                                        f"🔄 Next Stage: {next_stage_name}\n\n"
+                                        f"*Project:* {project.name}\n"
+                                        f"*Designer:* {designer_name}\n"
+                                        f"*Progress:* {project.progress}%\n"
+                                        f"*Next Stage:* {next_stage_name}\n\n"
                                         f"Confirmed by: {user_name}"
                                     )
 
@@ -3898,14 +3899,14 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "type": "header",
                                 "text": {
                                     "type": "plain_text",
-                                    "text": "🎉 Project Completed!",
+                                    "text": "Project Completed",
                                 },
                             },
                             {
                                 "type": "section",
                                 "text": {
                                     "type": "mrkdwn",
-                                    "text": f"*{project.name}*\n\nAll {total} stages completed!\n👤 {designer.name if designer else 'Unassigned'}\n📊 100%\n\nGreat work! 🙌",
+                                    "text": f"*{project.name}*\n\nAll {total} stages completed!\n*Designer:* {designer.name if designer else 'Unassigned'}\n*Progress:* 100%",
                                 },
                             },
                         ]
@@ -3926,14 +3927,14 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "type": "header",
                                 "text": {
                                     "type": "plain_text",
-                                    "text": f"✅ Stage Complete",
+                                    "text": "Stage Complete",
                                 },
                             },
                             {
                                 "type": "section",
                                 "text": {
                                     "type": "mrkdwn",
-                                    "text": f"📦 {project.name}\n📊 Progress: {project.progress}%\n🔄 Next: {next_stage}",
+                                    "text": f"*{project.name}*\n*Progress:* {project.progress}%\n*Next:* {next_stage}",
                                 },
                             },
                             {"type": "divider"},
@@ -3944,7 +3945,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                         "type": "button",
                                         "text": {
                                             "type": "plain_text",
-                                            "text": "📊 Progress",
+                                            "text": "Progress",
                                         },
                                         "action_id": "view_progress",
                                         "value": str(project.id),
@@ -3953,7 +3954,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                         "type": "button",
                                         "text": {
                                             "type": "plain_text",
-                                            "text": "📦 Project Info",
+                                            "text": "Project Info",
                                         },
                                         "action_id": "view_project",
                                         "value": str(project.id),
@@ -3976,13 +3977,13 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     report_blocks = [
                         {
                             "type": "header",
-                            "text": {"type": "plain_text", "text": "📊 Stage Evaluation Report"},
+                            "text": {"type": "plain_text", "text": "Stage Evaluation Report"},
                         },
                         {
                             "type": "section",
                             "text": {
                                 "type": "mrkdwn",
-                                "text": f"📦 *{project.name}*\n🔄 Stage: {current_stage} (Stage {project.stage_index + 1}/9)",
+                                "text": f"*{project.name}*\n*Stage:* {current_stage} (Stage {project.stage_index + 1}/9)",
                             },
                         },
                         {"type": "divider"},
@@ -3996,7 +3997,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text", "text": "1️⃣ Costing of the product (1-5)"},
+                            "label": {"type": "plain_text",                             "text": "1 Costing of the product (1-5)"},
                             "optional": True,
                         },
                         {
@@ -4009,7 +4010,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text", "text": "2️⃣ Willingness to buy (1-5)"},
+                            "label": {"type": "plain_text",                             "text": "2 Willingness to buy (1-5)"},
                             "optional": True,
                         },
                         {
@@ -4022,7 +4023,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text", "text": "3️⃣ Engagement life (1-5)"},
+                            "label": {"type": "plain_text",                             "text": "3 Engagement life (1-5)"},
                             "optional": True,
                         },
                         {
@@ -4035,7 +4036,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text", "text": "4️⃣ Durability (1-5)"},
+                            "label": {"type": "plain_text",                             "text": "4 Durability (1-5)"},
                             "optional": True,
                         },
                         {
@@ -4048,7 +4049,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text", "text": "5️⃣ Age Appropriateness (1-5)"},
+                            "label": {"type": "plain_text",                             "text": "5 Age Appropriateness (1-5)"},
                             "optional": True,
                         },
                         {
@@ -4061,7 +4062,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text", "text": "6️⃣ Ease of use (1-5)"},
+                            "label": {"type": "plain_text",                             "text": "6 Ease of use (1-5)"},
                             "optional": True,
                         },
                         {
@@ -4074,7 +4075,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text", "text": "7️⃣ Aesthetics of the Products (1-5)"},
+                            "label": {"type": "plain_text",                             "text": "7 Aesthetics of the Products (1-5)"},
                             "optional": True,
                         },
                         {
@@ -4087,7 +4088,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text", "text": "8️⃣ Easy to store / Travel Friendliness (1-5)"},
+                            "label": {"type": "plain_text",                             "text": "8 Easy to store / Travel Friendliness (1-5)"},
                             "optional": True,
                         },
                         {"type": "divider"},
@@ -4099,7 +4100,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "action_id": "report_notes",
                                 "multi_line": True,
                             },
-                            "label": {"type": "plain_text", "text": "💬 Additional notes / observations"},
+                            "label": {"type": "plain_text",                             "text": "Additional notes / observations"},
                             "optional": True,
                         },
                     ]
@@ -4112,7 +4113,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "view": {
                                     "type": "modal",
                                     "callback_id": f"stage_report_form_{project_id}_{project.stage_index}",
-                                    "title": {"type": "plain_text", "text": "📊 Stage Evaluation Report"},
+                                    "title": {"type": "plain_text",                                     "text": "Stage Evaluation Report"},
                                     "submit": {"type": "plain_text", "text": "Submit Report"},
                                     "close": {"type": "plain_text", "text": "Cancel"},
                                     "blocks": report_blocks,
@@ -4124,7 +4125,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     blocks = [
                         {
                             "type": "header",
-                            "text": {"type": "plain_text", "text": "⚠️ Report Delay"},
+                            "text": {"type": "plain_text", "text": "Report Delay"},
                         },
                         {
                             "type": "input",
@@ -4160,7 +4161,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                     "callback_id": f"delay_form_{project_id}",
                                     "title": {
                                         "type": "plain_text",
-                                        "text": "⚠️ Report Delay",
+                                        "text": "Report Delay",
                                     },
                                     "submit": {"type": "plain_text", "text": "Submit"},
                                     "close": {"type": "plain_text", "text": "Cancel"},
@@ -4172,7 +4173,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     blocks = [
                         {
                             "type": "header",
-                            "text": {"type": "plain_text", "text": "📝 Update Notes"},
+                            "text": {"type": "plain_text", "text": "Update Notes"},
                         },
                         {
                             "type": "input",
@@ -4224,17 +4225,17 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     total_stages = len(phases)
                     current_stage = _get_current_stage_name(project.stage_index, project.phase_type)
                     reply_text = (
-                        f"📊 *Progress Report*\n\n"
-                        f"Project: {project.name}\n"
-                        f"Total Progress: {project.progress}%\n"
-                        f"Current Stage: {current_stage}\n\n"
-                        f"Stage Breakdown:\n"
+                        f"*Progress Report*\n\n"
+                        f"*Project:* {project.name}\n"
+                        f"*Total Progress:* {project.progress}%\n"
+                        f"*Current Stage:* {current_stage}\n\n"
+                        f"*Stage Breakdown:*\n"
                     )
                     for i, phase in enumerate(phases):
                         check = "✅" if phase.completed_at else "⬜"
                         marker = " ➜" if i == project.stage_index else ""
                         reply_text += f"{check} {i + 1}. {phase.deadline}{marker}\n"
-                    reply_text += f"\n📅 Deadline: {project.deadline}"
+                    reply_text += f"\n*Deadline:* {project.deadline}"
                     if project.slack_channel_id:
                         await slack_api_call(
                             db,
@@ -4250,10 +4251,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     )
                     deadline = current_phase.deadline if current_phase else "N/A"
                     reply_text = (
-                        f"🔄 *Current Stage: {current_stage}*\n\n"
-                        f"📅 Deadline: {deadline}\n"
-                        f"👤 Assigned: {designer.name if designer else 'Unassigned'}\n"
-                        f"📊 Progress: {project.progress}%"
+                        f"*Current Stage:* {current_stage}\n\n"
+                        f"*Deadline:* {deadline}\n"
+                        f"*Assigned:* {designer.name if designer else 'Unassigned'}\n"
+                        f"*Progress:* {project.progress}%"
                     )
                     if project.slack_channel_id:
                         await slack_api_call(
@@ -4263,7 +4264,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         )
                 elif action_id == "accept_project":
                     reply_text = (
-                        f"✅ Project *{project.name}* accepted by {slack_user_name}!"
+                        f"*{project.name}* accepted by {slack_user_name}!"
                     )
                     if project.slack_channel_id:
                         await slack_api_call(
@@ -4277,7 +4278,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             "type": "header",
                             "text": {
                                 "type": "plain_text",
-                                "text": "❓ Project Clarification",
+                                "text": "Project Clarification",
                             },
                         },
                         {
@@ -4305,7 +4306,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                     "callback_id": f"clarify_form_{project_id}",
                                     "title": {
                                         "type": "plain_text",
-                                        "text": "❓ Clarification",
+                                        "text": "Clarification",
                                     },
                                     "submit": {"type": "plain_text", "text": "Submit"},
                                     "close": {"type": "plain_text", "text": "Cancel"},
@@ -4371,13 +4372,13 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     blocks = [
                         {
                             "type": "header",
-                            "text": {"type": "plain_text", "text": "⚠️ Delay Reported"},
+                            "text": {"type": "plain_text", "text": "Delay Reported"},
                         },
                         {
                             "type": "section",
                             "text": {
                                 "type": "mrkdwn",
-                                "text": f"📋 Reason: {reason}\n📅 Revised: {revised}\n📦 Project: {project.name}",
+                                "text": f"*Reason:* {reason}\n*Revised:* {revised}\n*Project:* {project.name}",
                             },
                         },
                     ]
@@ -4422,13 +4423,13 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     blocks = [
                         {
                             "type": "header",
-                            "text": {"type": "plain_text", "text": "✅ Notes Updated"},
+                            "text": {"type": "plain_text", "text": "Notes Updated"},
                         },
                         {
                             "type": "section",
                             "text": {
                                 "type": "mrkdwn",
-                                "text": f"📝 Your note has been logged.\n📦 Project: {project.name}\n🔄 Current Stage: {_get_current_stage_name(project.stage_index, project.phase_type)}",
+                                "text": f"*Your note has been logged.*\n*Project:* {project.name}\n*Current Stage:* {_get_current_stage_name(project.stage_index, project.phase_type)}",
                             },
                         },
                     ]
@@ -4481,14 +4482,14 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             "type": "header",
                             "text": {
                                 "type": "plain_text",
-                                "text": "❓ Clarification Received",
+                                "text": "Clarification Received",
                             },
                         },
                         {
                             "type": "section",
                             "text": {
                                 "type": "mrkdwn",
-                                "text": f"📦 Project: {project.name}\n💬 {clarification}\n\nThe project manager will respond.",
+                                "text": f"*Project:* {project.name}\n{clarification}\n\nThe project manager will respond.",
                             },
                         },
                     ]
@@ -4640,7 +4641,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 timeline_lines = []
                 for i, phase in enumerate(phases):
                     check = "✅" if phase.completed_at else "⬜"
-                    marker = " ➜" if i == new_stage_index else ""
+                    marker = " ->" if i == new_stage_index else ""
                     phase_name = _get_current_stage_name(i, project.phase_type)
                     timeline_lines.append(f"{check} {i + 1}. {phase_name}{marker}")
                 timeline_text = "\n".join(timeline_lines)
@@ -4649,35 +4650,35 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 for block_id, action_id, field_name in rating_map:
                     val = ratings.get(field_name)
                     if val is not None:
-                        emoji = "⭐" if val >= 4 else "🔸" if val >= 3 else "⚠️"
+                        emoji = "⭐" if val >= 4 else "o" if val >= 3 else "!"
                         rating_lines.append(f"{emoji} {field_name.replace('_', ' ').title()}: {val}/5")
                 rating_text = "\n".join(rating_lines) if rating_lines else "*No ratings submitted*"
                 
                 delay_text = ""
                 if delay_days > 0:
-                    delay_text = f"\n⚠️ *Delay:* {delay_days} day(s) past deadline ({deadline})"
+                    delay_text = f"\n*Delay:* {delay_days} day(s) past deadline ({deadline})"
                 else:
-                    delay_text = f"\n✅ *On Time:* Completed before deadline ({deadline})"
+                    delay_text = f"\n*On Time:* Completed before deadline ({deadline})"
                 
                 next_stage_text = ""
                 if new_stage_index < total_phases:
                     next_stage = _get_current_stage_name(new_stage_index, project.phase_type)
                     next_phase = phases[new_stage_index] if new_stage_index < len(phases) else None
                     next_deadline = next_phase.deadline if next_phase else "TBD"
-                    next_stage_text = f"\n🔄 *Next Stage:* {next_stage}\n📅 *New Deadline:* {next_deadline}"
+                    next_stage_text = f"\n*Next Stage:* {next_stage}\n*New Deadline:* {next_deadline}"
                 else:
-                    next_stage_text = f"\n🎉 *All stages completed!*"
+                    next_stage_text = f"\n*All stages completed!*"
                 
                 confirmation_blocks = [
                     {
                         "type": "header",
-                        "text": {"type": "plain_text", "text": "✅ Stage Complete — Report Submitted"},
+                        "text": {"type": "plain_text", "text": "Stage Complete - Report Submitted"},
                     },
                     {
                         "type": "section",
                         "text": {
                             "type": "mrkdwn",
-                            "text": f"📦 *{project.name}*\n📊 Progress: {project.progress}%\n👤 {designer.name if designer else 'Unassigned'}{delay_text}{next_stage_text}",
+                            "text": f"*{project.name}*\n*Progress:* {project.progress}%\n*Designer:* {designer.name if designer else 'Unassigned'}{delay_text}{next_stage_text}",
                         },
                     },
                     {"type": "divider"},
