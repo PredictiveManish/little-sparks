@@ -1193,6 +1193,27 @@ async function handleAddDesigner(event) {
 // ============================================
 function onPhaseTypeChange() {
     const ideationRadio = document.querySelector('input[name="phaseType"][value="IDEATION"]');
+    const ideationCard = document.getElementById('ideationCard');
+    const productionCard = document.getElementById('productionCard');
+    
+    if (ideationRadio && ideationRadio.checked) {
+        ideationCard.className = 'phase-type-card border-2 border-brand-500 bg-brand-50 rounded-xl p-4 text-center transition-all';
+        ideationCard.querySelector('div.w-10').className = 'w-10 h-10 rounded-lg bg-brand-500 text-white flex items-center justify-center mx-auto mb-2';
+        ideationCard.querySelector('p.text-sm').className = 'text-sm font-semibold text-brand-700';
+        
+        productionCard.className = 'phase-type-card border-2 border-gray-200 bg-white rounded-xl p-4 text-center transition-all hover:border-gray-300';
+        productionCard.querySelector('div.w-10').className = 'w-10 h-10 rounded-lg bg-gray-500 text-white flex items-center justify-center mx-auto mb-2';
+        productionCard.querySelector('p.text-sm').className = 'text-sm font-semibold text-gray-700';
+    } else {
+        productionCard.className = 'phase-type-card border-2 border-brand-500 bg-brand-50 rounded-xl p-4 text-center transition-all';
+        productionCard.querySelector('div.w-10').className = 'w-10 h-10 rounded-lg bg-brand-500 text-white flex items-center justify-center mx-auto mb-2';
+        productionCard.querySelector('p.text-sm').className = 'text-sm font-semibold text-brand-700';
+        
+        ideationCard.className = 'phase-type-card border-2 border-gray-200 bg-white rounded-xl p-4 text-center transition-all hover:border-gray-300';
+        ideationCard.querySelector('div.w-10').className = 'w-10 h-10 rounded-lg bg-gray-500 text-white flex items-center justify-center mx-auto mb-2';
+        ideationCard.querySelector('p.text-sm').className = 'text-sm font-semibold text-gray-700';
+    }
+    
     renderPhaseDeadlines();
 }
 
@@ -1206,6 +1227,11 @@ function renderPhaseDeadlines() {
     const existingValues = {};
     existingInputs.forEach(input => {
         existingValues[input.dataset.phaseIndex] = input.value;
+    });
+    const existingNames = {};
+    const existingNameInputs = document.querySelectorAll('.phase-name-input');
+    existingNameInputs.forEach(input => {
+        existingNames[input.dataset.phaseIndex] = input.value;
     });
     const ideationRadio = document.querySelector('input[name="phaseType"][value="IDEATION"]');
     const phaseType = ideationRadio && ideationRadio.checked ? 'IDEATION' : 'PRODUCTION';
@@ -1225,13 +1251,26 @@ function renderPhaseDeadlines() {
             }
         }
         const existingValue = existingValues[index] || '';
+        const existingName = existingNames[index] || stage;
         const isRequired = index === 0;
         html += `
-            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3" data-phase-index="${index}">
                 <div class="flex items-center gap-2 flex-shrink-0">
+                    <button type="button" onclick="movePhaseUp(${index})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ${index === 0 ? 'opacity-0' : ''}" title="Move up">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+                    </button>
+                    <button type="button" onclick="movePhaseDown(${index})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ${index === stages.length - 1 ? 'opacity-0' : ''}" title="Move down">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
                     <span class="w-6 h-6 rounded-full ${index === 0 ? 'bg-brand-500' : 'bg-gray-400'} text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${index + 1}</span>
-                    <span class="text-sm font-medium ${index === 0 ? 'text-gray-900' : 'text-gray-500'}">${stage}</span>
-                    ${index > 0 ? '<span class="text-xs text-gray-400">(optional — defaults to Completion Date)</span>' : ''}
+                </div>
+                <div class="flex-1">
+                    <input type="text"
+                        class="phase-name-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors"
+                        data-phase-index="${index}"
+                        value="${existingName}"
+                        placeholder="Phase name"
+                    />
                 </div>
                 <div class="flex-1">
                     <input type="date"
@@ -1242,10 +1281,157 @@ function renderPhaseDeadlines() {
                         value="${existingValue}"
                     />
                 </div>
+                <button type="button" onclick="removePhase(${index})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors flex-shrink-0 ${stages.length <= 1 ? 'opacity-0 pointer-events-none' : ''}" title="Remove phase">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
             </div>
         `;
     });
+    html += `
+        <button type="button" onclick="addPhase()" class="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:text-brand-600 hover:border-brand-400 transition-colors flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Add Phase
+        </button>
+    `;
     container.innerHTML = html;
+}
+
+function addPhase() {
+    const container = document.getElementById('phaseDeadlinesContainer');
+    if (!container) return;
+    const ideationRadio = document.querySelector('input[name="phaseType"][value="IDEATION"]');
+    const phaseType = ideationRadio && ideationRadio.checked ? 'IDEATION' : 'PRODUCTION';
+    const defaultStages = getStagesForPhaseType(phaseType);
+    const existingInputs = document.querySelectorAll('.phase-deadline-input');
+    const existingNameInputs = document.querySelectorAll('.phase-name-input');
+    const count = existingInputs.length;
+    
+    const startDateInput = document.querySelector('#page-create-project form input[type="date"]');
+    const completionInput = document.querySelectorAll('#page-create-project form input[type="date"]')[1];
+    const completionDate = completionInput ? completionInput.value : '';
+    
+    let minDate = '';
+    if (count > 0) {
+        const prevPhaseInput = document.querySelector(`.phase-deadline-input[data-phase-index="${count - 1}"]`);
+        const prevValue = prevPhaseInput ? prevPhaseInput.value : '';
+        if (prevValue) {
+            minDate = `min="${prevValue}"`;
+        }
+    } else {
+        minDate = startDateInput ? `min="${startDateInput.value}"` : '';
+    }
+    
+    const insertBefore = container.querySelector('button[onclick="addPhase()"]');
+    const div = document.createElement('div');
+    div.className = 'flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3';
+    div.setAttribute('data-phase-index', count);
+    div.innerHTML = `
+        <div class="flex items-center gap-2 flex-shrink-0">
+            <button type="button" onclick="movePhaseUp(${count})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors opacity-0" title="Move up">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+            </button>
+            <button type="button" onclick="movePhaseDown(${count})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Move down">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <span class="w-6 h-6 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${count + 1}</span>
+        </div>
+        <div class="flex-1">
+            <input type="text" class="phase-name-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" value="${defaultStages[count] || 'New Phase'}" placeholder="Phase name" />
+        </div>
+        <div class="flex-1">
+            <input type="date" class="phase-deadline-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" ${minDate} value="" />
+        </div>
+        <button type="button" onclick="removePhase(${count})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors flex-shrink-0" title="Remove phase">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+    `;
+    container.insertBefore(div, insertBefore);
+    _reindexPhases();
+}
+
+function removePhase(index) {
+    const container = document.getElementById('phaseDeadlinesContainer');
+    if (!container) return;
+    const phases = container.querySelectorAll('.flex.flex-col\\:sm\\:flex-row');
+    const phaseDiv = container.querySelector(`[data-phase-index="${index}"]`);
+    if (phaseDiv) {
+        phaseDiv.remove();
+        _reindexPhases();
+    }
+}
+
+function movePhaseUp(index) {
+    if (index <= 0) return;
+    const container = document.getElementById('phaseDeadlinesContainer');
+    if (!container) return;
+    const current = container.querySelector(`[data-phase-index="${index}"]`);
+    const prev = container.querySelector(`[data-phase-index="${index - 1}"]`);
+    if (current && prev) {
+        const temp = document.createElement('div');
+        temp.style.display = 'none';
+        current.parentNode.insertBefore(temp, current);
+        prev.parentNode.insertBefore(current, prev);
+        temp.parentNode.insertBefore(prev, temp);
+        temp.remove();
+        _reindexPhases();
+    }
+}
+
+function movePhaseDown(index) {
+    const container = document.getElementById('phaseDeadlinesContainer');
+    if (!container) return;
+    const phases = container.querySelectorAll('.flex.flex-col\\:sm\\:flex-row');
+    if (index >= phases.length - 1) return;
+    const current = container.querySelector(`[data-phase-index="${index}"]`);
+    const next = container.querySelector(`[data-phase-index="${index + 1}"]`);
+    if (current && next) {
+        const temp = document.createElement('div');
+        temp.style.display = 'none';
+        next.parentNode.insertBefore(temp, next);
+        current.parentNode.insertBefore(next, current);
+        temp.parentNode.insertBefore(current, temp);
+        temp.remove();
+        _reindexPhases();
+    }
+}
+
+function _reindexPhases() {
+    const container = document.getElementById('phaseDeadlinesContainer');
+    if (!container) return;
+    const phaseDivs = container.querySelectorAll('.flex.flex-col\\:sm\\:flex-row');
+    phaseDivs.forEach((div, newIndex) => {
+        div.setAttribute('data-phase-index', newIndex);
+        const numSpan = div.querySelector('span.w-6.h-6.rounded-full');
+        if (numSpan) numSpan.textContent = newIndex + 1;
+        const nameInput = div.querySelector('.phase-name-input');
+        if (nameInput) nameInput.setAttribute('data-phase-index', newIndex);
+        const deadlineInput = div.querySelector('.phase-deadline-input');
+        if (deadlineInput) {
+            deadlineInput.setAttribute('data-phase-index', newIndex);
+            if (newIndex === 0) {
+                const startDateInput = document.querySelector('#page-create-project form input[type="date"]');
+                deadlineInput.min = startDateInput ? startDateInput.value : '';
+                deadlineInput.required = true;
+            } else {
+                const prevInput = container.querySelector(`.phase-deadline-input[data-phase-index="${newIndex - 1}"]`);
+                deadlineInput.min = prevInput ? prevInput.value : '';
+                deadlineInput.required = false;
+            }
+        }
+        const upBtn = div.querySelector('button[onclick^="movePhaseUp"]');
+        if (upBtn) {
+            upBtn.setAttribute('onclick', `movePhaseUp(${newIndex})`);
+            upBtn.classList.toggle('opacity-0', newIndex === 0);
+        }
+        const downBtn = div.querySelector('button[onclick^="movePhaseDown"]');
+        if (downBtn) {
+            downBtn.setAttribute('onclick', `movePhaseDown(${newIndex})`);
+        }
+        const removeBtn = div.querySelector('button[onclick^="removePhase"]');
+        if (removeBtn) {
+            removeBtn.setAttribute('onclick', `removePhase(${newIndex})`);
+        }
+    });
 }
 
 async function handleCreateProject(event) {
@@ -1271,9 +1457,14 @@ async function handleCreateProject(event) {
     }
 
     const phaseDeadlineInputs = document.querySelectorAll('.phase-deadline-input');
+    const phaseNameInputs = document.querySelectorAll('.phase-name-input');
     const phaseDeadlines = [];
+    const phaseNames = [];
     phaseDeadlineInputs.forEach(input => {
         phaseDeadlines.push(input.value);
+    });
+    phaseNameInputs.forEach(input => {
+        phaseNames.push(input.value);
     });
 
     // Fill empty phase deadlines with the Expected Completion Date
@@ -1312,7 +1503,8 @@ async function handleCreateProject(event) {
             manager_notes: '',
             phases: phases,
             manager_ids: tempManagerSelections,
-            phase_type: phaseType
+            phase_type: phaseType,
+            stage_names: phaseNames
         });
         const successMsg = document.getElementById('createSuccessMessage');
         form.classList.add('hidden');
@@ -1343,9 +1535,9 @@ function updateCreateProjectDescription() {
     const descEl = document.getElementById('createProjectDescription');
     if (descEl) {
         if (ideationRadio && ideationRadio.checked) {
-            descEl.textContent = 'Fill in the details below. An 11-phase Ideation workflow will be automatically created.';
+            descEl.textContent = 'Fill in the details below. You can customize the workflow phases.';
         } else {
-            descEl.textContent = 'Fill in the details below. A 9-phase Production workflow will be automatically created.';
+            descEl.textContent = 'Fill in the details below. You can customize the workflow phases.';
         }
     }
 }

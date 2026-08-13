@@ -103,6 +103,7 @@ class ProjectCreate(BaseModel):
     created_by_user_id: int = 0
     manager_ids: List[int] = []
     phase_type: str = "PRODUCTION"
+    stage_names: Optional[List[str]] = None
 
 
 class ProjectUpdate(BaseModel):
@@ -114,6 +115,7 @@ class ProjectUpdate(BaseModel):
     slack_channel_id: Optional[str] = None
     slack_channel_name: Optional[str] = None
     manager_ids: Optional[List[int]] = None
+    stage_names: Optional[List[str]] = None
 
 
 class ProjectResponse(BaseModel):
@@ -131,6 +133,7 @@ class ProjectResponse(BaseModel):
     slack_channel_id: str = ""
     slack_channel_name: str = ""
     phase_type: str = "PRODUCTION"
+    stage_names: List[str] = []
     phases: List[PhaseResponse] = []
     managers: List["ProjectManagerResponse"] = []
 
