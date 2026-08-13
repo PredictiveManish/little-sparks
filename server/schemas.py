@@ -161,20 +161,19 @@ class DashboardStats(BaseModel):
     delayed: int
 
 
-class RecentProject(BaseModel):
+class OverdueProject(BaseModel):
     id: int
     name: str
     assigned_designer: str
-    stage_index: int
-    status: str
-
-
-class UpcomingDeadline(BaseModel):
-    project_id: int
-    project_name: str
-    assigned_designer: str
     deadline: str
-    days_left: int
+    days_overdue: int
+    stage_index: int
+
+
+class DelayTrendPoint(BaseModel):
+    month: str
+    total_delay_days: int
+    delayed_projects: int
 
 
 # ---------- Stage Actions ----------

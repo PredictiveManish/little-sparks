@@ -408,9 +408,18 @@
                     </div>
                 </div>
                 <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                    <h3 class="text-sm font-semibold text-gray-700 mb-4">Delay Overview</h3>
+                    <h3 class="text-sm font-semibold text-gray-700 mb-4">Overdue Projects</h3>
+                    <div id="overdueProjectsList" class="space-y-3" style="max-height: 280px; overflow-y: auto;">
+                        <p class="text-sm text-gray-400 text-center py-4">Loading...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-8">
+                <h3 class="text-sm font-semibold text-gray-700 mb-4">Delay Trend (Last 6 Months)</h3>
+                <div id="delayTrendContainer">
                     <div class="relative" style="height: 280px;">
-                        <canvas id="dashboardDelayChart"></canvas>
+                        <canvas id="dashboardDelayTrendChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -434,28 +443,6 @@
                 </div>
             </div>
 
-            <!-- Recent Projects & Upcoming Deadlines -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <!-- Recent Projects -->
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                    <div class="flex items-center justify-between mb-5">
-                        <h2 class="text-lg font-semibold text-gray-900">Recent Projects</h2>
-                        <a href="#" onclick="event.preventDefault(); navigateTo('projects')" class="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">View All →</a>
-                    </div>
-                    <div class="space-y-3" id="recentProjectsList">
-                    </div>
-                </div>
-
-                <!-- Upcoming Deadlines -->
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                    <div class="flex items-center justify-between mb-5">
-                        <h2 class="text-lg font-semibold text-gray-900">Upcoming Deadlines</h2>
-                        <a href="#" onclick="event.preventDefault(); navigateTo('projects')" class="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">View All →</a>
-                    </div>
-                    <div class="space-y-3" id="upcomingDeadlinesList">
-                    </div>
-                </div>
-            </div>
         </section>
 
         <!-- ============================================ -->

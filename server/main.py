@@ -73,8 +73,6 @@ from .schemas import (
     ProjectResponse,
     PhaseResponse,
     DashboardStats,
-    RecentProject,
-    UpcomingDeadline,
     SlackConfigCreate,
     SlackConfigResponse,
     SlackActivityResponse,
@@ -1156,72 +1154,116 @@ def get_pending_users(
 # ---------- Dashboard ----------
 
 
+def _compute_project_status(project, today_str):
+    if project.progress == 100:
+        return "COMPLETED"
+    elif project.deadline and today_str > project.deadline:
+        return "DELAYED"
+    else:
+        return "ON_TRACK"
+
+
+def _compute_phase_delay_days(phase, today_str):
+    if phase.completed_at:
+        completed_dt = None
+        for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]:
+            try:
+                completed_dt = datetime.strptime(phase.completed_at, fmt)
+                break
+            except ValueError:
+                pass
+        if completed_dt:
+            try:
+                deadline_dt = datetime.strptime(phase.deadline, "%Y-%m-%d")
+                return max(0, (completed_dt.date() - deadline_dt.date()).days)
+            except Exception:
+                pass
+    else:
+        try:
+            deadline_dt = datetime.strptime(phase.deadline, "%Y-%m-%d")
+            if today_str > phase.deadline:
+                return (datetime.now(IST).replace(tzinfo=None).date() - deadline_dt.date()).days
+        except Exception:
+            pass
+    return 0
+
+
 @app.get("/api/dashboard/stats", response_model=DashboardStats)
 def dashboard_stats(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     projects = get_user_owned_project_query(db, user).all()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
+    completed = sum(1 for p in projects if _compute_project_status(p, today_str) == "COMPLETED")
+    delayed = sum(1 for p in projects if _compute_project_status(p, today_str) == "DELAYED")
+    on_time = sum(1 for p in projects if _compute_project_status(p, today_str) == "ON_TRACK")
     return DashboardStats(
         active_projects=len(projects),
-        on_time=sum(1 for p in projects if p.status == "ON_TRACK"),
-        completed=sum(1 for p in projects if p.status == "COMPLETED"),
-        delayed=sum(1 for p in projects if p.status == "DELAYED"),
+        on_time=on_time,
+        completed=completed,
+        delayed=delayed,
     )
 
 
-@app.get("/api/dashboard/recent-projects", response_model=List[RecentProject])
-def recent_projects(
+@app.get("/api/dashboard/overdue-projects", response_model=List[OverdueProject])
+def overdue_projects(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    projects = (
-        get_user_owned_project_query(db, user)
-        .order_by(Project.created_at.desc())
-        .limit(5)
-        .all()
-    )
+    projects = get_user_owned_project_query(db, user).all()
+    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
+    today_date = datetime.now(IST).replace(tzinfo=None).date()
     result = []
     for p in projects:
-        designer = db.query(User).filter(User.id == p.assigned_designer_id).first()
-        result.append(
-            RecentProject(
+        if p.progress == 100 or not p.deadline:
+            continue
+        if today_str > p.deadline:
+            try:
+                deadline_dt = datetime.strptime(p.deadline, "%Y-%m-%d").date()
+                days_overdue = (today_date - deadline_dt).days
+            except Exception:
+                days_overdue = 0
+            designer = db.query(User).filter(User.id == p.assigned_designer_id).first()
+            result.append(OverdueProject(
                 id=p.id,
                 name=p.name,
                 assigned_designer=designer.name if designer else "Unassigned",
+                deadline=p.deadline,
+                days_overdue=days_overdue,
                 stage_index=p.stage_index,
-                status=p.status,
-            )
-        )
+            ))
+    result.sort(key=lambda x: x.days_overdue, reverse=True)
     return result
 
 
-@app.get("/api/dashboard/upcoming-deadlines", response_model=List[UpcomingDeadline])
-def upcoming_deadlines(
+@app.get("/api/dashboard/delay-trend", response_model=List[DelayTrendPoint])
+def delay_trend(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
-    today = datetime.now().strftime("%Y-%m-%d")
-    projects = (
-        get_user_owned_project_query(db, user)
-        .filter(Project.deadline >= today)
-        .order_by(Project.deadline.asc())
-        .limit(5)
+    reports = (
+        db.query(StageReport)
+        .filter(StageReport.delay_days > 0)
+        .order_by(StageReport.submitted_at)
         .all()
     )
+    monthly = {}
+    for r in reports:
+        try:
+            month = r.submitted_at.strftime("%Y-%m") if r.submitted_at else None
+        except Exception:
+            month = None
+        if not month:
+            continue
+        if month not in monthly:
+            monthly[month] = {"total_delay_days": 0, "delayed_projects": 0}
+        monthly[month]["total_delay_days"] += r.delay_days
+        monthly[month]["delayed_projects"] += 1
     result = []
-    today_dt = datetime.now()
-    for p in projects:
-        deadline_dt = datetime.strptime(p.deadline, "%Y-%m-%d")
-        days_left = (deadline_dt - today_dt).days
-        designer = db.query(User).filter(User.id == p.assigned_designer_id).first()
-        result.append(
-            UpcomingDeadline(
-                project_id=p.id,
-                project_name=p.name,
-                assigned_designer=designer.name if designer else "Unassigned",
-                deadline=p.deadline,
-                days_left=days_left,
-            )
-        )
+    for month in sorted(monthly.keys()):
+        result.append(DelayTrendPoint(
+            month=month,
+            total_delay_days=monthly[month]["total_delay_days"],
+            delayed_projects=monthly[month]["delayed_projects"],
+        ))
     return result
 
 
@@ -5680,6 +5722,8 @@ async def get_project_report(
     )
     
     phase_items = []
+    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
+    today_date = datetime.now(IST).replace(tzinfo=None).date()
     for ph in phases:
         delay_days = 0
         if ph.completed_at:
@@ -5697,6 +5741,13 @@ async def get_project_report(
                     delay_days = max(0, diff)
                 except Exception:
                     pass
+        else:
+            try:
+                deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+                if today_str > ph.deadline:
+                    delay_days = (today_date - deadline_dt.date()).days
+            except Exception:
+                pass
         phase_items.append(PhaseReportItem(
             stage_index=ph.stage_index,
             stage_name=_get_current_stage_name(ph.stage_index, project.phase_type),

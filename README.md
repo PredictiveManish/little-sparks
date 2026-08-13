@@ -16,8 +16,6 @@ A Product Design Project Management Platform
    - [2.1 Dashboard Layout](#21-dashboard-layout)
    - [2.2 Summary Statistics](#22-summary-statistics)
    - [2.3 Pending Requests](#23-pending-requests)
-   - [2.4 Recent Projects](#24-recent-projects)
-   - [2.5 Upcoming Deadlines](#25-upcoming-deadlines)
 3. [Admin Guide](#3-admin-guide)
    - [3.1 Admin Overview](#31-admin-overview)
    - [3.2 Managing User Accounts](#32-managing-user-accounts)
@@ -130,9 +128,6 @@ The Dashboard is organized into the following sections:
 | **Navigation Sidebar** | Left side | Menu for accessing all platform sections |
 | **Summary Statistics** | Top row | 4 cards showing key project metrics |
 | **Pending Requests** | Below stats (Admin only) | User approval management |
-| **Recent Projects** | Left panel | 5 most recently created projects |
-| **Upcoming Deadlines** | Right panel | 5 projects with nearest deadlines |
-| **Quick Actions** | Top area | Create Project button |
 
 ### 2.2 Summary Statistics
 
@@ -177,46 +172,6 @@ When new users register or log in via Slack, their accounts appear here as pendi
 > **[SCREENSHOT: Pending Requests Panel]**
 > *Insert screenshot showing the Pending Requests section with user list and action buttons*
 
-### 2.4 Recent Projects
-
-Displays the **5 most recently created projects** in the system.
-
-**Each project entry shows:**
-- Project name
-- Assigned designer(s)
-- Current stage badge
-- Click to navigate to project details
-
-**Actions:**
-- Click any project to view its **detailed page**
-- Click **"View All"** to go to the full Projects page
-
-> **[SCREENSHOT: Recent Projects Panel]**
-> *Insert screenshot showing the Recent Projects panel with project entries*
-
-### 2.5 Upcoming Deadlines
-
-Displays the **5 projects with the nearest upcoming deadlines**, sorted by date.
-
-**Each deadline entry shows:**
-- Project name
-- Assigned designer(s)
-- Deadline date with day-of-month badge
-- Days remaining indicator
-
-**Color-coded urgency:**
-| Color | Meaning |
-|-------|---------|
-| **Red** | Deadline within 7 days or overdue |
-| **Amber** | Deadline within 7-14 days |
-| **Blue** | Deadline more than 14 days away |
-
-**Actions:**
-- Click any project to view its **detailed page**
-- Click **"View All"** to go to the full Projects page
-
-> **[SCREENSHOT: Upcoming Deadlines Panel]**
-> *Insert screenshot showing the Upcoming Deadlines panel with color-coded urgency indicators*
 
 ---
 
@@ -790,7 +745,6 @@ Smartivity uses a **9-stage linear workflow** for product design. Each stage mus
 | **ON_TRACK** | Green | Project is progressing as planned |
 | **DELAYED** | Red | Project has missed a deadline |
 | **COMPLETED** | Blue | All 9 stages are finished |
-| **AT_RISK** | Amber | Project may miss upcoming deadlines |
 
 ---
 

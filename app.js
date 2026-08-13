@@ -517,55 +517,6 @@ async function loadDashboard() {
         document.getElementById('statCompleted').textContent = stats.completed;
         document.getElementById('statDelayed').textContent = stats.delayed;
 
-        const recentProjects = await api.getRecentProjects();
-        console.log('[APP] loadDashboard: Recent projects received', recentProjects?.length || 0);
-        const recentContainer = document.getElementById('recentProjectsList');
-        let html = '';
-        if (recentProjects.length === 0) {
-            html = '<p class="text-sm text-gray-400 text-center py-4">No projects yet. Create your first project!</p>';
-        } else {
-            recentProjects.forEach(p => {
-                html += `
-                    <div class="flex items-center justify-between py-3 border-b border-gray-100 last:border-0" onclick="navigateTo('project-details', ${p.id})" style="cursor:pointer">
-                        <div>
-                            <p class="font-medium text-gray-900 text-sm">${p.name}</p>
-                            <p class="text-xs text-gray-500">${p.assigned_designer || 'Unassigned'}</p>
-                        </div>
-                        <span class="text-xs font-medium px-2.5 py-1 rounded-full bg-brand-100 text-brand-700">Stage ${p.stage_index + 1}</span>
-                    </div>
-                `;
-            });
-        }
-        recentContainer.innerHTML = html;
-
-        const deadlines = await api.getUpcomingDeadlines();
-        console.log('[APP] loadDashboard: Upcoming deadlines received', deadlines?.length || 0);
-        const deadlineContainer = document.getElementById('upcomingDeadlinesList');
-        let dHtml = '';
-        if (deadlines.length === 0) {
-            dHtml = '<p class="text-sm text-gray-400 text-center py-4">No upcoming deadlines.</p>';
-        } else {
-            deadlines.forEach(d => {
-                const colorClass = d.days_left <= 7 ? 'text-red-500' : d.days_left <= 14 ? 'text-amber-500' : 'text-blue-500';
-                const bgClass = d.days_left <= 7 ? 'bg-red-50' : d.days_left <= 14 ? 'bg-amber-50' : 'bg-blue-50';
-                const parts = d.deadline.split('-');
-                dHtml += `
-                    <div class="flex items-center gap-4 py-3 border-b border-gray-100 last:border-0" style="cursor:pointer" onclick="navigateTo('project-details', ${d.project_id})">
-                        <div class="w-12 h-12 rounded-lg ${bgClass} flex flex-col items-center justify-center flex-shrink-0">
-                            <span class="text-lg font-bold ${colorClass}">${parts[2]}</span>
-                            <span class="text-[10px] ${colorClass} font-medium">${new Date(d.deadline).toLocaleDateString('en', { month: 'short' })}</span>
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <p class="font-medium text-gray-900 text-sm truncate">${d.project_name}</p>
-                            <p class="text-xs text-gray-500">${d.assigned_designer || 'Unassigned'}</p>
-                        </div>
-                        <span class="text-xs font-semibold ${colorClass} whitespace-nowrap">${d.days_left} days left</span>
-                    </div>
-                `;
-            });
-        }
-        deadlineContainer.innerHTML = dHtml;
-
         // Show pending requests card for admin only
         if (USER_ROLE === 'ADMIN') {
             try {
@@ -619,15 +570,14 @@ async function loadDashboard() {
         // Dashboard Charts
         try {
             const statusChartEl = document.getElementById('dashboardStatusChart');
-            const delayChartEl = document.getElementById('dashboardDelayChart');
             if (statusChartEl) {
                 renderChart('dashboardStatusChart', {
                     type: 'doughnut',
                     data: {
-                        labels: ['On Time', 'Delayed', 'Completed', 'At Risk'],
-                        datasets: [{
-                            data: [stats.on_time, stats.delayed, stats.completed, stats.active_projects - stats.on_time - stats.delayed - stats.completed],
-                            backgroundColor: [chartColors.greenBg, chartColors.redBg, chartColors.greenBg, chartColors.amberBg],
+                    labels: ['On Time', 'Delayed', 'Completed'],
+                    datasets: [{
+                        data: [stats.on_time, stats.delayed, stats.completed],
+                        backgroundColor: [chartColors.blueBg, chartColors.redBg, chartColors.greenBg],
                             borderWidth: 0,
                             hoverOffset: 8,
                         }]
@@ -645,32 +595,88 @@ async function loadDashboard() {
                     }
                 });
             }
-            if (delayChartEl) {
-                const delayData = await api.getDashboardStats();
-                renderChart('dashboardDelayChart', {
-                    type: 'bar',
-                    data: {
-                        labels: ['On Time', 'Delayed', 'Completed', 'At Risk'],
-                        datasets: [{
-                            label: 'Projects',
-                            data: [delayData.on_time, delayData.delayed, delayData.completed, delayData.active_projects - delayData.on_time - delayData.delayed - delayData.completed],
-                            backgroundColor: [chartColors.greenBg, chartColors.redBg, chartColors.greenBg, chartColors.amberBg],
-                            borderRadius: 6,
-                            borderSkipped: false,
-                        }]
-                    },
-                    options: {
-                        ...defaultChartOptions,
-                        scales: {
-                            x: { ...defaultScaleConfig, grid: { display: false } },
-                            y: { ...defaultScaleConfig, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }
-                        },
-                        plugins: {
-                            ...defaultChartOptions.plugins,
-                            legend: { display: false }
-                        }
+            const overdueList = document.getElementById('overdueProjectsList');
+            if (overdueList) {
+                try {
+                    const overdue = await api.getOverdueProjects();
+                    let html = '';
+                    if (overdue.length === 0) {
+                        html = '<p class="text-sm text-gray-400 text-center py-4">No overdue projects. All on track!</p>';
+                    } else {
+                        overdue.forEach(p => {
+                            html += `
+                                <div class="flex items-center justify-between py-3 border-b border-gray-100 last:border-0" style="cursor:pointer" onclick="navigateTo('project-details', ${p.id})">
+                                    <div>
+                                        <p class="font-medium text-gray-900 text-sm">${p.name}</p>
+                                        <p class="text-xs text-gray-500">${p.assigned_designer || 'Unassigned'} · Deadline: ${p.deadline}</p>
+                                    </div>
+                                    <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-red-100 text-red-700 whitespace-nowrap">${p.days_overdue}d overdue</span>
+                                </div>
+                            `;
+                        });
                     }
-                });
+                    overdueList.innerHTML = html;
+                } catch (overdueErr) {
+                    console.warn('[APP] loadDashboard: Failed to load overdue projects:', overdueErr.message);
+                    overdueList.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">Failed to load overdue projects.</p>';
+                }
+            }
+            const trendChartEl = document.getElementById('dashboardDelayTrendChart');
+            if (trendChartEl) {
+                try {
+                    const trend = await api.getDelayTrend();
+                    if (trend.length > 0) {
+                        const months = trend.map(t => {
+                            const [y, m] = t.month.split('-');
+                            return new Date(y, m - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' });
+                        });
+                        renderChart('dashboardDelayTrendChart', {
+                            type: 'line',
+                            data: {
+                                labels: months,
+                                datasets: [{
+                                    label: 'Total Delay Days',
+                                    data: trend.map(t => t.total_delay_days),
+                                    borderColor: chartColors.red,
+                                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                    fill: true,
+                                    tension: 0.3,
+                                    pointRadius: 4,
+                                    pointHoverRadius: 6,
+                                    borderWidth: 2,
+                                }, {
+                                    label: 'Delayed Projects',
+                                    data: trend.map(t => t.delayed_projects),
+                                    borderColor: chartColors.amber,
+                                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                                    fill: true,
+                                    tension: 0.3,
+                                    pointRadius: 4,
+                                    pointHoverRadius: 6,
+                                    borderWidth: 2,
+                                    yAxisID: 'y1',
+                                }]
+                            },
+                            options: {
+                                ...defaultChartOptions,
+                                scales: {
+                                    x: { ...defaultScaleConfig, grid: { display: false } },
+                                    y: { ...defaultScaleConfig, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, title: { display: true, text: 'Delay Days', font: { size: 11 } } },
+                                    y1: { ...defaultScaleConfig, beginAtZero: true, position: 'right', grid: { display: false }, title: { display: true, text: 'Projects', font: { size: 11 } } }
+                                },
+                                plugins: {
+                                    ...defaultChartOptions.plugins,
+                                    legend: { position: 'bottom', labels: { font: { size: 11 } } }
+                                }
+                            }
+                        });
+                    } else {
+                        document.getElementById('delayTrendContainer').innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No delay data available yet.</p>';
+                    }
+                } catch (trendErr) {
+                    console.warn('[APP] loadDashboard: Failed to load delay trend:', trendErr.message);
+                    document.getElementById('delayTrendContainer').innerHTML = '<p class="text-sm text-gray-400 text-center py-4">Failed to load delay trend.</p>';
+                }
             }
         } catch (chartErr) {
             console.warn('[APP] loadDashboard: Failed to render charts:', chartErr.message);
@@ -743,7 +749,7 @@ async function populateProjectsTable() {
                     <td class="px-5 py-4">
                         <div class="flex items-center gap-2">
                             <div class="w-20 h-1.5 bg-gray-200 rounded-full flex-shrink-0">
-                                <div class="h-full rounded-full ${p.progress >= 80 ? 'bg-green-500' : p.progress >= 40 ? 'bg-brand-500' : 'bg-amber-500'}" style="width:${p.progress}%"></div>
+                                <div class="h-full rounded-full ${p.progress >= 80 ? (p.status === 'DELAYED' ? 'bg-red-500' : 'bg-green-500') : p.progress >= 40 ? 'bg-brand-500' : 'bg-amber-500'}" style="width:${p.progress}%"></div>
                             </div>
                             <span class="text-xs font-medium text-gray-600">${p.progress}%</span>
                         </div>
@@ -780,6 +786,7 @@ async function populateProjectDetails() {
             `Stage ${project.stage_index + 1}`;
         document.getElementById('detailProgress').textContent = project.progress;
         document.getElementById('detailProgressBar').style.width = project.progress + '%';
+        document.getElementById('detailProgressBar').className = `h-full rounded-full ${project.progress >= 80 ? (project.status === 'DELAYED' ? 'bg-red-500' : 'bg-green-500') : project.progress >= 40 ? 'bg-brand-500' : 'bg-amber-500'}`;
         document.getElementById('detailDeadline').textContent = formatDate(project.deadline);
         document.getElementById('detailStatus').textContent = getStatusText(project.status);
 
@@ -2686,12 +2693,20 @@ async function loadProjectReport() {
 
             // Phase progress horizontal bar
             const progressLabels = report.phases.map(p => p.stage_name);
+            const today = new Date();
             const progressData = report.phases.map(p => {
                 if (p.completed_at) return 100;
                 if (p.is_current) {
-                    const start = new Date(p.deadline);
-                    start.setDate(start.getDate() - 7);
-                    return 50;
+                    try {
+                        const deadline = new Date(p.deadline + 'T00:00:00');
+                        const projectStart = new Date(report.start_date + 'T00:00:00');
+                        const totalDays = Math.max(1, Math.round((deadline - projectStart) / (1000 * 60 * 60 * 24)));
+                        const elapsedDays = Math.max(0, Math.round((today - projectStart) / (1000 * 60 * 60 * 24)));
+                        const pct = Math.round((elapsedDays / totalDays) * 100);
+                        return Math.min(100, Math.max(0, pct));
+                    } catch (e) {
+                        return 50;
+                    }
                 }
                 return 0;
             });

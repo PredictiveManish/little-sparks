@@ -59,9 +59,9 @@ function getDesignerName(designerId, designers) {
 
 function getStatusColor(status) {
     const colors = {
-        'ON_TRACK': 'bg-green-100 text-green-700',
+        'ON_TRACK': 'bg-blue-100 text-blue-700',
         'DELAYED': 'bg-red-100 text-red-700',
-        'COMPLETED': 'bg-blue-100 text-blue-700',
+        'COMPLETED': 'bg-green-100 text-green-700',
         'AT_RISK': 'bg-amber-100 text-amber-700',
     };
     return colors[status] || 'bg-gray-100 text-gray-700';
