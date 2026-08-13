@@ -1582,17 +1582,35 @@ async def update_project(
         changes.append(f"Phase names updated")
         project.stage_names = data.stage_names
     if data.phases is not None:
-        # Update phase deadlines
+        # Sync phases: handle new phases added and phases removed
+        existing_phases = {
+            p.stage_index: p
+            for p in db.query(Phase)
+            .filter(Phase.project_id == project_id)
+            .all()
+        }
+        incoming_indices = {pd.stage_index for pd in data.phases}
+        # Remove phases that no longer exist in the payload
+        for idx, phase in list(existing_phases.items()):
+            if idx not in incoming_indices:
+                db.delete(phase)
+                changes.append(f"Phase {idx + 1} removed")
+        # Update deadlines and create new phases
         for phase_data in data.phases:
-            phase = (
-                db.query(Phase)
-                .filter(Phase.project_id == project_id, Phase.stage_index == phase_data.stage_index)
-                .first()
-            )
-            if phase and phase_data.deadline:
-                old_deadline = phase.deadline
-                phase.deadline = phase_data.deadline
-                changes.append(f"Phase {phase_data.stage_index + 1} deadline: {old_deadline} → {phase_data.deadline}")
+            if phase_data.stage_index in existing_phases:
+                phase = existing_phases[phase_data.stage_index]
+                if phase_data.deadline:
+                    old_deadline = phase.deadline
+                    phase.deadline = phase_data.deadline
+                    changes.append(f"Phase {phase_data.stage_index + 1} deadline: {old_deadline} → {phase_data.deadline}")
+            else:
+                new_phase = Phase(
+                    project_id=project_id,
+                    stage_index=phase_data.stage_index,
+                    deadline=phase_data.deadline or project.deadline,
+                )
+                db.add(new_phase)
+                changes.append(f"Phase {phase_data.stage_index + 1} added")
     if data.delay_reason is not None:
         # Update delay_reason on the current active phase
         current_phase = (

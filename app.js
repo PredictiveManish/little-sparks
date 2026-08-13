@@ -14,6 +14,8 @@ let USER_ROLE = null;
 let tempManagerSelections = [];
 let tempEditManagerSelections = [];
 // _editProjectCache removed - phase type is now read-only on edit page
+let _editProjectPhaseType = 'PRODUCTION';
+let _editProjectDeadline = '';
 let MANAGERS = [];
 
 // ============================================
@@ -1038,6 +1040,8 @@ async function populateEditProject() {
         populateEditManagerSelect(project.managers ? project.managers.map(m => m.id) : []);
         
         // Phase Type (read-only display)
+        _editProjectPhaseType = project.phase_type || 'PRODUCTION';
+        _editProjectDeadline = project.deadline || '';
         const phaseTypeDisplay = document.getElementById('editPhaseTypeDisplay');
         if (phaseTypeDisplay) {
             const pt = project.phase_type || 'PRODUCTION';
@@ -1491,6 +1495,134 @@ function _reindexPhases() {
     });
 }
 
+// ============================================
+// EDIT PROJECT PHASE MANAGEMENT
+// ============================================
+function addEditPhase() {
+    const container = document.getElementById('editPhaseDeadlinesContainer');
+    if (!container) return;
+    const phaseType = _editProjectPhaseType || 'PRODUCTION';
+    const defaultStages = getStagesForPhaseType(phaseType);
+    const existingInputs = document.querySelectorAll('#editPhaseDeadlinesContainer .phase-deadline-input');
+    const count = existingInputs.length;
+    
+    const prevPhaseInput = document.querySelector(`#editPhaseDeadlinesContainer .phase-deadline-input[data-phase-index="${count - 1}"]`);
+    const prevValue = prevPhaseInput ? prevPhaseInput.value : '';
+    
+    let minDate = '';
+    if (count > 0 && prevValue) {
+        minDate = `min="${prevValue}"`;
+    }
+    
+    const addBtn = container.querySelector('button[onclick="addEditPhase()"]');
+    const div = document.createElement('div');
+    div.className = 'flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3';
+    div.setAttribute('data-phase-index', count);
+    div.innerHTML = `
+        <div class="flex items-center gap-2 flex-shrink-0">
+            <button type="button" onclick="moveEditPhaseUp(${count})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors opacity-0" title="Move up">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+            </button>
+            <button type="button" onclick="moveEditPhaseDown(${count})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Move down">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <span class="w-6 h-6 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${count + 1}</span>
+        </div>
+        <div class="flex-1">
+            <input type="text" class="phase-name-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" value="${defaultStages[count] || 'New Phase'}" placeholder="Phase name" />
+        </div>
+        <div class="flex-1">
+            <input type="date" class="phase-deadline-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" ${minDate} value="" />
+        </div>
+        <button type="button" onclick="removeEditPhase(${count})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors flex-shrink-0" title="Remove phase">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+    `;
+    container.insertBefore(div, addBtn);
+    _reindexEditPhases();
+}
+
+function removeEditPhase(index) {
+    const container = document.getElementById('editPhaseDeadlinesContainer');
+    if (!container) return;
+    const phaseDiv = container.querySelector(`[data-phase-index="${index}"]`);
+    if (phaseDiv) {
+        phaseDiv.remove();
+        _reindexEditPhases();
+    }
+}
+
+function moveEditPhaseUp(index) {
+    if (index <= 0) return;
+    const container = document.getElementById('editPhaseDeadlinesContainer');
+    if (!container) return;
+    const current = container.querySelector(`[data-phase-index="${index}"]`);
+    const prev = container.querySelector(`[data-phase-index="${index - 1}"]`);
+    if (current && prev) {
+        const temp = document.createElement('div');
+        temp.style.display = 'none';
+        current.parentNode.insertBefore(temp, current);
+        prev.parentNode.insertBefore(current, prev);
+        temp.parentNode.insertBefore(prev, temp);
+        temp.remove();
+        _reindexEditPhases();
+    }
+}
+
+function moveEditPhaseDown(index) {
+    const container = document.getElementById('editPhaseDeadlinesContainer');
+    if (!container) return;
+    const phases = container.querySelectorAll('.flex.flex-col\\:sm\\:flex-row');
+    if (index >= phases.length - 1) return;
+    const current = container.querySelector(`[data-phase-index="${index}"]`);
+    const next = container.querySelector(`[data-phase-index="${index + 1}"]`);
+    if (current && next) {
+        const temp = document.createElement('div');
+        temp.style.display = 'none';
+        next.parentNode.insertBefore(temp, next);
+        current.parentNode.insertBefore(next, current);
+        temp.parentNode.insertBefore(current, temp);
+        temp.remove();
+        _reindexEditPhases();
+    }
+}
+
+function _reindexEditPhases() {
+    const container = document.getElementById('editPhaseDeadlinesContainer');
+    if (!container) return;
+    const phaseDivs = container.querySelectorAll('.flex.flex-col\\:sm\\:flex-row');
+    phaseDivs.forEach((div, newIndex) => {
+        div.setAttribute('data-phase-index', newIndex);
+        const numSpan = div.querySelector('span.w-6.h-6.rounded-full');
+        if (numSpan) numSpan.textContent = newIndex + 1;
+        const nameInput = div.querySelector('.phase-name-input');
+        if (nameInput) nameInput.setAttribute('data-phase-index', newIndex);
+        const deadlineInput = div.querySelector('.phase-deadline-input');
+        if (deadlineInput) {
+            deadlineInput.setAttribute('data-phase-index', newIndex);
+            if (newIndex === 0) {
+                deadlineInput.min = '';
+            } else {
+                const prevInput = container.querySelector(`.phase-deadline-input[data-phase-index="${newIndex - 1}"]`);
+                deadlineInput.min = prevInput ? prevInput.value : '';
+            }
+        }
+        const upBtn = div.querySelector('button[onclick^="moveEditPhaseUp"]');
+        if (upBtn) {
+            upBtn.setAttribute('onclick', `moveEditPhaseUp(${newIndex})`);
+            upBtn.classList.toggle('opacity-0', newIndex === 0);
+        }
+        const downBtn = div.querySelector('button[onclick^="moveEditPhaseDown"]');
+        if (downBtn) {
+            downBtn.setAttribute('onclick', `moveEditPhaseDown(${newIndex})`);
+        }
+        const removeBtn = div.querySelector('button[onclick^="removeEditPhase"]');
+        if (removeBtn) {
+            removeBtn.setAttribute('onclick', `removeEditPhase(${newIndex})`);
+        }
+    });
+}
+
 async function handleCreateProject(event) {
     event.preventDefault();
     const form = event.target;
@@ -1700,6 +1832,12 @@ function renderEditPhaseDeadlines(project) {
         html += `
             <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3" data-phase-index="${index}">
                 <div class="flex items-center gap-2 flex-shrink-0">
+                    <button type="button" onclick="moveEditPhaseUp(${index})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ${index === 0 ? 'opacity-0' : ''}" title="Move up">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+                    </button>
+                    <button type="button" onclick="moveEditPhaseDown(${index})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ${index === stages.length - 1 ? 'opacity-0' : ''}" title="Move down">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
                     <span class="w-6 h-6 rounded-full ${index === 0 ? 'bg-brand-500' : 'bg-gray-400'} text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${index + 1}</span>
                 </div>
                 <div class="flex-1">
@@ -1718,9 +1856,18 @@ function renderEditPhaseDeadlines(project) {
                         value="${existingValue}"
                     />
                 </div>
+                <button type="button" onclick="removeEditPhase(${index})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors flex-shrink-0 ${stages.length <= 1 ? 'opacity-0 pointer-events-none' : ''}" title="Remove phase">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
             </div>
         `;
     });
+    html += `
+        <button type="button" onclick="addEditPhase()" class="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm text-gray-500 hover:text-brand-600 hover:border-brand-400 transition-colors flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Add Phase
+        </button>
+    `;
     container.innerHTML = html;
 }
 
