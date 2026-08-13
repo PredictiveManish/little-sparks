@@ -100,6 +100,9 @@ from .schemas import (
     SlackCompletionCancelResponse,
     OverdueProject,
     DelayTrendPoint,
+    MonthlyTrendPoint,
+    DesignerComparisonItem,
+    DesignerTrendPoint,
 )
 
 # ---------- Init ----------
