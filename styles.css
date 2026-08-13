@@ -139,3 +139,26 @@ input[type="radio"][name="phaseType"]:checked + .phase-type-card .text-brand-700
 input[type="radio"][name="phaseType"]:checked + .phase-type-card .text-brand-500 {
     color: #F47920 !important;
 }
+
+/* Drag handle for phase reordering */
+.drag-handle {
+    cursor: grab;
+    color: #9CA3AF;
+    transition: color 0.15s ease;
+}
+.drag-handle:hover {
+    color: #6B7280;
+}
+.drag-handle:active {
+    cursor: grabbing;
+}
+.phase-row {
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.phase-row.dragging {
+    opacity: 0.4;
+    transform: scale(0.98);
+}
+.phase-row.drag-over {
+    border-top: 2px solid #F47920;
+}

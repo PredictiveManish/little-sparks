@@ -1315,14 +1315,11 @@ function renderPhaseDeadlines() {
         const existingName = existingNames[index] || stage;
         const isRequired = index === 0;
         html += `
-            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3" data-phase-index="${index}">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 phase-row" data-phase-index="${index}" draggable="true">
                 <div class="flex items-center gap-2 flex-shrink-0">
-                    <button type="button" onclick="movePhaseUp(${index})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ${index === 0 ? 'opacity-0' : ''}" title="Move up">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
-                    </button>
-                    <button type="button" onclick="movePhaseDown(${index})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ${index === stages.length - 1 ? 'opacity-0' : ''}" title="Move down">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    </button>
+                    <div class="drag-handle w-6 h-6 rounded flex items-center justify-center cursor-grab hover:bg-gray-100 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/></svg>
+                    </div>
                     <span class="w-6 h-6 rounded-full ${index === 0 ? 'bg-brand-500' : 'bg-gray-400'} text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${index + 1}</span>
                 </div>
                 <div class="flex-1">
@@ -1384,16 +1381,13 @@ function addPhase() {
     
     const insertBefore = container.querySelector('button[onclick="addPhase()"]');
     const div = document.createElement('div');
-    div.className = 'flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3';
+    div.className = 'flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 phase-row';
     div.setAttribute('data-phase-index', count);
     div.innerHTML = `
         <div class="flex items-center gap-2 flex-shrink-0">
-            <button type="button" onclick="movePhaseUp(${count})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors opacity-0" title="Move up">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
-            </button>
-            <button type="button" onclick="movePhaseDown(${count})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Move down">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-            </button>
+            <div class="drag-handle w-6 h-6 rounded flex items-center justify-center cursor-grab hover:bg-gray-100 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/></svg>
+            </div>
             <span class="w-6 h-6 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${count + 1}</span>
         </div>
         <div class="flex-1">
@@ -1413,45 +1407,9 @@ function addPhase() {
 function removePhase(index) {
     const container = document.getElementById('phaseDeadlinesContainer');
     if (!container) return;
-    const phases = container.querySelectorAll('.flex.flex-col\\:sm\\:flex-row');
     const phaseDiv = container.querySelector(`[data-phase-index="${index}"]`);
     if (phaseDiv) {
         phaseDiv.remove();
-        _reindexPhases();
-    }
-}
-
-function movePhaseUp(index) {
-    if (index <= 0) return;
-    const container = document.getElementById('phaseDeadlinesContainer');
-    if (!container) return;
-    const current = container.querySelector(`[data-phase-index="${index}"]`);
-    const prev = container.querySelector(`[data-phase-index="${index - 1}"]`);
-    if (current && prev) {
-        const temp = document.createElement('div');
-        temp.style.display = 'none';
-        current.parentNode.insertBefore(temp, current);
-        prev.parentNode.insertBefore(current, prev);
-        temp.parentNode.insertBefore(prev, temp);
-        temp.remove();
-        _reindexPhases();
-    }
-}
-
-function movePhaseDown(index) {
-    const container = document.getElementById('phaseDeadlinesContainer');
-    if (!container) return;
-    const phases = container.querySelectorAll('.flex.flex-col\\:sm\\:flex-row');
-    if (index >= phases.length - 1) return;
-    const current = container.querySelector(`[data-phase-index="${index}"]`);
-    const next = container.querySelector(`[data-phase-index="${index + 1}"]`);
-    if (current && next) {
-        const temp = document.createElement('div');
-        temp.style.display = 'none';
-        next.parentNode.insertBefore(temp, next);
-        current.parentNode.insertBefore(next, current);
-        temp.parentNode.insertBefore(current, temp);
-        temp.remove();
         _reindexPhases();
     }
 }
@@ -1479,19 +1437,66 @@ function _reindexPhases() {
                 deadlineInput.required = false;
             }
         }
-        const upBtn = div.querySelector('button[onclick^="movePhaseUp"]');
-        if (upBtn) {
-            upBtn.setAttribute('onclick', `movePhaseUp(${newIndex})`);
-            upBtn.classList.toggle('opacity-0', newIndex === 0);
-        }
-        const downBtn = div.querySelector('button[onclick^="movePhaseDown"]');
-        if (downBtn) {
-            downBtn.setAttribute('onclick', `movePhaseDown(${newIndex})`);
-        }
         const removeBtn = div.querySelector('button[onclick^="removePhase"]');
         if (removeBtn) {
             removeBtn.setAttribute('onclick', `removePhase(${newIndex})`);
         }
+    });
+    attachPhaseDragAndDrop(container);
+}
+
+function attachPhaseDragAndDrop(container) {
+    if (!container) return;
+    const rows = container.querySelectorAll('.phase-row');
+    let draggedRow = null;
+
+    rows.forEach(row => {
+        const handle = row.querySelector('.drag-handle');
+        if (!handle) return;
+
+        handle.addEventListener('dragstart', (e) => {
+            draggedRow = row;
+            row.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', row.dataset.phaseIndex);
+        });
+
+        handle.addEventListener('dragend', () => {
+            row.classList.remove('dragging');
+            rows.forEach(r => r.classList.remove('drag-over'));
+            draggedRow = null;
+        });
+
+        row.addEventListener('dragover', (e) => {
+            if (row === draggedRow) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            row.classList.add('drag-over');
+        });
+
+        row.addEventListener('dragleave', () => {
+            row.classList.remove('drag-over');
+        });
+
+        row.addEventListener('drop', (e) => {
+            e.preventDefault();
+            row.classList.remove('drag-over');
+            if (draggedRow && draggedRow !== row) {
+                const allRows = [...container.querySelectorAll('.phase-row')];
+                const dragIdx = allRows.indexOf(draggedRow);
+                const dropIdx = allRows.indexOf(row);
+                if (dragIdx < dropIdx) {
+                    row.parentNode.insertBefore(draggedRow, row.nextSibling);
+                } else {
+                    row.parentNode.insertBefore(draggedRow, row);
+                }
+                if (container.id === 'editPhaseDeadlinesContainer') {
+                    _reindexEditPhases();
+                } else {
+                    _reindexPhases();
+                }
+            }
+        });
     });
 }
 
@@ -1516,16 +1521,13 @@ function addEditPhase() {
     
     const addBtn = container.querySelector('button[onclick="addEditPhase()"]');
     const div = document.createElement('div');
-    div.className = 'flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3';
+    div.className = 'flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 phase-row';
     div.setAttribute('data-phase-index', count);
     div.innerHTML = `
         <div class="flex items-center gap-2 flex-shrink-0">
-            <button type="button" onclick="moveEditPhaseUp(${count})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors opacity-0" title="Move up">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
-            </button>
-            <button type="button" onclick="moveEditPhaseDown(${count})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors" title="Move down">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-            </button>
+            <div class="drag-handle w-6 h-6 rounded flex items-center justify-center cursor-grab hover:bg-gray-100 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/></svg>
+            </div>
             <span class="w-6 h-6 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${count + 1}</span>
         </div>
         <div class="flex-1">
@@ -1552,41 +1554,6 @@ function removeEditPhase(index) {
     }
 }
 
-function moveEditPhaseUp(index) {
-    if (index <= 0) return;
-    const container = document.getElementById('editPhaseDeadlinesContainer');
-    if (!container) return;
-    const current = container.querySelector(`[data-phase-index="${index}"]`);
-    const prev = container.querySelector(`[data-phase-index="${index - 1}"]`);
-    if (current && prev) {
-        const temp = document.createElement('div');
-        temp.style.display = 'none';
-        current.parentNode.insertBefore(temp, current);
-        prev.parentNode.insertBefore(current, prev);
-        temp.parentNode.insertBefore(prev, temp);
-        temp.remove();
-        _reindexEditPhases();
-    }
-}
-
-function moveEditPhaseDown(index) {
-    const container = document.getElementById('editPhaseDeadlinesContainer');
-    if (!container) return;
-    const phases = container.querySelectorAll('.flex.flex-col\\:sm\\:flex-row');
-    if (index >= phases.length - 1) return;
-    const current = container.querySelector(`[data-phase-index="${index}"]`);
-    const next = container.querySelector(`[data-phase-index="${index + 1}"]`);
-    if (current && next) {
-        const temp = document.createElement('div');
-        temp.style.display = 'none';
-        next.parentNode.insertBefore(temp, next);
-        current.parentNode.insertBefore(next, current);
-        temp.parentNode.insertBefore(current, temp);
-        temp.remove();
-        _reindexEditPhases();
-    }
-}
-
 function _reindexEditPhases() {
     const container = document.getElementById('editPhaseDeadlinesContainer');
     if (!container) return;
@@ -1607,20 +1574,12 @@ function _reindexEditPhases() {
                 deadlineInput.min = prevInput ? prevInput.value : '';
             }
         }
-        const upBtn = div.querySelector('button[onclick^="moveEditPhaseUp"]');
-        if (upBtn) {
-            upBtn.setAttribute('onclick', `moveEditPhaseUp(${newIndex})`);
-            upBtn.classList.toggle('opacity-0', newIndex === 0);
-        }
-        const downBtn = div.querySelector('button[onclick^="moveEditPhaseDown"]');
-        if (downBtn) {
-            downBtn.setAttribute('onclick', `moveEditPhaseDown(${newIndex})`);
-        }
         const removeBtn = div.querySelector('button[onclick^="removeEditPhase"]');
         if (removeBtn) {
             removeBtn.setAttribute('onclick', `removeEditPhase(${newIndex})`);
         }
     });
+    attachPhaseDragAndDrop(container);
 }
 
 async function handleCreateProject(event) {
@@ -1830,14 +1789,11 @@ function renderEditPhaseDeadlines(project) {
         const existingName = existingNames[index] || (project.stage_names && project.stage_names[index]) || stage;
         
         html += `
-            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3" data-phase-index="${index}">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 phase-row" data-phase-index="${index}" draggable="true">
                 <div class="flex items-center gap-2 flex-shrink-0">
-                    <button type="button" onclick="moveEditPhaseUp(${index})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ${index === 0 ? 'opacity-0' : ''}" title="Move up">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
-                    </button>
-                    <button type="button" onclick="moveEditPhaseDown(${index})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors ${index === stages.length - 1 ? 'opacity-0' : ''}" title="Move down">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    </button>
+                    <div class="drag-handle w-6 h-6 rounded flex items-center justify-center cursor-grab hover:bg-gray-100 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/></svg>
+                    </div>
                     <span class="w-6 h-6 rounded-full ${index === 0 ? 'bg-brand-500' : 'bg-gray-400'} text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${index + 1}</span>
                 </div>
                 <div class="flex-1">
