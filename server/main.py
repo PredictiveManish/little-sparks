@@ -6364,6 +6364,294 @@ async def get_designer_monthly_performance(
     )
 
 
+# ---------- Monthly Trend for a Project ----------
+
+@app.get("/api/projects/{project_id}/monthly-trend", response_model=List[MonthlyTrendPoint])
+async def get_project_monthly_trend(
+    project_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if user.role.upper() == "DESIGNER":
+        raise HTTPException(status_code=403, detail="Designers cannot access project reports")
+    if user.role.upper() == "MANAGER":
+        is_creator = project.created_by_user_id == user.id
+        is_assigned = bool(
+            db.query(ProjectManager).filter(
+                ProjectManager.project_id == project_id,
+                ProjectManager.manager_id == user.id,
+            ).first()
+        )
+        if not is_creator and not is_assigned:
+            raise HTTPException(status_code=403, detail="You can only access your own projects")
+
+    rating_fields = ["costing", "willingness_to_buy", "engagement_life", "durability",
+                     "age_appropriateness", "ease_of_use", "aesthetics", "easy_to_store"]
+
+    # Get all completed phases and their stage reports
+    phases = (
+        db.query(Phase)
+        .filter(Phase.project_id == project_id, Phase.completed_at.isnot(None))
+        .all()
+    )
+    phase_map = {ph.id: ph for ph in phases}
+
+    phase_ids = [ph.id for ph in phases]
+    stage_reports = (
+        db.query(StageReport)
+        .filter(StageReport.project_id == project_id, StageReport.submitted_at.isnot(None))
+        .order_by(StageReport.submitted_at)
+        .all()
+    )
+
+    # Group by month
+    monthly_data = {}
+    for sr in stage_reports:
+        if not sr.submitted_at:
+            continue
+        try:
+            submitted_dt = sr.submitted_at
+            if isinstance(submitted_dt, str):
+                submitted_dt = datetime.strptime(submitted_dt[:10], "%Y-%m-%d")
+            month_key = submitted_dt.strftime("%Y-%m")
+            if month_key not in monthly_data:
+                monthly_data[month_key] = {"ratings": [], "delay_days": 0, "delayed_count": 0}
+
+            # Collect ratings
+            for rf in rating_fields:
+                val = getattr(sr, rf, None)
+                if val is not None:
+                    monthly_data[month_key]["ratings"].append(val)
+
+            # Collect delay info from phase
+            try:
+                completed_dt = submitted_dt
+                deadline_dt = datetime.strptime(project.deadline, "%Y-%m-%d")
+                # Check if this report corresponds to a phase completion
+                for ph in phases:
+                    if ph.stage_index == sr.stage_index and ph.completed_at:
+                        comp_str = ph.completed_at
+                        if isinstance(comp_str, str):
+                            comp_str = comp_str[:10]
+                        if comp_str[:7] == month_key:
+                            dl_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+                            delay = max(0, (completed_dt.date() - dl_dt.date()).days)
+                            monthly_data[month_key]["delay_days"] += delay
+                            if delay > 0:
+                                monthly_data[month_key]["delayed_count"] += 1
+            except Exception:
+                pass
+        except Exception:
+            continue
+
+    result = []
+    for month in sorted(monthly_data.keys()):
+        data = monthly_data[month]
+        avg_r = None
+        if data["ratings"]:
+            avg_r = round(sum(data["ratings"]) / len(data["ratings"]), 2)
+        result.append(MonthlyTrendPoint(
+            month=month,
+            avg_rating=avg_r,
+            total_delay_days=data["delay_days"],
+            delayed_stage_count=data["delayed_count"],
+        ))
+
+    return result
+
+
+# ---------- Designer Comparison ----------
+
+@app.get("/api/reports/designer-comparison", response_model=List[DesignerComparisonItem])
+async def get_designer_comparison(
+    period: str = Query("monthly", description="Period type: weekly or monthly"),
+    week_start: Optional[str] = Query(None, description="Week start (YYYY-MM-DD)"),
+    week_end: Optional[str] = Query(None, description="Week end (YYYY-MM-DD)"),
+    month: Optional[int] = Query(None, ge=1, le=12, description="Month"),
+    year: Optional[int] = Query(None, ge=2020, le=2030, description="Year"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    all_designers = (
+        db.query(User)
+        .filter(User.role.in_(["DESIGNER", "MANAGER"]))
+        .all()
+    )
+
+    # Build period date range
+    if period == "weekly" and week_start and week_end:
+        period_start = week_start
+        period_end = week_end
+    elif period == "monthly" and month and year:
+        period_start = f"{year}-{month:02d}-01"
+        if month == 12:
+            period_end = f"{year + 1}-01-01"
+        else:
+            period_end = f"{year}-{month + 1:02d}-01"
+    else:
+        # Default to current month
+        now = datetime.now(IST).replace(tzinfo=None)
+        period_start = now.strftime("%Y-%m-01")
+        if now.month == 12:
+            period_end = f"{now.year + 1}-01-01"
+        else:
+            period_end = f"{now.year}-{now.month + 1:02d}-01"
+
+    result = []
+    for designer in all_designers:
+        projects = (
+            db.query(Project)
+            .filter(Project.assigned_designer_id == designer.id)
+            .all()
+        )
+        if not projects:
+            continue
+
+        project_ids = [p.id for p in projects]
+        phases = (
+            db.query(Phase)
+            .filter(
+                Phase.project_id.in_(project_ids),
+                Phase.completed_at.isnot(None),
+                Phase.completed_at >= period_start,
+                Phase.completed_at < period_end,
+            )
+            .all()
+        )
+
+        stages_completed = len(phases)
+        on_time = 0
+        delayed = 0
+        total_delay = 0
+
+        for ph in phases:
+            delay_days = 0
+            if ph.completed_at and ph.deadline:
+                try:
+                    comp_str = ph.completed_at
+                    if isinstance(comp_str, str):
+                        comp_str = comp_str[:10]
+                    completed_dt = datetime.strptime(comp_str, "%Y-%m-%d")
+                    deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+                    delay_days = max(0, (completed_dt.date() - deadline_dt.date()).days)
+                except Exception:
+                    pass
+            total_delay += delay_days
+            if delay_days > 0:
+                delayed += 1
+            else:
+                on_time += 1
+
+        on_time_rate = None
+        avg_delay = None
+        if stages_completed > 0:
+            on_time_rate = round((on_time / stages_completed) * 100, 1)
+            avg_delay = round(total_delay / stages_completed, 1)
+
+        result.append(DesignerComparisonItem(
+            designer_id=designer.id,
+            designer_name=designer.name,
+            stages_completed=stages_completed,
+            on_time=on_time,
+            delayed=delayed,
+            on_time_rate=on_time_rate,
+            avg_delay_days=avg_delay,
+        ))
+
+    # Sort by on_time_rate descending (None values last)
+    result.sort(key=lambda x: x.on_time_rate if x.on_time_rate is not None else -1, reverse=True)
+    return result
+
+
+# ---------- Designer Performance Trend (6 months) ----------
+
+@app.get("/api/designers/{designer_id}/performance/trend", response_model=List[DesignerTrendPoint])
+async def get_designer_performance_trend(
+    designer_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    designer = db.query(User).filter(User.id == designer_id).first()
+    if not designer:
+        raise HTTPException(status_code=404, detail="Designer not found")
+
+    projects = (
+        db.query(Project)
+        .filter(Project.assigned_designer_id == designer_id)
+        .all()
+    )
+    if not projects:
+        return []
+
+    project_ids = [p.id for p in projects]
+    phases = (
+        db.query(Phase)
+        .filter(
+            Phase.project_id.in_(project_ids),
+            Phase.completed_at.isnot(None),
+        )
+        .order_by(Phase.completed_at)
+        .all()
+    )
+
+    # Group by month for last 6 months
+    monthly_data = {}
+    now = datetime.now(IST).replace(tzinfo=None)
+    for i in range(6):
+        m = now.month - i
+        y = now.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        month_key = f"{y}-{m:02d}"
+        monthly_data[month_key] = {"stages": 0, "delay_days": 0, "on_time": 0}
+
+    for ph in phases:
+        try:
+            comp_str = ph.completed_at
+            if isinstance(comp_str, str):
+                comp_str = comp_str[:10]
+            comp_dt = datetime.strptime(comp_str, "%Y-%m-%d")
+            month_key = comp_dt.strftime("%Y-%m")
+            if month_key not in monthly_data:
+                continue
+
+            delay_days = 0
+            if ph.deadline:
+                try:
+                    deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+                    delay_days = max(0, (comp_dt.date() - deadline_dt.date()).days)
+                except Exception:
+                    pass
+
+            monthly_data[month_key]["stages"] += 1
+            monthly_data[month_key]["delay_days"] += delay_days
+            if delay_days == 0:
+                monthly_data[month_key]["on_time"] += 1
+        except Exception:
+            continue
+
+    result = []
+    for month_key in sorted(monthly_data.keys(), reverse=True):
+        data = monthly_data[month_key]
+        on_time_rate = None
+        avg_delay = None
+        if data["stages"] > 0:
+            on_time_rate = round((data["on_time"] / data["stages"]) * 100, 1)
+            avg_delay = round(data["delay_days"] / data["stages"], 1)
+        result.append(DesignerTrendPoint(
+            month=month_key,
+            on_time_rate=on_time_rate,
+            stages_completed=data["stages"],
+            avg_delay_days=avg_delay,
+        ))
+
+    return result
+
+
 # ---------- Report download endpoints (CSV / PDF) ----------
 
 

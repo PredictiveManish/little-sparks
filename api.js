@@ -111,6 +111,22 @@ const api = {
     getDesignerMonthlyPerformance: (designerId, month, year) =>
         apiFetch(`/designers/${designerId}/performance/monthly?month=${month}&year=${year}`),
 
+    // Reports — Project Monthly Trend (6-12 months)
+    getProjectMonthlyTrend: (projectId) => apiFetch(`/projects/${projectId}/monthly-trend`),
+
+    // Reports — Designer Comparison (cross-designer ranking)
+    getDesignerComparison: (period, weekStart, weekEnd, month, year) => {
+        const params = new URLSearchParams({ period });
+        if (weekStart) params.set('week_start', weekStart);
+        if (weekEnd) params.set('week_end', weekEnd);
+        if (month) params.set('month', month);
+        if (year) params.set('year', year);
+        return apiFetch(`/reports/designer-comparison?${params.toString()}`);
+    },
+
+    // Reports — Designer Performance Trend (6 months)
+    getDesignerPerformanceTrend: (designerId) => apiFetch(`/designers/${designerId}/performance/trend`),
+
     // Report downloads (CSV / PDF) via fetch+blob
     downloadReportCSV: async (endpoint) => {
         const url = `${API_BASE}${endpoint}`;

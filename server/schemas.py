@@ -176,6 +176,33 @@ class DelayTrendPoint(BaseModel):
     delayed_projects: int
 
 
+class MonthlyTrendPoint(BaseModel):
+    """Monthly trend for a project: avg_rating + delay across last 6-12 months."""
+    month: str
+    avg_rating: Optional[float] = None
+    total_delay_days: int = 0
+    delayed_stage_count: int = 0
+
+
+class DesignerComparisonItem(BaseModel):
+    """Single designer's performance for comparison ranking."""
+    designer_id: int
+    designer_name: str
+    stages_completed: int = 0
+    on_time: int = 0
+    delayed: int = 0
+    on_time_rate: Optional[float] = None
+    avg_delay_days: Optional[float] = None
+
+
+class DesignerTrendPoint(BaseModel):
+    """Single designer's monthly on-time rate trend."""
+    month: str
+    on_time_rate: Optional[float] = None
+    stages_completed: int = 0
+    avg_delay_days: Optional[float] = None
+
+
 # ---------- Stage Actions ----------
 
 

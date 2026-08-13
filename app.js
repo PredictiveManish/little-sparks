@@ -2702,51 +2702,108 @@ async function loadProjectReport() {
                 }
             });
 
-            // Phase progress horizontal bar
-            const progressLabels = report.phases.map(p => p.stage_name);
+            // Phase timeline — Gantt-style floating bars
             const today = new Date();
-            const progressData = report.phases.map(p => {
-                if (p.completed_at) return 100;
-                if (p.is_current) {
-                    try {
-                        const deadline = new Date(p.deadline + 'T00:00:00');
-                        const projectStart = new Date(report.start_date + 'T00:00:00');
-                        const totalDays = Math.max(1, Math.round((deadline - projectStart) / (1000 * 60 * 60 * 24)));
-                        const elapsedDays = Math.max(0, Math.round((today - projectStart) / (1000 * 60 * 60 * 24)));
-                        const pct = Math.round((elapsedDays / totalDays) * 100);
-                        return Math.min(100, Math.max(0, pct));
-                    } catch (e) {
-                        return 50;
-                    }
+            const projectStart = new Date(report.start_date + 'T00:00:00');
+            const projectEnd = new Date(report.deadline + 'T00:00:00');
+            const totalDays = Math.max(1, Math.round((projectEnd - projectStart) / (1000 * 60 * 60 * 24)));
+
+            const timelineLabels = [];
+            const plannedStarts = [];
+            const plannedDurations = [];
+            const actualStarts = [];
+            const actualDurations = [];
+            const actualColors = [];
+
+            report.phases.forEach((p, i) => {
+                timelineLabels.push(p.stage_name);
+
+                // Planned: from project start (or previous phase end) to deadline
+                const phaseDeadline = new Date(p.deadline + 'T00:00:00');
+                const prevPhase = report.phases[i - 1];
+                let plannedStart;
+                if (i === 0) {
+                    plannedStart = projectStart;
+                } else if (prevPhase.completed_at) {
+                    plannedStart = new Date(prevPhase.completed_at.split('T')[0] + 'T00:00:00');
+                } else {
+                    plannedStart = projectStart;
                 }
-                return 0;
+
+                const ps = Math.max(0, Math.round((plannedStart - projectStart) / (1000 * 60 * 60 * 24)));
+                const pd = Math.max(1, Math.round((phaseDeadline - plannedStart) / (1000 * 60 * 60 * 24)));
+                plannedStarts.push(ps);
+                plannedDurations.push(pd);
+
+                // Actual: from previous phase completion (or project start) to current completion
+                let actualStart, actualEnd;
+                if (p.completed_at) {
+                    actualStart = new Date(prevPhase && prevPhase.completed_at ? prevPhase.completed_at.split('T')[0] + 'T00:00:00' : report.start_date + 'T00:00:00');
+                    const completedParts = p.completed_at.split('T')[0];
+                    actualEnd = new Date(completedParts + 'T00:00:00');
+                    const as = Math.max(0, Math.round((actualStart - projectStart) / (1000 * 60 * 60 * 24)));
+                    const ad = Math.max(1, Math.round((actualEnd - actualStart) / (1000 * 60 * 60 * 24)));
+                    actualStarts.push(as);
+                    actualDurations.push(ad);
+                    actualColors.push(chartColors.greenBg);
+                } else if (p.is_current) {
+                    // In-progress: actual start from prev phase or project start, actual end = today
+                    const as = Math.max(0, Math.round((plannedStart - projectStart) / (1000 * 60 * 60 * 24)));
+                    const todayOffset = Math.max(0, Math.round((today - plannedStart) / (1000 * 60 * 60 * 24)));
+                    actualStarts.push(as);
+                    actualDurations.push(Math.max(1, todayOffset));
+                    actualColors.push(p.delay_days > 0 ? chartColors.redBg : chartColors.brand);
+                } else {
+                    // Not started yet
+                    actualStarts.push(0);
+                    actualDurations.push(0);
+                    actualColors.push(chartColors.grayBg);
+                }
             });
-            renderChart('projectProgressChart', {
+
+            renderChart('projectTimelineChart', {
                 type: 'bar',
                 data: {
-                    labels: progressLabels,
-                    datasets: [{
-                        label: 'Completion %',
-                        data: progressData,
-                        backgroundColor: progressData.map((v, i) => {
-                            if (v === 100) return chartColors.greenBg;
-                            if (v > 0) return chartColors.brand;
-                            return chartColors.grayBg;
-                        }),
-                        borderRadius: 6,
-                        borderSkipped: false,
-                    }]
+                    labels: timelineLabels,
+                    datasets: [
+                        {
+                            label: 'Planned Duration',
+                            data: plannedStarts.map((s, i) => [s, plannedDurations[i]]),
+                            backgroundColor: 'rgba(156, 163, 175, 0.3)',
+                            borderColor: 'rgba(156, 163, 175, 0.5)',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                        },
+                        {
+                            label: 'Actual Duration',
+                            data: actualStarts.map((s, i) => [s, actualDurations[i]]),
+                            backgroundColor: actualColors,
+                            borderColor: actualColors.map(c => c.replace('0.75', '1')),
+                            borderWidth: 1,
+                            borderRadius: 4,
+                        }
+                    ]
                 },
                 options: {
                     ...defaultChartOptions,
                     indexAxis: 'y',
                     scales: {
-                        x: { ...defaultScaleConfig, beginAtZero: true, max: 100, ticks: { ...defaultScaleConfig.ticks, callback: v => v + '%' } },
+                        x: {
+                            ...defaultScaleConfig,
+                            min: 0,
+                            max: totalDays,
+                            title: { display: true, text: 'Days from project start', font: { size: 11 } },
+                        },
                         y: { ...defaultScaleConfig, grid: { display: false } }
                     },
                     plugins: {
                         ...defaultChartOptions.plugins,
-                        legend: { display: false }
+                        legend: { position: 'bottom', labels: { font: { size: 11 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.x}d (offset ${ctx.parsed.yStart}d)`
+                            }
+                        }
                     }
                 }
             });
@@ -2785,6 +2842,27 @@ async function loadWeeklyReport() {
         
         const summary = report.summary || {};
         
+        // Categorize stages for operational view
+        const updatedStages = [];
+        const overdueStages = [];
+        const noUpdateStages = [];
+        
+        report.reports.forEach(item => {
+            const hasActivity = item.activities && item.activities.length > 0;
+            const completed = item.completed_this_week;
+            const delayed = item.delay_days > 0;
+            
+            if (completed) {
+                updatedStages.push(item);
+            } else if (delayed) {
+                overdueStages.push(item);
+            } else if (!hasActivity && item.progress < 100) {
+                noUpdateStages.push(item);
+            } else if (hasActivity) {
+                updatedStages.push(item);
+            }
+        });
+        
         let html = `
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                 <p class="text-sm text-gray-500 mb-4">Week: ${formatDate(weekStart)} — ${formatDate(weekEnd)}</p>
@@ -2806,138 +2884,102 @@ async function loadWeeklyReport() {
                         <p class="text-xs text-amber-600 mt-1">Delay Days</p>
                     </div>
                 </div>
-                <div class="space-y-4">
+            </div>
         `;
         
-        if (report.reports.length === 0) {
-            html += '<p class="text-sm text-gray-400 text-center py-4">No reports for this week.</p>';
-        } else {
-            report.reports.forEach(item => {
+        // Section 1: Stages updated this week
+        if (updatedStages.length > 0) {
+            html += '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">';
+            html += '<h3 class="text-sm font-semibold text-gray-700 mb-4">✅ Stages Updated This Week</h3>';
+            html += '<div class="space-y-3">';
+            updatedStages.forEach(item => {
                 html += `
                     <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center justify-between mb-2">
                             <h4 class="font-semibold text-gray-900">${item.stage_name}</h4>
                             <div class="flex gap-2">
-                                ${item.completed_this_week ? '<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">Completed This Week</span>' : ''}
+                                ${item.completed_this_week ? '<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">Completed</span>' : ''}
                                 ${item.activities && item.activities.length > 0 ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 text-blue-700">${item.activities.length} Activity${item.activities.length > 1 ? 'ies' : 'y'}</span>` : ''}
-                                ${(!item.completed_this_week && (!item.activities || item.activities.length === 0)) ? '<span class="text-xs font-medium px-2 py-1 rounded-full bg-gray-200 text-gray-500">No Changes</span>' : ''}
                             </div>
                         </div>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
-                            <div>
-                                <p class="text-xs text-gray-500">Designer</p>
-                                <p class="font-medium">${item.assigned_designer}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs text-gray-500">Progress</p>
-                                <p class="font-medium">${item.progress}%</p>
-                            </div>
-                            <div>
-                                <p class="text-xs text-gray-500">Progress Change</p>
-                                <p class="font-medium">${item.progress_change !== undefined && item.progress_change !== 0 ? (item.progress_change > 0 ? '+' + item.progress_change : item.progress_change) : '—'}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs text-gray-500">Delay</p>
-                                <p class="font-medium">${item.delay_days > 0 ? item.delay_days + 'd' : '—'}</p>
-                            </div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-2">
+                            <div><p class="text-xs text-gray-500">Designer</p><p class="font-medium">${item.assigned_designer}</p></div>
+                            <div><p class="text-xs text-gray-500">Progress</p><p class="font-medium">${item.progress}%</p></div>
+                            <div><p class="text-xs text-gray-500">Change</p><p class="font-medium">${item.progress_change !== undefined && item.progress_change !== 0 ? (item.progress_change > 0 ? '+' + item.progress_change : item.progress_change) : '—'}</p></div>
+                            <div><p class="text-xs text-gray-500">Delay</p><p class="font-medium">${item.delay_days > 0 ? item.delay_days + 'd' : '—'}</p></div>
                         </div>
                 `;
-                
                 if (item.delay_days > 0) {
-                    html += `
-                        <div class="mb-3 p-3 bg-red-50 rounded-lg border border-red-200">
-                            <p class="text-sm font-medium text-red-700">⚠ Delay Detected</p>
-                            <p class="text-xs text-red-600 mt-1">${item.delay_reason || item.delay_days + ' days behind schedule'}</p>
-                        </div>
-                    `;
+                    html += `<div class="p-3 bg-red-50 rounded-lg border border-red-200"><p class="text-sm font-medium text-red-700">⚠ Delay: ${item.delay_reason || item.delay_days + ' days behind schedule'}</p></div>`;
                 }
-                
                 if (item.activities && item.activities.length > 0) {
-                    html += '<div class="space-y-3">';
+                    html += '<div class="space-y-2 mt-2">';
                     item.activities.forEach(activity => {
-                        html += `
-                            <div class="bg-white rounded-lg p-3 border border-gray-200">
-                                <div class="flex items-center justify-between mb-2">
-                                    <p class="text-xs font-medium text-gray-700">${activity.submitted_by || 'Unknown'}</p>
-                                    <p class="text-xs text-gray-500">${activity.submitted_at || ''}</p>
-                                </div>
-                        `;
-                        
+                        html += `<div class="bg-white rounded-lg p-3 border border-gray-200"><div class="flex items-center justify-between mb-1"><p class="text-xs font-medium text-gray-700">${activity.submitted_by || 'Unknown'}</p><p class="text-xs text-gray-500">${activity.submitted_at || ''}</p></div>`;
+                        if (activity.notes) html += `<p class="text-xs text-gray-600 italic">${activity.notes}</p>`;
                         if (activity.ratings && Object.keys(activity.ratings).length > 0) {
-                            html += '<div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">';
-                            const ratingLabels = {
-                                costing: 'Costing',
-                                willingness_to_buy: 'Willingness to Buy',
-                                engagement_life: 'Engagement Life',
-                                durability: 'Durability',
-                                age_appropriateness: 'Age Appropriateness',
-                                ease_of_use: 'Ease of Use',
-                                aesthetics: 'Aesthetics',
-                                easy_to_store: 'Easy to Store'
-                            };
+                            html += '<div class="grid grid-cols-4 gap-1 mt-1">';
+                            const ratingLabels = {costing:'Costing',willingness_to_buy:'Willingness',engagement_life:'Engagement',durability:'Durability',age_appropriateness:'Age',ease_of_use:'Ease',aesthetics:'Aesthetics',easy_to_store:'Store'};
                             for (const [key, value] of Object.entries(activity.ratings)) {
-                                html += `<div class="text-center"><p class="text-xs text-gray-500">${ratingLabels[key] || key}</p><p class="text-sm font-semibold text-gray-900">${value}</p></div>`;
+                                html += `<div class="text-center"><p class="text-xs text-gray-500">${ratingLabels[key] || key}</p><p class="text-sm font-semibold">${value}</p></div>`;
                             }
                             html += '</div>';
                         }
-                        
-                        if (activity.notes) {
-                            html += `<p class="text-xs text-gray-600 italic">${activity.notes}</p>`;
-                        }
-                        
                         html += '</div>';
                     });
                     html += '</div>';
                 }
-                
                 html += '</div>';
             });
+            html += '</div></div>';
         }
         
-        html += '</div></div>';
-        content.innerHTML = html;
-
-        // Show charts container
-        const chartsContainer = document.getElementById('weeklyReportCharts');
-        if (chartsContainer) chartsContainer.classList.remove('hidden');
-
-        // Render Weekly Report Charts
-        try {
-            if (report.reports.length > 0) {
-                // Delay days by stage
-                renderChart('weeklyDelayChart', {
-                    type: 'bar',
-                    data: {
-                        labels: report.reports.map(r => r.stage_name),
-                        datasets: [{
-                            label: 'Delay Days',
-                            data: report.reports.map(r => r.delay_days),
-                            backgroundColor: report.reports.map(r => r.delay_days > 0 ? chartColors.redBg : chartColors.grayBg),
-                            borderRadius: 6,
-                            borderSkipped: false,
-                        }]
-                    },
-                    options: {
-                        ...defaultChartOptions,
-                        scales: {
-                            x: { ...defaultScaleConfig, grid: { display: false } },
-                            y: { ...defaultScaleConfig, beginAtZero: true }
-                        },
-                        plugins: {
-                            ...defaultChartOptions.plugins,
-                            legend: { display: false }
-                        }
-                    }
-                });
-            }
-        } catch (chartErr) {
-            console.warn('[APP] loadWeeklyReport: Failed to render charts:', chartErr.message);
+        // Section 2: Stages that went overdue
+        if (overdueStages.length > 0) {
+            html += '<div class="bg-white rounded-xl border border-red-200 shadow-sm p-6">';
+            html += '<h3 class="text-sm font-semibold text-red-700 mb-4">⚠ Stages Overdue This Week</h3>';
+            html += '<div class="space-y-3">';
+            overdueStages.forEach(item => {
+                html += `
+                    <div class="bg-red-50 rounded-lg p-4 border border-red-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-semibold text-red-900">${item.stage_name}</h4>
+                            <span class="text-xs font-medium px-2 py-1 rounded-full bg-red-200 text-red-800">Delayed ${item.delay_days}d</span>
+                        </div>
+                        <p class="text-xs text-red-700">${item.delay_reason || item.delay_days + ' days behind deadline (' + formatDate(item.deadline) + ')'}</p>
+                    </div>
+                `;
+            });
+            html += '</div></div>';
         }
+        
+        // Section 3: No update this week
+        if (noUpdateStages.length > 0) {
+            html += '<div class="bg-white rounded-xl border border-amber-200 shadow-sm p-6">';
+            html += '<h3 class="text-sm font-semibold text-amber-700 mb-4">🔔 No Update This Week — Needs Nudge</h3>';
+            html += '<div class="space-y-3">';
+            noUpdateStages.forEach(item => {
+                html += `
+                    <div class="bg-amber-50 rounded-lg p-4 border border-amber-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-semibold text-amber-900">${item.stage_name}</h4>
+                            <span class="text-xs font-medium px-2 py-1 rounded-full bg-amber-200 text-amber-800">No Activity</span>
+                        </div>
+                        <p class="text-xs text-amber-700">${item.assigned_designer} — Progress: ${item.progress}% — Deadline: ${formatDate(item.deadline)}</p>
+                    </div>
+                `;
+            });
+            html += '</div></div>';
+        }
+        
+        if (updatedStages.length === 0 && overdueStages.length === 0 && noUpdateStages.length === 0) {
+            html += '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400"><p>No activity detected for this week.</p></div>';
+        }
+        
+        content.innerHTML = html;
     } catch (err) {
         console.error('[APP] loadWeeklyReport: Failed:', err.message);
         content.innerHTML = '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-red-500">Failed to load report: ' + err.message + '</div>';
-        const chartsContainer = document.getElementById('weeklyReportCharts');
-        if (chartsContainer) chartsContainer.classList.add('hidden');
     }
 }
 
@@ -3122,12 +3164,67 @@ async function loadMonthlyReport() {
 
         // Render Monthly Report Charts
         try {
+            // 1. 6-month trend line chart (dual-axis: avg_rating + delay_days)
+            try {
+                const trendData = await api.getProjectMonthlyTrend(parseInt(projectId));
+                if (trendData && trendData.length > 0) {
+                    const trendMonths = trendData.map(t => {
+                        const [y, m] = t.month.split('-');
+                        return new Date(y, m - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' });
+                    });
+                    renderChart('monthlyTrendChart', {
+                        type: 'line',
+                        data: {
+                            labels: trendMonths,
+                            datasets: [{
+                                label: 'Avg Rating',
+                                data: trendData.map(t => t.avg_rating),
+                                borderColor: chartColors.brand,
+                                backgroundColor: 'rgba(244, 121, 32, 0.1)',
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                                borderWidth: 2,
+                                yAxisID: 'y',
+                            }, {
+                                label: 'Delay Days',
+                                data: trendData.map(t => t.total_delay_days),
+                                borderColor: chartColors.red,
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                                borderWidth: 2,
+                                yAxisID: 'y1',
+                            }]
+                        },
+                        options: {
+                            ...defaultChartOptions,
+                            scales: {
+                                x: { ...defaultScaleConfig, grid: { display: false } },
+                                y: { ...defaultScaleConfig, beginAtZero: true, max: 5, ticks: { ...defaultScaleConfig.ticks, stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.05)' }, title: { display: true, text: 'Rating (1-5)', font: { size: 11 } } },
+                                y1: { ...defaultScaleConfig, beginAtZero: true, position: 'right', grid: { display: false }, title: { display: true, text: 'Delay Days', font: { size: 11 } } }
+                            },
+                            plugins: {
+                                ...defaultChartOptions.plugins,
+                                legend: { position: 'bottom', labels: { font: { size: 11 } } }
+                            }
+                        }
+                    });
+                }
+            } catch (trendErr) {
+                console.warn('[APP] loadMonthlyReport: Failed to load trend:', trendErr.message);
+                const trendEl = document.getElementById('monthlyTrendChart');
+                if (trendEl) trendEl.parentElement.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">Trend data loading...</p>';
+            }
+
+            // 2. Rating averages radar chart (this month only)
             if (report.reports.length > 0) {
-                // Rating averages radar chart
                 const ratingKeys = ['costing', 'willingness_to_buy', 'engagement_life', 'durability', 'age_appropriateness', 'ease_of_use', 'aesthetics', 'easy_to_store'];
                 const ratingLabels = ['Costing', 'Willingness', 'Engagement', 'Durability', 'Age Appr.', 'Ease', 'Aesthetics', 'Store'];
 
-                // Aggregate ratings across all stages in this month
                 const avgRatings = ratingKeys.map(key => {
                     const vals = report.reports
                         .map(r => (r.avg_ratings && r.avg_ratings[key]) !== null && (r.avg_ratings && r.avg_ratings[key]) !== undefined ? r.avg_ratings[key] : null)
@@ -3177,7 +3274,7 @@ async function loadMonthlyReport() {
                     }
                 });
 
-                // Delay analysis bar chart
+                // 3. Delay analysis bar chart (this month)
                 renderChart('monthlyDelayChart', {
                     type: 'bar',
                     data: {
@@ -3252,66 +3349,41 @@ async function loadDesignerPerformance() {
         currentReportData = report;
         showReportDownloadActions(endpoint);
         
+        // Compute on-time rate for current period
+        const totalStages = report.total_stages_completed || 1;
+        const onTimeRate = totalStages > 0 ? Math.round((report.total_on_time / totalStages) * 100) : 0;
+        const delayRate = 100 - onTimeRate;
+        
         let html = `
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="text-center p-4 bg-green-50 rounded-lg">
+                        <p class="text-3xl font-bold text-green-600">${onTimeRate}%</p>
+                        <p class="text-xs text-green-600 mt-1">On-Time Delivery</p>
+                    </div>
                     <div class="text-center p-4 bg-brand-50 rounded-lg">
-                        <p class="text-2xl font-bold text-brand-600">${report.total_stages_completed}</p>
+                        <p class="text-3xl font-bold text-brand-600">${report.total_stages_completed}</p>
                         <p class="text-xs text-gray-500 mt-1">Stages Completed</p>
                     </div>
                     <div class="text-center p-4 bg-green-50 rounded-lg">
-                        <p class="text-2xl font-bold text-green-600">${report.total_on_time || 0}</p>
-                        <p class="text-xs text-gray-500 mt-1">On Time</p>
+                        <p class="text-2xl font-bold text-green-600">${report.total_on_time}</p>
+                        <p class="text-xs text-green-600 mt-1">On Time</p>
                     </div>
                     <div class="text-center p-4 bg-red-50 rounded-lg">
                         <p class="text-2xl font-bold text-red-600">${report.total_delays}</p>
-                        <p class="text-xs text-gray-500 mt-1">Delayed</p>
+                        <p class="text-xs text-red-600 mt-1">Delayed</p>
                     </div>
-                </div>
-                
-                <h3 class="text-sm font-semibold text-gray-700 mb-3">Phase Activity</h3>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="bg-gray-50 border-b border-gray-200">
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Project</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Stage</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Deadline</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Completed</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
-                                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Delay</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-        `;
-        
-        if (report.projects.length === 0) {
-            html += '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">No activity for this period.</td></tr>';
-        } else {
-            report.projects.forEach(item => {
-                const isDelayed = item.delay_days > 0;
-                const statusBadge = isDelayed
-                    ? `<span class="text-xs font-medium px-2 py-1 rounded-full bg-red-100 text-red-700">Delayed (${item.delay_days}d)</span>`
-                    : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">On Time</span>`;
-                html += `
-                    <tr class="border-b border-gray-100">
-                        <td class="px-4 py-3 font-medium">${item.project_name}</td>
-                        <td class="px-4 py-3 text-gray-600">${item.stage_name}</td>
-                        <td class="px-4 py-3 text-gray-600">${formatDate(item.deadline)}</td>
-                        <td class="px-4 py-3 text-gray-600">${item.completed_at ? formatDateTime(item.completed_at) : '—'}</td>
-                        <td class="px-4 py-3">${statusBadge}</td>
-                        <td class="px-4 py-3 text-gray-500 max-w-xs truncate">${item.delay_reason || '—'}</td>
-                    </tr>
-                `;
-            });
-        }
-        
-        html += `
-                        </tbody>
-                    </table>
                 </div>
             </div>
         `;
+        
+        // Cross-designer ranking
+        html += '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">';
+        html += '<h3 class="text-sm font-semibold text-gray-700 mb-4">📊 Team Ranking — On-Time Rate</h3>';
+        html += '<div id="designerRankingList" class="space-y-2"><p class="text-sm text-gray-400 py-2">Loading ranking...</p></div>';
+        html += '</div>';
+        
+        html += '<div id="designerPerfContentExtra" class="space-y-6">'; // charts go here
         
         content.innerHTML = html;
 
@@ -3321,47 +3393,89 @@ async function loadDesignerPerformance() {
 
         // Render Designer Performance Charts
         try {
-            if (report.projects.length > 0) {
-                // Delay days per project — bar chart (real signal: which projects, how late)
-                const projectNames = report.projects.map(p => p.project_name);
-                const delayDays = report.projects.map(p => p.delay_days);
-                const workLogged = report.projects.map(p => p.work_logged_days || 0);
-
-                renderChart('designerDelayTrendChart', {
-                    type: 'bar',
-                    data: {
-                        labels: projectNames,
-                        datasets: [
-                            {
-                                label: 'Delay Days',
-                                data: delayDays,
-                                backgroundColor: delayDays.map(v => v > 0 ? chartColors.redBg : chartColors.grayBg),
-                                borderRadius: 6,
-                                borderSkipped: false,
-                                order: 2,
-                            },
-                            {
-                                label: 'Work Logged (days)',
-                                data: workLogged,
-                                backgroundColor: chartColors.blueBg,
-                                borderRadius: 6,
-                                borderSkipped: false,
-                                order: 1,
-                            }
-                        ]
-                    },
-                    options: {
-                        ...defaultChartOptions,
-                        scales: {
-                            x: { ...defaultScaleConfig, grid: { display: false } },
-                            y: { ...defaultScaleConfig, beginAtZero: true }
+            // 1. 6-month on-time rate trend line
+            try {
+                const trendData = await api.getDesignerPerformanceTrend(parseInt(designerId));
+                if (trendData && trendData.length > 0) {
+                    const trendMonths = trendData.map(t => {
+                        const [y, m] = t.month.split('-');
+                        return new Date(y, m - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' });
+                    });
+                    renderChart('designerDelayTrendChart', {
+                        type: 'line',
+                        data: {
+                            labels: trendMonths,
+                            datasets: [{
+                                label: 'On-Time Rate (%)',
+                                data: trendData.map(t => t.on_time_rate),
+                                borderColor: chartColors.green,
+                                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                                borderWidth: 2,
+                            }]
                         },
-                        plugins: {
-                            ...defaultChartOptions.plugins,
-                            legend: { position: 'bottom', labels: { font: { size: 11 } } },
+                        options: {
+                            ...defaultChartOptions,
+                            scales: {
+                                x: { ...defaultScaleConfig, grid: { display: false } },
+                                y: { ...defaultScaleConfig, beginAtZero: true, max: 100, ticks: { ...defaultScaleConfig.ticks, callback: v => v + '%' }, grid: { color: 'rgba(0,0,0,0.05)' } }
+                            },
+                            plugins: {
+                                ...defaultChartOptions.plugins,
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (ctx) => `On-time: ${ctx.parsed.y}% (${ctx.label})`
+                                    }
+                                }
+                            }
                         }
-                    }
-                });
+                    });
+                }
+            } catch (trendErr) {
+                console.warn('[APP] loadDesignerPerformance: Failed to load trend:', trendErr.message);
+            }
+
+            // 2. Cross-designer ranking
+            try {
+                const periodParams = period === 'weekly'
+                    ? { weekStart: document.getElementById('designerPerfWeekStart').value, weekEnd: document.getElementById('designerPerfWeekEnd').value }
+                    : { month: document.getElementById('designerPerfMonth').value, year: document.getElementById('designerPerfYear').value };
+                const comparisonData = await api.getDesignerComparison(period, periodParams.weekStart, periodParams.weekEnd, periodParams.month, periodParams.year);
+                if (comparisonData && comparisonData.length > 0) {
+                    const rankingHtml = comparisonData.map((d, i) => {
+                        const isCurrentDesigner = d.designer_id === parseInt(designerId);
+                        const rate = d.on_time_rate !== null ? d.on_time_rate + '%' : 'N/A';
+                        const barWidth = d.on_time_rate !== null ? d.on_time_rate : 0;
+                        const barColor = d.on_time_rate >= 80 ? 'bg-green-500' : d.on_time_rate >= 60 ? 'bg-amber-500' : 'bg-red-500';
+                        const rowClass = isCurrentDesigner ? 'bg-brand-50 border-brand-200' : 'border-gray-100';
+                        const rankBadge = isCurrentDesigner
+                            ? `<span class="text-xs font-bold px-2 py-1 rounded-full bg-brand-500 text-white mr-2">#${i + 1} (you)</span>`
+                            : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-gray-200 text-gray-600 mr-2">#${i + 1}</span>`;
+                        return `
+                            <div class="flex items-center gap-3 p-2 rounded-lg border ${rowClass}">
+                                ${rankBadge}
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center justify-between mb-1">
+                                        <p class="text-sm font-medium text-gray-900 truncate">${d.designer_name}</p>
+                                        <p class="text-sm font-semibold ${d.on_time_rate >= 80 ? 'text-green-600' : d.on_time_rate >= 60 ? 'text-amber-600' : 'text-red-600'}">${rate}</p>
+                                    </div>
+                                    <div class="w-full bg-gray-200 rounded-full h-2">
+                                        <div class="${barColor} h-2 rounded-full" style="width:${barWidth}%"></div>
+                                    </div>
+                                    <p class="text-xs text-gray-500 mt-0.5">${d.stages_completed} stages · ${d.on_time} on-time · ${d.delayed} delayed${d.avg_delay_days !== null ? ' · ' + d.avg_delay_days + 'd avg delay' : ''}</p>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    document.getElementById('designerRankingList').innerHTML = rankingHtml;
+                }
+            } catch (compErr) {
+                console.warn('[APP] loadDesignerPerformance: Failed to load comparison:', compErr.message);
+                document.getElementById('designerRankingList').innerHTML = '<p class="text-sm text-gray-400 py-2">Ranking data unavailable.</p>';
             }
         } catch (chartErr) {
             console.warn('[APP] loadDesignerPerformance: Failed to render charts:', chartErr.message);
