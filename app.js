@@ -832,12 +832,12 @@ async function populateProjectDetails() {
             const prevCompleted = idx === 0 ? true : (project.phases[idx - 1].completed_at !== null);
             const canComplete = isCurrent && !isCompleted && prevCompleted;
 
-            const assignedNames = sd.assignedDesigners && sd.assignedDesigners.length > 0
-                ? sd.assignedDesigners.map(dId => DESIGNERS.find(d => d.id === dId)).filter(Boolean).map(d => d.name).join(', ')
+            const assignedNames = sd.assigned_designer_ids && sd.assigned_designer_ids.length > 0
+                ? sd.assigned_designer_ids.map(dId => DESIGNERS.find(d => d.id === dId)).filter(Boolean).map(d => d.name).join(', ')
                 : getDesignerName(project.assigned_designer_id, DESIGNERS);
 
-            const designerUpdate = sd.designer_update || '—';
             const delayReason = sd.delay_reason || '—';
+            const delayDays = calculateDelayDays(sd.deadline);
             const completedAt = sd.completed_at ? formatDateTime(sd.completed_at) : '—';
             const deadline = sd.deadline ? formatDate(sd.deadline) : '—';
 
@@ -900,11 +900,11 @@ async function populateProjectDetails() {
                             <p class="font-medium text-gray-700">${assignedNames}</p>
                         </div>
                         <div>
-                            <p class="text-gray-400 mb-0.5">Update</p>
-                            <p class="text-gray-500 truncate">${designerUpdate}</p>
+                            <p class="text-gray-400 mb-0.5">Delay</p>
+                            <p class="text-gray-500 truncate">${delayDays > 0 ? `Delayed (${delayDays}d)` : 'On track'}</p>
                         </div>
                         <div>
-                            <p class="text-gray-400 mb-0.5">Delay</p>
+                            <p class="text-gray-400 mb-0.5">Reason</p>
                             <p class="text-gray-500 truncate">${delayReason}</p>
                         </div>
                     </div>
@@ -1414,17 +1414,23 @@ function deselectAllManagers() {
 // ============================================
 // DESIGNER ASSIGNMENT MODAL
 // ============================================
-function openDesignerModal(stageIndex) {
+async function openDesignerModal(stageIndex) {
     designerModalStageIndex = stageIndex;
     document.getElementById('designerSearchInput').value = '';
-    renderDesignerChecklist();
     
-    // Fetch project to get phase_type-aware stage name
-    api.getProject(selectedProjectId).then(project => {
+    try {
+        const project = await api.getProject(selectedProjectId);
         const stages = getStagesForPhaseType(project.phase_type);
         document.getElementById('designerModalStageLabel').textContent = `Stage: ${stages[stageIndex]}`;
-    });
+        
+        const currentAssignments = project.phases[stageIndex]?.assigned_designer_ids || [];
+        tempDesignerSelections = [...currentAssignments];
+    } catch (err) {
+        console.error('[APP] openDesignerModal: Failed to load project data:', err.message);
+        tempDesignerSelections = [];
+    }
     
+    renderDesignerChecklist();
     document.getElementById('designerModal').classList.remove('hidden');
 }
 
