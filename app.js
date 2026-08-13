@@ -3453,7 +3453,7 @@ async function loadDesignerPerformance() {
                         const barColor = d.on_time_rate >= 80 ? 'bg-green-500' : d.on_time_rate >= 60 ? 'bg-amber-500' : 'bg-red-500';
                         const rowClass = isCurrentDesigner ? 'bg-brand-50 border-brand-200' : 'border-gray-100';
                         const rankBadge = isCurrentDesigner
-                            ? `<span class="text-xs font-bold px-2 py-1 rounded-full bg-brand-500 text-white mr-2">#${i + 1} (you)</span>`
+                            ? `<span class="text-xs font-bold px-2 py-1 rounded-full bg-brand-500 text-white mr-2">#${i + 1}</span>`
                             : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-gray-200 text-gray-600 mr-2">#${i + 1}</span>`;
                         return `
                             <div class="flex items-center gap-3 p-2 rounded-lg border ${rowClass}">
