@@ -1447,56 +1447,65 @@ function _reindexPhases() {
 
 function attachPhaseDragAndDrop(container) {
     if (!container) return;
-    const rows = container.querySelectorAll('.phase-row');
+    if (container._dndAttached) return;
+    container._dndAttached = true;
     let draggedRow = null;
 
-    rows.forEach(row => {
-        const handle = row.querySelector('.drag-handle');
+    container.addEventListener('dragstart', (e) => {
+        const handle = e.target.closest('.drag-handle');
         if (!handle) return;
+        const row = e.target.closest('.phase-row');
+        if (!row) return;
+        draggedRow = row;
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', row.dataset.phaseIndex);
+    });
 
-        handle.addEventListener('dragstart', (e) => {
-            draggedRow = row;
-            row.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', row.dataset.phaseIndex);
-        });
+    container.addEventListener('dragend', () => {
+        if (draggedRow) {
+            draggedRow.classList.remove('dragging');
+        }
+        const rows = container.querySelectorAll('.phase-row');
+        rows.forEach(r => r.classList.remove('drag-over'));
+        draggedRow = null;
+    });
 
-        handle.addEventListener('dragend', () => {
-            row.classList.remove('dragging');
-            rows.forEach(r => r.classList.remove('drag-over'));
-            draggedRow = null;
-        });
+    container.addEventListener('dragover', (e) => {
+        const row = e.target.closest('.phase-row');
+        if (!row) return;
+        if (row === draggedRow) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        row.classList.add('drag-over');
+    });
 
-        row.addEventListener('dragover', (e) => {
-            if (row === draggedRow) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            row.classList.add('drag-over');
-        });
+    container.addEventListener('dragleave', (e) => {
+        const row = e.target.closest('.phase-row');
+        if (!row) return;
+        row.classList.remove('drag-over');
+    });
 
-        row.addEventListener('dragleave', () => {
-            row.classList.remove('drag-over');
-        });
-
-        row.addEventListener('drop', (e) => {
-            e.preventDefault();
-            row.classList.remove('drag-over');
-            if (draggedRow && draggedRow !== row) {
-                const allRows = [...container.querySelectorAll('.phase-row')];
-                const dragIdx = allRows.indexOf(draggedRow);
-                const dropIdx = allRows.indexOf(row);
-                if (dragIdx < dropIdx) {
-                    row.parentNode.insertBefore(draggedRow, row.nextSibling);
-                } else {
-                    row.parentNode.insertBefore(draggedRow, row);
-                }
-                if (container.id === 'editPhaseDeadlinesContainer') {
-                    _reindexEditPhases();
-                } else {
-                    _reindexPhases();
-                }
+    container.addEventListener('drop', (e) => {
+        const row = e.target.closest('.phase-row');
+        if (!row) return;
+        e.preventDefault();
+        row.classList.remove('drag-over');
+        if (draggedRow && draggedRow !== row) {
+            const allRows = [...container.querySelectorAll('.phase-row')];
+            const dragIdx = allRows.indexOf(draggedRow);
+            const dropIdx = allRows.indexOf(row);
+            if (dragIdx < dropIdx) {
+                row.parentNode.insertBefore(draggedRow, row.nextSibling);
+            } else {
+                row.parentNode.insertBefore(draggedRow, row);
             }
-        });
+            if (container.id === 'editPhaseDeadlinesContainer') {
+                _reindexEditPhases();
+            } else {
+                _reindexPhases();
+            }
+        }
     });
 }
 
