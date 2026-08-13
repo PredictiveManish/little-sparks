@@ -6126,7 +6126,7 @@ async def get_project_monthly_report(
             project_name=project.name,
             assigned_designer=designer.name if designer else "Unassigned",
             stage_index=idx,
-            stage_name=_get_current_stage_name($1, project.phase_type, project.stage_names),
+            stage_name=_get_current_stage_name(idx, project.phase_type, project.stage_names),
             status=project.status,
             progress=project.progress,
             deadline=ph.deadline,
