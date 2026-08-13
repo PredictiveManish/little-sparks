@@ -97,7 +97,7 @@ class ProjectCreate(BaseModel):
     description: str = ""
     assigned_designer_id: int
     start_date: str
-    deadline: str
+    deadline: Optional[str] = None
     manager_notes: str = ""
     phases: List[PhaseCreate]
     created_by_user_id: int = 0

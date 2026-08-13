@@ -1393,7 +1393,7 @@ async def create_project(
     if user.role.upper() == "DESIGNER":
         raise HTTPException(status_code=403, detail="Designers cannot create projects")
 
-    if datetime.strptime(data.deadline, "%Y-%m-%d") < datetime.strptime(
+    if data.deadline and datetime.strptime(data.deadline, "%Y-%m-%d") < datetime.strptime(
         data.start_date, "%Y-%m-%d"
     ):
         raise HTTPException(
@@ -1404,7 +1404,7 @@ async def create_project(
     phase_list = sorted(data.phases, key=lambda x: x.stage_index)
     for i, phase in enumerate(phase_list):
         if not phase.deadline:
-            phase.deadline = data.deadline
+            phase.deadline = data.deadline if data.deadline else data.start_date
         if i == 0 and datetime.strptime(phase.deadline, "%Y-%m-%d") < datetime.strptime(
             data.start_date, "%Y-%m-%d"
         ):
@@ -1420,13 +1420,17 @@ async def create_project(
                 detail=f"Phase {phase.stage_index + 1} deadline cannot be before Phase {phase.stage_index} deadline",
             )
 
+    project_deadline = data.deadline
+    if not project_deadline and phase_list:
+        project_deadline = phase_list[-1].deadline
+
     project = Project(
         name=data.name,
         description=data.description,
         assigned_designer_id=data.assigned_designer_id,
         created_by_user_id=user.id,
         start_date=data.start_date,
-        deadline=data.deadline,
+        deadline=project_deadline,
         manager_notes=data.manager_notes,
         phase_type=data.phase_type,
     )

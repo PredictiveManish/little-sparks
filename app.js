@@ -754,7 +754,7 @@ async function populateProjectsTable() {
                             <span class="text-xs font-medium text-gray-600">${p.progress}%</span>
                         </div>
                     </td>
-                    <td class="px-5 py-4 text-gray-600 text-sm">${formatDate(p.deadline)}</td>
+                    <td class="px-5 py-4 text-gray-600 text-sm">${p.phases && p.phases[p.stage_index] ? formatDate(p.phases[p.stage_index].deadline) : formatDate(p.deadline)}</td>
                     <td class="px-5 py-4">
                         <span class="text-xs font-semibold px-2.5 py-1 rounded-full ${statusClass}">${statusText}</span>
                     </td>
@@ -1260,12 +1260,12 @@ async function handleCreateProject(event) {
     const startDate = form.querySelectorAll('input[type="date"]')[0].value;
     const deadline = form.querySelectorAll('input[type="date"]')[1].value;
 
-    if (!startDate || !deadline) {
+    if (!startDate) {
         showToast('Please fill in all required fields');
         return;
     }
 
-    if (new Date(deadline) < new Date(startDate)) {
+    if (deadline && new Date(deadline) < new Date(startDate)) {
         showToast('Expected Completion date cannot be before Start Date');
         return;
     }
