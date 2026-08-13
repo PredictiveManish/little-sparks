@@ -4199,7 +4199,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                     "callback_id": f"notes_form_{project_id}",
                                     "title": {
                                         "type": "plain_text",
-                                        "text": "📝 Update Notes",
+                                        "text": "Update Notes",
                                     },
                                     "submit": {"type": "plain_text", "text": "Submit"},
                                     "close": {"type": "plain_text", "text": "Cancel"},
@@ -4232,8 +4232,8 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         f"*Stage Breakdown:*\n"
                     )
                     for i, phase in enumerate(phases):
-                        check = "✅" if phase.completed_at else "⬜"
-                        marker = " ➜" if i == project.stage_index else ""
+                        check = "✓" if phase.completed_at else "○"
+                        marker = " →" if i == project.stage_index else ""
                         reply_text += f"{check} {i + 1}. {phase.deadline}{marker}\n"
                     reply_text += f"\n*Deadline:* {project.deadline}"
                     if project.slack_channel_id:
@@ -4640,8 +4640,8 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 # Build timeline of completed stages
                 timeline_lines = []
                 for i, phase in enumerate(phases):
-                    check = "✅" if phase.completed_at else "⬜"
-                    marker = " ->" if i == new_stage_index else ""
+                    check = "✓" if phase.completed_at else "○"
+                    marker = " →" if i == new_stage_index else ""
                     phase_name = _get_current_stage_name(i, project.phase_type)
                     timeline_lines.append(f"{check} {i + 1}. {phase_name}{marker}")
                 timeline_text = "\n".join(timeline_lines)
@@ -4650,7 +4650,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 for block_id, action_id, field_name in rating_map:
                     val = ratings.get(field_name)
                     if val is not None:
-                        emoji = "⭐" if val >= 4 else "o" if val >= 3 else "!"
+                        emoji = "★" if val >= 4 else "·" if val >= 3 else "!"
                         rating_lines.append(f"{emoji} {field_name.replace('_', ' ').title()}: {val}/5")
                 rating_text = "\n".join(rating_lines) if rating_lines else "*No ratings submitted*"
                 
@@ -4711,13 +4711,13 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         "elements": [
                             {
                                 "type": "button",
-                                "text": {"type": "plain_text", "text": "📊 View Project"},
+                                "text": {"type": "plain_text", "text": "View Project"},
                                 "action_id": "view_project",
                                 "value": str(project_id),
                             },
                             {
                                 "type": "button",
-                                "text": {"type": "plain_text", "text": "📈 Progress"},
+                                "text": {"type": "plain_text", "text": "Progress"},
                                 "action_id": "view_progress",
                                 "value": str(project_id),
                             },
@@ -4738,13 +4738,13 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     updated_blocks = [
                         {
                             "type": "header",
-                            "text": {"type": "plain_text", "text": "✅ Report Submitted"},
+                            "text": {"type": "plain_text", "text": "Report Submitted"},
                         },
                         {
                             "type": "section",
                             "text": {
                                 "type": "mrkdwn",
-                                "text": f"📦 *{project.name}*\n🔄 Stage: {stage_name} → {new_stage_index + 1}/9\n✅ Report logged, stage advanced",
+                                "text": f"*{project.name}*\n*Stage:* {stage_name} → {new_stage_index + 1}/9\nReport logged, stage advanced",
                             },
                         },
                     ]
