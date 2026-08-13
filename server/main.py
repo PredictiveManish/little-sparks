@@ -6302,6 +6302,17 @@ async def get_designer_weekly_performance(
         else:
             total_on_time += 1
         
+        # Count updates (SlackActivity entries) for this project
+        updates_count = db.query(SlackActivity).filter(
+            SlackActivity.project_id == ph.project_id
+        ).count()
+        
+        # Count delays (phases with delay_reason) for this project
+        project_phases = db.query(Phase).filter(
+            Phase.project_id == ph.project_id
+        ).all()
+        delays_count = sum(1 for p in project_phases if p.delay_reason)
+        
         items.append(DesignerProjectItem(
             project_id=proj.id,
             project_name=proj.name,
@@ -6313,6 +6324,8 @@ async def get_designer_weekly_performance(
             completed_at=ph.completed_at,
             delay_days=delay_days,
             delay_reason=ph.delay_reason or "",
+            updates_count=updates_count,
+            delays_count=delays_count,
         ))
     
     return DesignerPerformanceResponse(
@@ -6414,6 +6427,17 @@ async def get_designer_monthly_performance(
         else:
             total_on_time += 1
         
+        # Count updates (SlackActivity entries) for this project
+        updates_count = db.query(SlackActivity).filter(
+            SlackActivity.project_id == ph.project_id
+        ).count()
+        
+        # Count delays (phases with delay_reason) for this project
+        project_phases = db.query(Phase).filter(
+            Phase.project_id == ph.project_id
+        ).all()
+        delays_count = sum(1 for p in project_phases if p.delay_reason)
+        
         items.append(DesignerProjectItem(
             project_id=proj.id,
             project_name=proj.name,
@@ -6425,6 +6449,8 @@ async def get_designer_monthly_performance(
             completed_at=ph.completed_at,
             delay_days=delay_days,
             delay_reason=ph.delay_reason or "",
+            updates_count=updates_count,
+            delays_count=delays_count,
         ))
     
     return DesignerPerformanceResponse(

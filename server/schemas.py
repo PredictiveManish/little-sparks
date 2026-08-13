@@ -485,6 +485,8 @@ class DesignerProjectItem(BaseModel):
     completed_at: Optional[str] = None
     delay_days: int = 0
     delay_reason: str = ""
+    updates_count: int = 0
+    delays_count: int = 0
 
 
 # ---------- Slack Completion Tracker ----------
