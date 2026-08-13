@@ -763,29 +763,13 @@
         class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors resize-none"></textarea>
     </div>
 
-    <!-- Phase Type Selection -->
+    <!-- Phase Type (Read Only) -->
     <div>
-        <label class="block text-sm font-semibold text-gray-700 mb-2">Phase Type</label>
-        <div class="grid grid-cols-2 gap-3">
-            <label class="phase-type-option cursor-pointer">
-                <input type="radio" name="editPhaseType" value="IDEATION" class="hidden" onchange="onEditPhaseTypeChange()">
-                <div class="phase-type-card border-2 border-gray-200 bg-white rounded-xl p-4 text-center transition-all hover:border-gray-300" id="editIdeationCard">
-                    <div class="w-10 h-10 rounded-lg bg-gray-500 text-white flex items-center justify-center mx-auto mb-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-                    </div>
-                    <p class="text-sm font-semibold text-gray-700">Ideation</p>
-                </div>
-            </label>
-            <label class="phase-type-option cursor-pointer">
-                <input type="radio" name="editPhaseType" value="PRODUCTION" class="hidden" onchange="onEditPhaseTypeChange()">
-                <div class="phase-type-card border-2 border-gray-200 bg-white rounded-xl p-4 text-center transition-all hover:border-gray-300" id="editProductionCard">
-                    <div class="w-10 h-10 rounded-lg bg-gray-500 text-white flex items-center justify-center mx-auto mb-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.442l4.896 4.896a2 2 0 002.828 0l4.896-4.896a2 2 0 00.586-1.442V5l-1-1H4z"/></svg>
-                    </div>
-                    <p class="text-sm font-semibold text-gray-700">Production</p>
-                </div>
-            </label>
+        <label class="block text-sm font-semibold text-gray-500 mb-2">Phase Type <span class="text-gray-400 font-normal">(Read Only)</span></label>
+        <div id="editPhaseTypeDisplay" class="px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-sm font-medium text-gray-700">
+            <!-- Populated by JS -->
         </div>
+        <p class="text-xs text-gray-400 mt-1">Phase type cannot be changed after project creation. To change it, create a new project.</p>
     </div>
 
     <!-- Phase-wise Deadlines -->
@@ -795,13 +779,6 @@
         <div id="editPhaseDeadlinesContainer" class="space-y-3">
             <!-- Generated dynamically by JS -->
         </div>
-    </div>
-
-    <!-- Manager Notes -->
-    <div>
-        <label class="block text-sm font-semibold text-gray-700 mb-2">Manager Notes</label>
-        <textarea id="editProjectManagerNotes" rows="3" placeholder="Add your notes here..."
-        class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors resize-none"></textarea>
     </div>
 
     <!-- Read Only: Current Phase Info -->

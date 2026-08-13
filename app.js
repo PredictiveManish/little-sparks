@@ -13,7 +13,7 @@ let CURRENT_USER = null;
 let USER_ROLE = null;
 let tempManagerSelections = [];
 let tempEditManagerSelections = [];
-let _editProjectCache = null;
+// _editProjectCache removed - phase type is now read-only on edit page
 let MANAGERS = [];
 
 // ============================================
@@ -1034,19 +1034,18 @@ async function populateEditProject() {
         const descInput = document.getElementById('editProjectDescription');
         if (descInput) descInput.value = project.description || '';
         
-        // Phase Type
-        const phaseTypeRadio = document.querySelector(`input[name="editPhaseType"][value="${project.phase_type || 'PRODUCTION'}"]`);
-        if (phaseTypeRadio) phaseTypeRadio.checked = true;
-        
-        // Manager Notes
-        const notesInput = document.getElementById('editProjectManagerNotes');
-        if (notesInput) notesInput.value = project.manager_notes || '';
-        
         // Manager Selection
         populateEditManagerSelect(project.managers ? project.managers.map(m => m.id) : []);
         
-        // Cache project for phase type changes
-        _editProjectCache = project;
+        // Phase Type (read-only display)
+        const phaseTypeDisplay = document.getElementById('editPhaseTypeDisplay');
+        if (phaseTypeDisplay) {
+            const pt = project.phase_type || 'PRODUCTION';
+            const icon = pt === 'IDEATION' 
+                ? '<svg class="w-4 h-4 inline mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>'
+                : '<svg class="w-4 h-4 inline mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 00-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.442l4.896 4.896a2 2 0 002.828 0l4.896-4.896a2 2 0 00.586-1.442V5l-1-1H4z"/></svg>';
+            phaseTypeDisplay.innerHTML = `${icon}${pt}`;
+        }
         
         // Phase Deadlines
         renderEditPhaseDeadlines(project);
@@ -1067,8 +1066,6 @@ async function saveProjectEdit() {
         const startDateInput = document.getElementById('editProjectStartDate');
         const dateInput = document.getElementById('editProjectDeadline');
         const descInput = document.getElementById('editProjectDescription');
-        const notesInput = document.getElementById('editProjectManagerNotes');
-
         const phaseDeadlineInputs = document.querySelectorAll('#editPhaseDeadlinesContainer .phase-deadline-input');
         const phaseNameInputs = document.querySelectorAll('#editPhaseDeadlinesContainer .phase-name-input');
         const phaseDeadlines = [];
@@ -1081,17 +1078,12 @@ async function saveProjectEdit() {
             deadline: deadline || dateInput?.value || ''
         }));
 
-        const ideationRadio = document.querySelector('input[name="editPhaseType"][value="IDEATION"]');
-        const phaseType = ideationRadio && ideationRadio.checked ? 'IDEATION' : 'PRODUCTION';
-
         const updateData = {
             name: nameInput ? nameInput.value : null,
             assigned_designer_id: designerSelect ? parseInt(designerSelect.value) : null,
             start_date: startDateInput ? startDateInput.value : null,
             deadline: dateInput ? dateInput.value : null,
             description: descInput ? descInput.value : null,
-            manager_notes: notesInput ? notesInput.value : null,
-            phase_type: phaseType,
             stage_names: phaseNames.length ? phaseNames : null,
             phases: phaseDeadlines.length ? phases : null,
             manager_ids: tempEditManagerSelections && tempEditManagerSelections.length ? tempEditManagerSelections : null,
@@ -1678,34 +1670,6 @@ function deselectAllManagers() {
 // ============================================
 // EDIT PROJECT FORM HELPERS
 // ============================================
-function onEditPhaseTypeChange() {
-    const ideationRadio = document.querySelector('input[name="editPhaseType"][value="IDEATION"]');
-    const ideationCard = document.getElementById('editIdeationCard');
-    const productionCard = document.getElementById('editProductionCard');
-    
-    if (ideationRadio && ideationRadio.checked) {
-        ideationCard.className = 'phase-type-card border-2 border-brand-500 bg-brand-50 rounded-xl p-4 text-center transition-all';
-        ideationCard.querySelector('div.w-10').className = 'w-10 h-10 rounded-lg bg-brand-500 text-white flex items-center justify-center mx-auto mb-2';
-        ideationCard.querySelector('p.text-sm').className = 'text-sm font-semibold text-brand-700';
-        
-        productionCard.className = 'phase-type-card border-2 border-gray-200 bg-white rounded-xl p-4 text-center transition-all hover:border-gray-300';
-        productionCard.querySelector('div.w-10').className = 'w-10 h-10 rounded-lg bg-gray-500 text-white flex items-center justify-center mx-auto mb-2';
-        productionCard.querySelector('p.text-sm').className = 'text-sm font-semibold text-gray-700';
-    } else {
-        productionCard.className = 'phase-type-card border-2 border-brand-500 bg-brand-50 rounded-xl p-4 text-center transition-all';
-        productionCard.querySelector('div.w-10').className = 'w-10 h-10 rounded-lg bg-brand-500 text-white flex items-center justify-center mx-auto mb-2';
-        productionCard.querySelector('p.text-sm').className = 'text-sm font-semibold text-brand-700';
-        
-        ideationCard.className = 'phase-type-card border-2 border-gray-200 bg-white rounded-xl p-4 text-center transition-all hover:border-gray-300';
-        ideationCard.querySelector('div.w-10').className = 'w-10 h-10 rounded-lg bg-gray-500 text-white flex items-center justify-center mx-auto mb-2';
-        ideationCard.querySelector('p.text-sm').className = 'text-sm font-semibold text-gray-700';
-    }
-    
-    if (_editProjectCache) {
-        renderEditPhaseDeadlines(_editProjectCache);
-    }
-}
-
 function renderEditPhaseDeadlines(project) {
     const container = document.getElementById('editPhaseDeadlinesContainer');
     if (!container || !project) return;
@@ -1722,8 +1686,7 @@ function renderEditPhaseDeadlines(project) {
         existingNames[input.dataset.phaseIndex] = input.value;
     });
     
-    const ideationRadio = document.querySelector('input[name="editPhaseType"][value="IDEATION"]');
-    const phaseType = ideationRadio && ideationRadio.checked ? 'IDEATION' : (project.phase_type || 'PRODUCTION');
+    const phaseType = project.phase_type || 'PRODUCTION';
     const stages = getStagesForPhaseType(phaseType);
     const phases = project.phases || [];
     
