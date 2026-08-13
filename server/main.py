@@ -98,6 +98,8 @@ from .schemas import (
     ProjectManagerResponse,
     SlackCompletionTrackerResponse,
     SlackCompletionCancelResponse,
+    OverdueProject,
+    DelayTrendPoint,
 )
 
 # ---------- Init ----------
