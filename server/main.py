@@ -1,13 +1,11 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request, Cookie, Response, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse, FileResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional
 from pydantic import BaseModel
 from jose import jwt
-from itsdangerous import Signer, BadSignature
 from cryptography.fernet import Fernet, InvalidToken
 import argon2
 import hashlib
@@ -117,7 +115,7 @@ app.add_middleware(
         o.strip()
         for o in os.getenv(
             "ALLOWED_ORIGINS",
-            "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,https://little-sparks-six.vercel.app",
+            "https://little-sparks-six.vercel.app,http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000",
         ).split(",")
     ],
     allow_credentials=True,
@@ -669,7 +667,6 @@ def _get_jwk_key(jwks, kid):
 
 def _jwk_to_rsa_key(jwk):
     from cryptography.hazmat.primitives.asymmetric import rsa
-    from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.backends import default_backend
     import base64
 
@@ -1494,7 +1491,6 @@ async def create_project(
         .all()
     )
 
-    from fastapi import BackgroundTasks
 
     async def _notify():
         with SessionLocal() as bg_db:

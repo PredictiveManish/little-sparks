@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, model_validator
 from typing import List, Optional
 from datetime import datetime
+import json
 
 
 # ---------- Auth ----------
@@ -86,6 +87,19 @@ class PhaseResponse(BaseModel):
     delay_responsible: List[int] = []
     completed_at: Optional[str] = None
     assigned_designer_ids: List[int] = []
+
+    @model_validator(mode='before')
+    @classmethod
+    def coerce_json_fields(cls, data):
+        if isinstance(data, dict):
+            for field in ('delay_responsible', 'assigned_designer_ids'):
+                val = data.get(field)
+                if isinstance(val, str):
+                    try:
+                        data[field] = json.loads(val)
+                    except (json.JSONDecodeError, TypeError):
+                        data[field] = []
+        return data
 
     class Config:
         from_attributes = True
