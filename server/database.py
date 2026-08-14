@@ -199,8 +199,38 @@ def _migrate_phase_responsible_column():
     """Add delay_responsible column to phases table if missing.
     Safe to run on every startup — no-op if already present."""
     is_sqlite = "sqlite" in DATABASE_URL
-    json_type = "TEXT" if is_sqlite else "JSON"
-    _add_column_if_missing("phases", "delay_responsible", f"{json_type} DEFAULT '[]'")
+    if is_sqlite:
+        _add_column_if_missing("phases", "delay_responsible", "TEXT DEFAULT '[]'")
+    else:
+        # PostgreSQL: use JSONB so SQLAlchemy/Pydantic get proper Python lists
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text(
+                    "SELECT column_name, data_type FROM information_schema.columns "
+                    "WHERE table_name='phases' AND column_name='delay_responsible'"
+                ))
+                row = result.fetchone()
+                if row:
+                    if row[1] != 'jsonb':
+                        logger.info("Casting delay_responsible from %s to JSONB", row[1])
+                        conn.execute(text(
+                            "ALTER TABLE phases ALTER COLUMN delay_responsible DROP DEFAULT"
+                        ))
+                        conn.execute(text(
+                            "ALTER TABLE phases ALTER COLUMN delay_responsible TYPE JSONB USING delay_responsible::jsonb"
+                        ))
+                        conn.execute(text(
+                            "ALTER TABLE phases ALTER COLUMN delay_responsible SET DEFAULT '[]'::jsonb"
+                        ))
+                        conn.commit()
+                else:
+                    logger.info("Adding delay_responsible column to phases")
+                    conn.execute(text(
+                        "ALTER TABLE phases ADD COLUMN delay_responsible JSONB DEFAULT '[]'::jsonb"
+                    ))
+                    conn.commit()
+        except Exception as e:
+            logger.warning("Migration check for delay_responsible encountered an issue (likely already applied): %s", e)
 
 
 def _migrate_slack_completion_tracker_table():
