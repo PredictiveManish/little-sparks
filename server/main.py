@@ -1582,27 +1582,47 @@ async def update_project(
         changes.append(f"Phase names updated")
         project.stage_names = data.stage_names
     if data.phases is not None:
-        # Sync phases: handle new phases added and phases removed
-        existing_phases = {
-            p.stage_index: p
-            for p in db.query(Phase)
-            .filter(Phase.project_id == project_id)
-            .all()
-        }
+        # Build index of existing phases by primary key (phase_id) when available,
+        # falling back to stage_index for backward compatibility with older data.
+        existing_by_pk = {p.id: p for p in db.query(Phase).filter(Phase.project_id == project_id).all()}
+        existing_by_idx = {p.stage_index: p for p in existing_by_pk.values()}
+
+        # Collect incoming phase_ids and indices
+        incoming_pk_set = {pd.phase_id for pd in data.phases if pd.phase_id is not None}
         incoming_indices = {pd.stage_index for pd in data.phases}
-        # Remove phases that no longer exist in the payload
-        for idx, phase in list(existing_phases.items()):
-            if idx not in incoming_indices:
-                db.delete(phase)
-                changes.append(f"Phase {idx + 1} removed")
+
+        # Remove phases whose phase_id is no longer in the payload (identity-based removal)
+        for ph_id, phase in existing_by_pk.items():
+            if ph_id not in incoming_pk_set and ph_id not in {
+                p.id for pd in data.phases if (p := existing_by_pk.get(pd.phase_id))
+            }:
+                # Check if this phase is referenced by any incoming phase via pk or idx fallback
+                referenced = False
+                for pd in data.phases:
+                    if pd.phase_id == ph_id:
+                        referenced = True
+                        break
+                    if pd.phase_id is None and existing_by_idx.get(pd.stage_index, None) and existing_by_idx[pd.stage_index].id == ph_id:
+                        referenced = True
+                        break
+                if not referenced:
+                    db.delete(phase)
+                    changes.append(f"Phase {phase.stage_index + 1} removed")
+
         # Update deadlines and create new phases
         for phase_data in data.phases:
-            if phase_data.stage_index in existing_phases:
-                phase = existing_phases[phase_data.stage_index]
+            # Try to find existing phase by phase_id first
+            phase = None
+            if phase_data.phase_id is not None and phase_data.phase_id in existing_by_pk:
+                phase = existing_by_pk[phase_data.phase_id]
+            elif phase_data.stage_index in existing_by_idx:
+                phase = existing_by_idx[phase_data.stage_index]
+
+            if phase is not None:
                 if phase_data.deadline:
                     old_deadline = phase.deadline
                     phase.deadline = phase_data.deadline
-                    changes.append(f"Phase {phase_data.stage_index + 1} deadline: {old_deadline} → {phase_data.deadline}")
+                    changes.append(f"Phase {phase.stage_index + 1} deadline: {old_deadline} → {phase.deadline}")
             else:
                 new_phase = Phase(
                     project_id=project_id,

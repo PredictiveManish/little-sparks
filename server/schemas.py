@@ -73,6 +73,7 @@ class ApproveUserRequest(BaseModel):
 class PhaseCreate(BaseModel):
     stage_index: int
     deadline: str
+    phase_id: Optional[int] = None
 
 
 class PhaseResponse(BaseModel):

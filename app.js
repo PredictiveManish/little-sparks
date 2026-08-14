@@ -1072,15 +1072,24 @@ async function saveProjectEdit() {
         const descInput = document.getElementById('editProjectDescription');
         const phaseDeadlineInputs = document.querySelectorAll('#editPhaseDeadlinesContainer .phase-deadline-input');
         const phaseNameInputs = document.querySelectorAll('#editPhaseDeadlinesContainer .phase-name-input');
+        const phaseRowDivs = document.querySelectorAll('#editPhaseDeadlinesContainer .phase-row');
         const phaseDeadlines = [];
         const phaseNames = [];
+        const phaseIds = [];
         phaseDeadlineInputs.forEach(input => phaseDeadlines.push(input.value));
         phaseNameInputs.forEach(input => phaseNames.push(input.value));
-
-        const phases = phaseDeadlines.map((deadline, index) => ({
-            stage_index: index,
-            deadline: deadline || dateInput?.value || ''
-        }));
+        phaseRowDivs.forEach(div => phaseIds.push(div.getAttribute('data-phase-id') || ''));
+        const phases = phaseDeadlines.map((deadline, index) => {
+            const phaseObj = {
+                stage_index: index,
+                deadline: deadline || dateInput?.value || ''
+            };
+            const phaseId = phaseIds[index];
+            if (phaseId && phaseId !== '') {
+                phaseObj.phase_id = parseInt(phaseId);
+            }
+            return phaseObj;
+        });
 
         const updateData = {
             name: nameInput ? nameInput.value : null,
@@ -1383,6 +1392,7 @@ function addPhase() {
     const div = document.createElement('div');
     div.className = 'flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 phase-row';
     div.setAttribute('data-phase-index', count);
+    div.setAttribute('data-phase-id', '');
     div.innerHTML = `
         <div class="flex items-center gap-2 flex-shrink-0">
             <div class="drag-handle w-6 h-6 rounded flex items-center justify-center cursor-grab hover:bg-gray-100 transition-colors">
@@ -1417,7 +1427,7 @@ function removePhase(index) {
 function _reindexPhases() {
     const container = document.getElementById('phaseDeadlinesContainer');
     if (!container) return;
-    const phaseDivs = container.querySelectorAll('.flex.flex-col\\:sm\\:flex-row');
+    const phaseDivs = container.querySelectorAll('.phase-row');
     phaseDivs.forEach((div, newIndex) => {
         div.setAttribute('data-phase-index', newIndex);
         const numSpan = div.querySelector('span.w-6.h-6.rounded-full');
@@ -1532,6 +1542,7 @@ function addEditPhase() {
     const div = document.createElement('div');
     div.className = 'flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 phase-row';
     div.setAttribute('data-phase-index', count);
+    div.setAttribute('data-phase-id', '');
     div.innerHTML = `
         <div class="flex items-center gap-2 flex-shrink-0">
             <div class="drag-handle w-6 h-6 rounded flex items-center justify-center cursor-grab hover:bg-gray-100 transition-colors">
@@ -1566,9 +1577,13 @@ function removeEditPhase(index) {
 function _reindexEditPhases() {
     const container = document.getElementById('editPhaseDeadlinesContainer');
     if (!container) return;
-    const phaseDivs = container.querySelectorAll('.flex.flex-col\\:sm\\:flex-row');
+    const phaseDivs = container.querySelectorAll('.phase-row');
     phaseDivs.forEach((div, newIndex) => {
         div.setAttribute('data-phase-index', newIndex);
+        const phaseId = div.getAttribute('data-phase-id');
+        if (phaseId !== null) {
+            div.setAttribute('data-phase-id', phaseId);
+        }
         const numSpan = div.querySelector('span.w-6.h-6.rounded-full');
         if (numSpan) numSpan.textContent = newIndex + 1;
         const nameInput = div.querySelector('.phase-name-input');
@@ -1624,10 +1639,17 @@ async function handleCreateProject(event) {
         phaseNames.push(input.value);
     });
 
-    // Fill empty phase deadlines with the Expected Completion Date
-    for (let i = 0; i < phaseDeadlines.length; i++) {
-        if (!phaseDeadlines[i]) {
-            phaseDeadlines[i] = deadline;
+    // Evenly space blank phase deadlines between start_date and deadline
+    if (phaseDeadlines.length > 0 && startDate && deadline) {
+        const startDt = new Date(startDate);
+        const endDt = new Date(deadline);
+        const totalMs = endDt.getTime() - startDt.getTime();
+        const spacing = totalMs / (phaseDeadlines.length + 1);
+        for (let i = 0; i < phaseDeadlines.length; i++) {
+            if (!phaseDeadlines[i]) {
+                const spaced = new Date(startDt.getTime() + spacing * (i + 1));
+                phaseDeadlines[i] = spaced.toISOString().split('T')[0];
+            }
         }
     }
 
@@ -1796,9 +1818,10 @@ function renderEditPhaseDeadlines(project) {
         const minDate = index === 0 ? '' : (index > 0 ? `min="${phases[index - 1]?.deadline || ''}"` : '');
         const existingValue = existingValues[index] || (phaseData ? phaseData.deadline : deadline);
         const existingName = existingNames[index] || (project.stage_names && project.stage_names[index]) || stage;
+        const phaseId = phaseData ? phaseData.id : '';
         
         html += `
-            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 phase-row" data-phase-index="${index}" draggable="true">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 phase-row" data-phase-index="${index}" data-phase-id="${phaseId}" draggable="true">
                 <div class="flex items-center gap-2 flex-shrink-0">
                     <div class="drag-handle w-6 h-6 rounded flex items-center justify-center cursor-grab hover:bg-gray-100 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/></svg>
@@ -1821,7 +1844,7 @@ function renderEditPhaseDeadlines(project) {
                         value="${existingValue}"
                     />
                 </div>
-                <button type="button" onclick="removeEditPhase(${index})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors flex-shrink-0 ${stages.length <= 1 ? 'opacity-0 pointer-events-none' : ''}" title="Remove phase">
+                <button type="button" onclick="removeEditPhase(${index})" class="w-6 h-6 rounded flex items-center justify-center text-xs text-red-400 hover:text-red-600 hover:bg-red-50 hover:bg-red-50 transition-colors flex-shrink-0 ${stages.length <= 1 ? 'opacity-0 pointer-events-none' : ''}" title="Remove phase">
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
             </div>
