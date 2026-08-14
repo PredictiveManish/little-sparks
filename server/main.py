@@ -1477,6 +1477,7 @@ async def create_project(
         phase = Phase(
             project_id=project.id,
             stage_index=phase_data.stage_index,
+            stage_name=phase_data.stage_name,
             deadline=phase_data.deadline,
         )
         db.add(phase)
@@ -1598,9 +1599,10 @@ async def update_project(
         for i, stage_name in enumerate(default_stages):
             if i < len(existing_phases):
                 existing_phases[i].stage_index = i
-                # Preserve existing deadline, only update stage_names later
+                existing_phases[i].stage_name = stage_name
+                # Preserve existing deadline
             else:
-                new_phase = Phase(project_id=project_id, stage_index=i, deadline=data.deadline or project.deadline)
+                new_phase = Phase(project_id=project_id, stage_index=i, stage_name=stage_name, deadline=data.deadline or project.deadline)
                 db.add(new_phase)
         # Commit phase rebuild changes before continuing
         db.flush()
@@ -1645,6 +1647,9 @@ async def update_project(
                 phase = existing_by_idx[phase_data.stage_index]
 
             if phase is not None:
+                phase.stage_index = phase_data.stage_index
+                if phase_data.stage_name is not None:
+                    phase.stage_name = phase_data.stage_name
                 if phase_data.deadline:
                     old_deadline = phase.deadline
                     phase.deadline = phase_data.deadline
@@ -1653,6 +1658,7 @@ async def update_project(
                 new_phase = Phase(
                     project_id=project_id,
                     stage_index=phase_data.stage_index,
+                    stage_name=phase_data.stage_name,
                     deadline=phase_data.deadline or project.deadline,
                 )
                 db.add(new_phase)
@@ -2145,7 +2151,9 @@ def _get_stages_for_phase_type(phase_type):
     return PRODUCTION_STAGES
 
 
-def _get_current_stage_name(stage_index, phase_type=None, custom_names=None):
+def _get_current_stage_name(stage_index, phase_type=None, custom_names=None, phase=None):
+    if phase and phase.stage_name:
+        return phase.stage_name
     if custom_names and stage_index < len(custom_names):
         return custom_names[stage_index]
     if phase_type is None:
@@ -5399,7 +5407,7 @@ def _projects_rows(db, dt_from, dt_to):
             rows_phase.append({
                 "project_id": p.id, "project_name": p.name,
                 "stage_index": ph.stage_index,
-                "stage_name": _get_current_stage_name(ph.stage_index, p.phase_type, p.stage_names),
+                "stage_name": _get_current_stage_name(ph.stage_index, p.phase_type, p.stage_names, phase=ph),
                 "deadline": ph.deadline, "designer_update": ph.designer_update,
                 "delay_reason": ph.delay_reason,
                 "completed_at": ph.completed_at or "",
@@ -5776,7 +5784,7 @@ async def get_report_summary(
                 "project_name": project.name,
                 "assigned_designer": designer.name if (designer := db.query(User).filter(User.id == project.assigned_designer_id).first()) else "Unassigned",
                 "stage_index": phase.stage_index,
-                "stage_name": _get_current_stage_name(phase.stage_index, project.phase_type, project.stage_names),
+                "stage_name": _get_current_stage_name(phase.stage_index, project.phase_type, project.stage_names, phase=phase),
                 "total_reports": total,
             }
             for field, avg_key in valid_fields:
@@ -5884,7 +5892,7 @@ async def get_project_report(
                 pass
         phase_items.append(PhaseReportItem(
             stage_index=ph.stage_index,
-            stage_name=_get_current_stage_name(ph.stage_index, project.phase_type, project.stage_names),
+            stage_name=_get_current_stage_name(ph.stage_index, project.phase_type, project.stage_names, phase=ph),
             deadline=ph.deadline,
             completed_at=ph.completed_at,
             designer_update=ph.designer_update or "",
@@ -6041,7 +6049,7 @@ async def get_project_weekly_report(
             project_name=project.name,
             assigned_designer=designer.name if designer else "Unassigned",
             stage_index=idx,
-            stage_name=_get_current_stage_name(idx, project.phase_type, project.stage_names),
+            stage_name=_get_current_stage_name(idx, project.phase_type, project.stage_names, phase=ph),
             status=project.status,
             progress=project.progress,
             deadline=ph.deadline,
@@ -6244,7 +6252,7 @@ async def get_project_monthly_report(
             project_name=project.name,
             assigned_designer=designer.name if designer else "Unassigned",
             stage_index=idx,
-            stage_name=_get_current_stage_name(idx, project.phase_type, project.stage_names),
+            stage_name=_get_current_stage_name(idx, project.phase_type, project.stage_names, phase=ph),
             status=project.status,
             progress=project.progress,
             deadline=ph.deadline,
@@ -6372,7 +6380,7 @@ async def get_designer_weekly_performance(
             project_id=proj.id,
             project_name=proj.name,
             stage_index=ph.stage_index,
-            stage_name=_get_current_stage_name(ph.stage_index, proj.phase_type, proj.stage_names),
+            stage_name=_get_current_stage_name(ph.stage_index, proj.phase_type, proj.stage_names, phase=ph),
             status=proj.status,
             progress=proj.progress,
             deadline=ph.deadline,
@@ -6497,7 +6505,7 @@ async def get_designer_monthly_performance(
             project_id=proj.id,
             project_name=proj.name,
             stage_index=ph.stage_index,
-            stage_name=_get_current_stage_name(ph.stage_index, proj.phase_type, proj.stage_names),
+            stage_name=_get_current_stage_name(ph.stage_index, proj.phase_type, proj.stage_names, phase=ph),
             status=proj.status,
             progress=proj.progress,
             deadline=ph.deadline,

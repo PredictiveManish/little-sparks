@@ -252,6 +252,108 @@ def _migrate_slack_completion_tracker_table():
         )
 
 
+def _migrate_phase_stage_name_column():
+    """Add stage_name column to phases table and backfill from Project.stage_names.
+    Safe to run on every startup — no-op if column already exists and populated."""
+    is_sqlite = "sqlite" in DATABASE_URL
+    if is_sqlite:
+        _add_column_if_missing("phases", "stage_name", "TEXT")
+    else:
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text(
+                    "SELECT column_name, data_type FROM information_schema.columns "
+                    "WHERE table_name='phases' AND column_name='stage_name'"
+                ))
+                row = result.fetchone()
+                if not row:
+                    logger.info("Adding stage_name column to phases")
+                    conn.execute(text(
+                        "ALTER TABLE phases ADD COLUMN stage_name VARCHAR"
+                    ))
+                    conn.commit()
+                else:
+                    logger.info("stage_name column already exists on phases table")
+        except Exception as e:
+            logger.warning("Migration check for stage_name encountered an issue (likely already applied): %s", e)
+
+
+def _backfill_phase_stage_names(db_instance):
+    """Backfill phase.stage_name from Project.stage_names for all existing phases.
+    
+    For each Project, iterate its Phase rows ordered by stage_index and set
+    phase.stage_name = project.stage_names[i] for each (falling back to the
+    default stage name for that phase_type/index if stage_names is missing or
+    shorter than the phase count).
+    
+    This runs once at startup and only fills NULL stage_names.
+    """
+    try:
+        from .models import Project, Phase
+        db = db_instance
+        projects = db.query(Project).all()
+        backfilled = 0
+        for project in projects:
+            phases = (
+                db.query(Phase)
+                .filter(Phase.project_id == project.id)
+                .order_by(Phase.stage_index)
+                .all()
+            )
+            if not phases:
+                continue
+            custom_names = project.stage_names or []
+            default_names = _get_stages_for_phase_type_safe(project.phase_type)
+            for i, phase in enumerate(phases):
+                if phase.stage_name:
+                    continue
+                if i < len(custom_names) and custom_names[i]:
+                    phase.stage_name = custom_names[i]
+                elif i < len(default_names):
+                    phase.stage_name = default_names[i]
+                else:
+                    phase.stage_name = f"Stage {i + 1}"
+                backfilled += 1
+        if backfilled:
+            db.commit()
+            logger.info("Phase stage_name backfill completed: %d phases updated", backfilled)
+        else:
+            logger.info("Phase stage_name backfill: nothing to do (all phases already have stage_name)")
+    except Exception as e:
+        logger.warning("Phase stage_name backfill encountered an issue: %s", e)
+
+
+def _get_stages_for_phase_type_safe(phase_type):
+    """Safely get default stage names without importing main.py at module level."""
+    IDEATION_STAGES = [
+        "Sourcing Starts",
+        "Mockup 1",
+        "Internal Discussion (Deeksha + Mentor + Rajat)",
+        "User Testing -1 Concluded",
+        "Mockup 2 - Internal Discussion",
+        "Sourcing Locked with Production",
+        "Costing Sheet Check",
+        "User Testing -2",
+        "Internal Discussion",
+        "Sales Alignment for Launch Plan",
+        "Conclusion",
+    ]
+    PRODUCTION_STAGES = [
+        "Lock Concept",
+        "Lock UX features",
+        "Lock MRP",
+        "Lock graphics theme",
+        "Lock Production feasibility",
+        "Lock Procurement",
+        "Lock IM",
+        "Lock CCP",
+        "Final Handover",
+    ]
+    if phase_type == "IDEATION":
+        return IDEATION_STAGES
+    return PRODUCTION_STAGES
+
+
 def init_db():
     """Initialize database tables, run migrations, and WAL mode."""
     try:
@@ -266,4 +368,10 @@ def init_db():
     _migrate_stage_report_completion_columns()
     _migrate_slack_completion_tracker_table()
     _migrate_phase_responsible_column()
+    _migrate_phase_stage_name_column()
     init_wal_mode()
+    # Run backfill in a session after WAL mode is set
+    try:
+        _backfill_phase_stage_names(SessionLocal())
+    except Exception as e:
+        logger.warning("Phase stage_name backfill failed at startup: %s", e)

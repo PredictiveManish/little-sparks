@@ -73,6 +73,7 @@ const api = {
 
     // Projects
     getProjects: () => apiFetch('/projects'),
+    getAllProjects: () => apiFetch('/projects'),
     getProject: (id) => apiFetch(`/projects/${id}`),
     createProject: (data) => apiFetch('/projects', { method: 'POST', body: data }),
     updateProject: (id, data) => apiFetch(`/projects/${id}`, { method: 'PUT', body: data }),

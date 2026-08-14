@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 from typing import List, Optional
 from datetime import datetime
 import json
@@ -75,12 +75,14 @@ class PhaseCreate(BaseModel):
     stage_index: int
     deadline: str
     phase_id: Optional[int] = None
+    stage_name: Optional[str] = None
 
 
 class PhaseResponse(BaseModel):
     id: int
     project_id: int
     stage_index: int
+    stage_name: Optional[str] = None
     deadline: str
     designer_update: str
     delay_reason: str

@@ -80,6 +80,68 @@ const defaultScaleConfig = {
 };
 
 // ============================================
+// DELAY INSIGHT HELPERS
+// ============================================
+
+let _delayHistoryCache = null;
+
+async function _getDelayHistoryCache() {
+    if (_delayHistoryCache) return _delayHistoryCache;
+    try {
+        const projects = await api.getAllProjects();
+        const stageDelays = {};
+        for (const project of (projects || [])) {
+            for (const phase of (project.phases || [])) {
+                const name = phase.stage_name || phase.name || '';
+                if (!name || phase.delay_days <= 0) continue;
+                if (!stageDelays[name]) stageDelays[name] = [];
+                stageDelays[name].push(phase.delay_days);
+            }
+        }
+        const averages = {};
+        for (const [name, delays] of Object.entries(stageDelays)) {
+            averages[name] = delays.reduce((a, b) => a + b, 0) / delays.length;
+        }
+        _delayHistoryCache = averages;
+        return averages;
+    } catch (err) {
+        console.warn('[APP] _getDelayHistoryCache: Failed to load delay history:', err.message);
+        _delayHistoryCache = {};
+        return _delayHistoryCache;
+    }
+}
+
+function formatDelayInsight(item, context) {
+    if (item.delay_reason) return item.delay_reason;
+    if (!item.delay_days || item.delay_days <= 0) return '';
+    
+    const stageName = item.stage_name || '';
+    const delayDays = item.delay_days;
+    
+    const ctx = context || {};
+    
+    if (ctx.type === 'weekly-overdue') {
+        return `${delayDays} days behind deadline (${formatDate(item.deadline)})`;
+    }
+    
+    if (stageName) {
+        try {
+            const averages = _delayHistoryCache || {};
+            const histAvg = averages[stageName];
+            if (histAvg && histAvg > 0) {
+                const diff = (delayDays - histAvg).toFixed(1);
+                const direction = parseFloat(diff) > 0 ? 'more' : 'less';
+                return `${delayDays} days delayed — ${Math.abs(parseFloat(diff))} days ${direction} than this stage's average (${histAvg.toFixed(1)}d) across other projects`;
+            }
+        } catch (e) {
+            // fall through
+        }
+    }
+    
+    return `${delayDays} days behind schedule`;
+}
+
+// ============================================
 // AUTH
 // ============================================
 
@@ -1140,7 +1202,8 @@ async function saveProjectEdit() {
         const phases = phaseDeadlines.map((deadline, index) => {
             const phaseObj = {
                 stage_index: index,
-                deadline: deadline || dateInput?.value || ''
+                deadline: deadline || dateInput?.value || '',
+                stage_name: phaseNames[index] || null
             };
             const phaseId = phaseIds[index];
             if (phaseId && phaseId !== '') {
@@ -1572,6 +1635,7 @@ function _reindexPhases() {
         }
     });
     attachPhaseDragAndDrop(container);
+    _checkPhaseDeadlineConflicts(container);
 }
 
 function attachPhaseDragAndDrop(container) {
@@ -1634,6 +1698,29 @@ function attachPhaseDragAndDrop(container) {
             } else {
                 _reindexPhases();
             }
+        }
+    });
+}
+
+function _checkPhaseDeadlineConflicts(container) {
+    const deadlineInputs = container.querySelectorAll('.phase-deadline-input');
+    deadlineInputs.forEach(input => {
+        const row = input.closest('.phase-row');
+        if (!row) return;
+        const existingWarning = row.querySelector('.deadline-conflict-warning');
+        if (existingWarning) existingWarning.remove();
+        
+        const min = input.getAttribute('min');
+        if (!min || input.value === '') return;
+        
+        if (new Date(input.value) < new Date(min)) {
+            const warning = document.createElement('div');
+            warning.className = 'deadline-conflict-warning mt-1 px-2 py-1 bg-red-50 border border-red-200 rounded text-xs text-red-700';
+            warning.textContent = 'This date is now before the previous phase — please update it';
+            row.appendChild(warning);
+            input.classList.add('border-red-400');
+        } else {
+            input.classList.remove('border-red-400');
         }
     });
 }
@@ -1723,6 +1810,7 @@ function _reindexEditPhases() {
         }
     });
     attachPhaseDragAndDrop(container);
+    _checkPhaseDeadlineConflicts(container);
 }
 
 async function handleCreateProject(event) {
@@ -1788,7 +1876,8 @@ async function handleCreateProject(event) {
 
     const phases = phaseDeadlines.map((phaseDeadline, index) => ({
         stage_index: index,
-        deadline: phaseDeadline
+        deadline: phaseDeadline,
+        stage_name: phaseNames[index] || null
     }));
 
     try {
@@ -3197,6 +3286,58 @@ async function loadProjectReport() {
             </div>
         `;
         
+        // B1: 3 Core Metrics — average delay per stage, on-time rate, top risk
+        try {
+            const completedWithDelay = report.phases.filter(p => p.completed_at && p.delay_days > 0);
+            const completedOnTime = report.phases.filter(p => p.completed_at && p.delay_days === 0);
+            const totalCompleted = completedWithDelay.length + completedOnTime.length;
+            const onTimeRate = totalCompleted > 0 ? Math.round((completedOnTime.length / totalCompleted) * 100) : 0;
+            const avgDelayPerStage = report.phases.length > 0
+                ? (report.phases.reduce((sum, p) => sum + (p.delay_days || 0), 0) / report.phases.length).toFixed(1)
+                : '0';
+            const topRisk = report.phases
+                .filter(p => !p.completed_at && p.delay_days > 0)
+                .sort((a, b) => b.delay_days - a.delay_days)[0]
+                || report.phases
+                .filter(p => p.delay_days > 0)
+                .sort((a, b) => b.delay_days - a.delay_days)[0];
+            const trendPhases = report.phases.filter(p => p.completed_at);
+            const trend = trendPhases.length >= 2
+                ? (() => {
+                    const mid = Math.floor(trendPhases.length / 2);
+                    const firstHalf = trendPhases.slice(0, mid).filter(p => p.delay_days > 0).length;
+                    const secondHalf = trendPhases.slice(mid).filter(p => p.delay_days > 0).length;
+                    if (secondHalf < firstHalf) return '↓ improving';
+                    if (secondHalf > firstHalf) return '↑ declining';
+                    return '→ stable';
+                })()
+                : '—';
+            html += `
+                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mt-6">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-4">📊 Key Metrics</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-amber-50 rounded-lg p-4">
+                            <p class="text-xs text-amber-600 font-medium uppercase tracking-wider">Avg Delay per Stage</p>
+                            <p class="text-2xl font-bold text-amber-700 mt-1">${avgDelayPerStage}d</p>
+                            <p class="text-xs text-amber-600 mt-1">${report.phases.filter(p => p.delay_days > 0).length} of ${report.phases.length} stages delayed</p>
+                        </div>
+                        <div class="bg-green-50 rounded-lg p-4">
+                            <p class="text-xs text-green-600 font-medium uppercase tracking-wider">On-Time Completion Rate</p>
+                            <p class="text-2xl font-bold text-green-700 mt-1">${onTimeRate}%</p>
+                            <p class="text-xs text-green-600 mt-1">Trend: ${trend}</p>
+                        </div>
+                        <div class="${topRisk ? 'bg-red-50 border border-red-200' : 'bg-gray-50'} rounded-lg p-4">
+                            <p class="text-xs ${topRisk ? 'text-red-600' : 'text-gray-500'} font-medium uppercase tracking-wider">Top Risk</p>
+                            <p class="text-sm font-semibold ${topRisk ? 'text-red-700' : 'text-gray-600'} mt-1">${topRisk ? topRisk.stage_name + ' — ' + topRisk.delay_days + 'd delayed' : 'No active risks'}</p>
+                            ${topRisk ? '<p class="text-xs text-red-600 mt-1">' + formatDelayInsight(topRisk) + '</p>' : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        } catch (e) {
+            console.warn('[APP] loadProjectReport: Failed to compute key metrics:', e.message);
+        }
+        
         if (report.stage_reports && report.stage_reports.length > 0) {
             html += `
                 <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
@@ -3539,6 +3680,40 @@ async function loadWeeklyReport() {
             </div>
         `;
         
+        // B1: 3 Core Metrics for weekly report
+        try {
+            const delayedItems = report.reports.filter(r => r.delay_days > 0);
+            const totalItems = report.reports.length;
+            const avgDelay = totalItems > 0 ? (delayedItems.reduce((s, r) => s + r.delay_days, 0) / totalItems).toFixed(1) : '0';
+            const onTimeCount = report.reports.filter(r => r.delay_days === 0 && r.progress > 0).length;
+            const onTimeRate = totalItems > 0 ? Math.round((onTimeCount / totalItems) * 100) : 0;
+            const topRisk = delayedItems.sort((a, b) => b.delay_days - a.delay_days)[0] || report.reports.find(r => r.progress < 100 && r.delay_days === 0);
+            html += `
+                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mt-6">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-4">📊 Key Metrics</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-amber-50 rounded-lg p-4">
+                            <p class="text-xs text-amber-600 font-medium uppercase tracking-wider">Avg Delay per Stage</p>
+                            <p class="text-2xl font-bold text-amber-700 mt-1">${avgDelay}d</p>
+                            <p class="text-xs text-amber-600 mt-1">${delayedItems.length} of ${totalItems} stages delayed</p>
+                        </div>
+                        <div class="bg-green-50 rounded-lg p-4">
+                            <p class="text-xs text-green-600 font-medium uppercase tracking-wider">On-Time Rate</p>
+                            <p class="text-2xl font-bold text-green-700 mt-1">${onTimeRate}%</p>
+                            <p class="text-xs text-green-600 mt-1">${onTimeCount} on-time / ${delayedItems.length} delayed</p>
+                        </div>
+                        <div class="${topRisk ? 'bg-red-50 border border-red-200' : 'bg-gray-50'} rounded-lg p-4">
+                            <p class="text-xs ${topRisk ? 'text-red-600' : 'text-gray-500'} font-medium uppercase tracking-wider">Top Risk</p>
+                            <p class="text-sm font-semibold ${topRisk ? 'text-red-700' : 'text-gray-600'} mt-1">${topRisk ? topRisk.stage_name + ' — ' + topRisk.delay_days + 'd delayed' : 'No active risks'}</p>
+                            ${topRisk ? '<p class="text-xs text-red-600 mt-1">' + formatDelayInsight(topRisk, { type: 'weekly-overdue' }) + '</p>' : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        } catch (e) {
+            console.warn('[APP] loadWeeklyReport: Failed to compute key metrics:', e.message);
+        }
+        
         // Section 1: Stages updated this week
         if (updatedStages.length > 0) {
             html += '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">';
@@ -3562,7 +3737,7 @@ async function loadWeeklyReport() {
                         </div>
                 `;
                 if (item.delay_days > 0) {
-                    html += `<div class="p-3 bg-red-50 rounded-lg border border-red-200"><p class="text-sm font-medium text-red-700">⚠ Delay: ${item.delay_reason || item.delay_days + ' days behind schedule'}</p></div>`;
+                    html += `<div class="p-3 bg-red-50 rounded-lg border border-red-200"><p class="text-sm font-medium text-red-700">⚠ Delay: ${formatDelayInsight(item)}</p></div>`;
                 }
                 if (item.activities && item.activities.length > 0) {
                     html += '<div class="space-y-2 mt-2">';
@@ -3598,7 +3773,7 @@ async function loadWeeklyReport() {
                             <h4 class="font-semibold text-red-900">${item.stage_name}</h4>
                             <span class="text-xs font-medium px-2 py-1 rounded-full bg-red-200 text-red-800">Delayed ${item.delay_days}d</span>
                         </div>
-                        <p class="text-xs text-red-700">${item.delay_reason || item.delay_days + ' days behind deadline (' + formatDate(item.deadline) + ')'}</p>
+                        <p class="text-xs text-red-700">${formatDelayInsight(item, { type: 'weekly-overdue' })}</p>
                     </div>
                 `;
             });
@@ -3701,6 +3876,40 @@ async function loadMonthlyReport() {
                 </div>
         `;
         
+        // B1: 3 Core Metrics for monthly report
+        try {
+            const delayedItems = report.reports.filter(r => r.delay_days > 0);
+            const totalItems = report.reports.length;
+            const avgDelay = totalItems > 0 ? (delayedItems.reduce((s, r) => s + r.delay_days, 0) / totalItems).toFixed(1) : '0';
+            const onTimeCount = report.reports.filter(r => r.delay_days === 0).length;
+            const onTimeRate = totalItems > 0 ? Math.round((onTimeCount / totalItems) * 100) : 0;
+            const topRisk = delayedItems.sort((a, b) => b.delay_days - a.delay_days)[0] || report.reports.find(r => r.progress < 100);
+            html += `
+                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mt-6">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-4">📊 Key Metrics</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-amber-50 rounded-lg p-4">
+                            <p class="text-xs text-amber-600 font-medium uppercase tracking-wider">Avg Delay per Stage</p>
+                            <p class="text-2xl font-bold text-amber-700 mt-1">${avgDelay}d</p>
+                            <p class="text-xs text-amber-600 mt-1">${delayedItems.length} of ${totalItems} stages delayed</p>
+                        </div>
+                        <div class="bg-green-50 rounded-lg p-4">
+                            <p class="text-xs text-green-600 font-medium uppercase tracking-wider">On-Time Rate</p>
+                            <p class="text-2xl font-bold text-green-700 mt-1">${onTimeRate}%</p>
+                            <p class="text-xs text-green-600 mt-1">${onTimeCount} on-time / ${delayedItems.length} delayed</p>
+                        </div>
+                        <div class="${topRisk ? 'bg-red-50 border border-red-200' : 'bg-gray-50'} rounded-lg p-4">
+                            <p class="text-xs ${topRisk ? 'text-red-600' : 'text-gray-500'} font-medium uppercase tracking-wider">Top Risk</p>
+                            <p class="text-sm font-semibold ${topRisk ? 'text-red-700' : 'text-gray-600'} mt-1">${topRisk ? topRisk.stage_name + ' — ' + topRisk.delay_days + 'd delayed' : 'No active risks'}</p>
+                            ${topRisk ? '<p class="text-xs text-red-600 mt-1">' + formatDelayInsight(topRisk) + '</p>' : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        } catch (e) {
+            console.warn('[APP] loadMonthlyReport: Failed to compute key metrics:', e.message);
+        }
+        
         if (summary.avg_ratings_overall && Object.keys(summary.avg_ratings_overall).length > 0) {
             html += `
                 <div class="mb-6">
@@ -3767,7 +3976,7 @@ async function loadMonthlyReport() {
                     html += `
                         <div class="mb-3 p-3 bg-red-50 rounded-lg border border-red-200">
                             <p class="text-sm font-medium text-red-700">⚠ Delay Detected</p>
-                            <p class="text-xs text-red-600 mt-1">${item.delay_reason || item.delay_days + ' days behind schedule'}</p>
+                            <p class="text-xs text-red-600 mt-1">${formatDelayInsight(item)}</p>
                         </div>
                     `;
                 }
@@ -4103,39 +4312,43 @@ async function loadDesignerPerformance() {
                 if (trendContainer) trendContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No trend data available.</p>';
             }
 
-            // 2. Cross-designer ranking
+            // 2. Cross-designer ranking — team-average comparison
             try {
                 const periodParams = period === 'weekly'
                     ? { weekStart: document.getElementById('designerPerfWeekStart').value, weekEnd: document.getElementById('designerPerfWeekEnd').value }
                     : { month: document.getElementById('designerPerfMonth').value, year: document.getElementById('designerPerfYear').value };
                 const comparisonData = await api.getDesignerComparison(period, periodParams.weekStart, periodParams.weekEnd, periodParams.month, periodParams.year);
                 if (comparisonData && comparisonData.length > 0) {
-                    const rankingHtml = comparisonData.map((d, i) => {
+                    const teamAvg = comparisonData.reduce((s, d) => s + (d.on_time_rate || 0), 0) / comparisonData.length;
+                    const sorted = [...comparisonData].sort((a, b) => (b.on_time_rate || 0) - (a.on_time_rate || 0));
+                    const rankingHtml = sorted.map((d) => {
                         const isCurrentDesigner = d.designer_id === parseInt(designerId);
                         const rate = d.on_time_rate !== null ? d.on_time_rate + '%' : 'N/A';
                         const barWidth = d.on_time_rate !== null ? d.on_time_rate : 0;
                         const barColor = d.on_time_rate >= 80 ? 'bg-green-500' : d.on_time_rate >= 60 ? 'bg-amber-500' : 'bg-red-500';
+                        const diffFromAvg = d.on_time_rate !== null ? (d.on_time_rate - teamAvg).toFixed(1) : 0;
+                        const diffLabel = d.on_time_rate !== null
+                            ? (parseFloat(diffFromAvg) >= 0 ? '+' : '') + diffFromAvg + 'pp vs team avg'
+                            : 'N/A';
                         const rowClass = isCurrentDesigner ? 'bg-brand-50 border-brand-200' : 'border-gray-100';
-                        const rankBadge = isCurrentDesigner
-                            ? `<span class="text-xs font-bold px-2 py-1 rounded-full bg-brand-500 text-white mr-2">#${i + 1}</span>`
-                            : `<span class="text-xs font-medium px-2 py-1 rounded-full bg-gray-200 text-gray-600 mr-2">#${i + 1}</span>`;
                         return `
                             <div class="flex items-center gap-3 p-2 rounded-lg border ${rowClass}">
-                                ${rankBadge}
                                 <div class="flex-1 min-w-0">
                                     <div class="flex items-center justify-between mb-1">
-                                        <p class="text-sm font-medium text-gray-900 truncate">${d.designer_name}</p>
+                                        <p class="text-sm font-medium text-gray-900 truncate">${d.designer_name} ${isCurrentDesigner ? '<span class="text-xs text-brand-600">(you)</span>' : ''}</p>
                                         <p class="text-sm font-semibold ${d.on_time_rate >= 80 ? 'text-green-600' : d.on_time_rate >= 60 ? 'text-amber-600' : 'text-red-600'}">${rate}</p>
                                     </div>
-                                    <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="w-full bg-gray-200 rounded-full h-2 relative">
                                         <div class="${barColor} h-2 rounded-full" style="width:${barWidth}%"></div>
+                                        <div class="absolute top-0 bottom-0 w-0.5 bg-gray-400" style="left:${teamAvg}%"></div>
                                     </div>
-                                    <p class="text-xs text-gray-500 mt-0.5">${d.stages_completed} stages · ${d.on_time} on-time · ${d.delayed} delayed${d.avg_delay_days !== null ? ' · ' + d.avg_delay_days + 'd avg delay' : ''}</p>
+                                    <p class="text-xs text-gray-500 mt-0.5">${diffLabel} · ${d.stages_completed} stages · ${d.on_time} on-time · ${d.delayed} delayed${d.avg_delay_days !== null ? ' · ' + d.avg_delay_days + 'd avg delay' : ''}</p>
                                 </div>
                             </div>
                         `;
                     }).join('');
-                    document.getElementById('designerRankingList').innerHTML = rankingHtml;
+                    const teamAvgHtml = `<p class="text-xs text-gray-500 mt-3 text-center">Team average: <span class="font-semibold text-gray-700">${teamAvg.toFixed(1)}%</span> — gray line indicates team average</p>`;
+                    document.getElementById('designerRankingList').innerHTML = rankingHtml + teamAvgHtml;
                 } else {
                     document.getElementById('designerRankingList').innerHTML = '<p class="text-sm text-gray-400 py-2">No ranking data available for this period.</p>';
                 }

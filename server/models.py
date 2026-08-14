@@ -106,6 +106,7 @@ class Phase(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     stage_index = Column(Integer, nullable=False)
+    stage_name = Column(String, nullable=True, default=None)
     deadline = Column(String, nullable=False)
     designer_update = Column(Text, default="")
     delay_reason = Column(Text, default="")
