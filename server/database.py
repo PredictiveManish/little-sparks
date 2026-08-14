@@ -114,7 +114,7 @@ def _add_column_if_missing(table_name, column_name, column_ddl):
         from sqlalchemy import inspect
 
         inspector = inspect(engine)
-        existing_columns = {c["name"] for c in inspector.get_columns(table_name)}
+        existing_columns = {c.name for c in inspector.get_columns(table_name)}
         if column_name in existing_columns:
             return
         logger.info("Adding column %s.%s", table_name, column_name)
@@ -154,7 +154,7 @@ def _migrate_stage_reports_table():
         from sqlalchemy import inspect
 
         inspector = inspect(engine)
-        existing_tables = {t["name"] for t in inspector.get_table_names()}
+        existing_tables = {t for t in inspector.get_table_names()}
         if "stage_reports" in existing_tables:
             return
         logger.info("Adding stage_reports table")
@@ -172,7 +172,7 @@ def _migrate_stage_report_completion_columns():
         from sqlalchemy import inspect
 
         inspector = inspect(engine)
-        existing_columns = {c["name"] for c in inspector.get_columns("stage_reports")}
+        existing_columns = {c.name for c in inspector.get_columns("stage_reports")}
         if "actual_completion_date" not in existing_columns:
             logger.info("Adding actual_completion_date column to stage_reports")
             with engine.connect() as conn:
@@ -240,7 +240,7 @@ def _migrate_slack_completion_tracker_table():
         from sqlalchemy import inspect
 
         inspector = inspect(engine)
-        existing_tables = {t["name"] for t in inspector.get_table_names()}
+        existing_tables = {t for t in inspector.get_table_names()}
         if "slack_completion_tracker" in existing_tables:
             return
         logger.info("Adding slack_completion_tracker table")
