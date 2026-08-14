@@ -1280,6 +1280,19 @@ def delay_trend(
             total_delay_days=monthly[month]["total_delay_days"],
             delayed_projects=monthly[month]["delayed_projects"],
         ))
+    # Zero-fill: generate full 6-month calendar window ending with current month
+    if result:
+        last_month = datetime.strptime(result[-1].month, "%Y-%m")
+        for i in range(6):
+            month_dt = last_month - timedelta(months=i)
+            month_str = month_dt.strftime("%Y-%m")
+            if month_str not in monthly:
+                result.append(DelayTrendPoint(
+                    month=month_str,
+                    total_delay_days=0,
+                    delayed_projects=0,
+                ))
+        result.sort(key=lambda x: x.month)
     return result
 
 

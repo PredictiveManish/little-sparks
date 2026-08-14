@@ -3143,56 +3143,59 @@ async function loadProjectReport() {
 
         // Render Project Report Charts
         try {
-                // Rating averages radar chart
+            // Rating averages radar chart
             const ratingLabels = ['Costing', 'Willingness', 'Engagement', 'Durability', 'Age Appr.', 'Ease', 'Aesthetics', 'Store'];
             const ratingKeys = ['costing', 'willingness_to_buy', 'engagement_life', 'durability', 'age_appropriateness', 'ease_of_use', 'aesthetics', 'easy_to_store'];
-            const ratingData = report.stage_reports
-                ? ratingKeys.map(key => {
+            if (report.stage_reports && report.stage_reports.length > 0) {
+                const ratingData = ratingKeys.map(key => {
                     const vals = report.stage_reports.map(r => r[key]).filter(v => v != null);
                     return vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
-                })
-                : [0, 0, 0, 0, 0, 0, 0, 0];
+                });
 
-            renderChart('projectRatingChart', {
-                type: 'radar',
-                data: {
-                    labels: ratingLabels,
-                    datasets: [{
-                        label: 'Avg Rating',
-                        data: ratingData.map(v => Math.round(v * 100) / 100),
-                        backgroundColor: 'rgba(244, 121, 32, 0.2)',
-                        borderColor: chartColors.brand,
-                        borderWidth: 2,
-                        pointBackgroundColor: ratingData.map(v => v >= 4 ? chartColors.green : v >= 3 ? chartColors.amber : chartColors.red),
-                        pointBorderColor: 'transparent',
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
-                    }]
-                },
-                options: {
-                    ...defaultChartOptions,
-                    scales: {
-                        r: {
-                            ...defaultScaleConfig,
-                            beginAtZero: true,
-                            max: 5,
-                            ticks: { ...defaultScaleConfig.ticks, stepSize: 1 },
-                            pointLabels: { font: { size: 11, weight: '500' } },
-                            grid: { color: 'rgba(0,0,0,0.07)' },
-                            angleLines: { color: 'rgba(0,0,0,0.07)' },
-                        }
+                renderChart('projectRatingChart', {
+                    type: 'radar',
+                    data: {
+                        labels: ratingLabels,
+                        datasets: [{
+                            label: 'Avg Rating',
+                            data: ratingData.map(v => Math.round(v * 100) / 100),
+                            backgroundColor: 'rgba(244, 121, 32, 0.2)',
+                            borderColor: chartColors.brand,
+                            borderWidth: 2,
+                            pointBackgroundColor: ratingData.map(v => v >= 4 ? chartColors.green : v >= 3 ? chartColors.amber : chartColors.red),
+                            pointBorderColor: 'transparent',
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                        }]
                     },
-                    plugins: {
-                        ...defaultChartOptions.plugins,
-                        legend: { position: 'bottom', labels: { font: { size: 11 } } },
-                        tooltip: {
-                            callbacks: {
-                                label: (ctx) => `Avg: ${ctx.parsed.r.toFixed(2)} / 5`
+                    options: {
+                        ...defaultChartOptions,
+                        scales: {
+                            r: {
+                                ...defaultScaleConfig,
+                                beginAtZero: true,
+                                max: 5,
+                                ticks: { ...defaultScaleConfig.ticks, stepSize: 1 },
+                                pointLabels: { font: { size: 11, weight: '500' } },
+                                grid: { color: 'rgba(0,0,0,0.07)' },
+                                angleLines: { color: 'rgba(0,0,0,0.07)' },
+                            }
+                        },
+                        plugins: {
+                            ...defaultChartOptions.plugins,
+                            legend: { position: 'bottom', labels: { font: { size: 11 } } },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => `Avg: ${ctx.parsed.r.toFixed(2)} / 5`
+                                }
                             }
                         }
                     }
-                }
-            });
+                });
+            } else {
+                const radarContainer = document.getElementById('projectRatingChart')?.closest('div');
+                if (radarContainer) radarContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No rating data available.</p>';
+            }
 
             // Delay analysis by stage
             const delayLabels = report.phases.map(p => p.stage_name);
@@ -3228,6 +3231,14 @@ async function loadProjectReport() {
             const projectStart = new Date(report.start_date + 'T00:00:00');
             const projectEnd = new Date(report.deadline + 'T00:00:00');
             const totalDays = Math.max(1, Math.round((projectEnd - projectStart) / (1000 * 60 * 60 * 24)));
+
+            // Guard: degenerate timeline when start == deadline
+            if (report.start_date && report.deadline && projectStart.getTime() === projectEnd.getTime()) {
+                const timelineContainer = document.getElementById('projectTimelineChart')?.closest('div');
+                if (timelineContainer) {
+                    timelineContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">Start date and deadline are the same — no timeline to display.</p>';
+                }
+            } else {
 
             const timelineLabels = [];
             const plannedStarts = [];
@@ -3328,6 +3339,7 @@ async function loadProjectReport() {
                     }
                 }
             });
+            }
         } catch (chartErr) {
             console.warn('[APP] loadProjectReport: Failed to render charts:', chartErr.message);
         }
@@ -3738,7 +3750,7 @@ async function loadMonthlyReport() {
             } catch (trendErr) {
                 console.warn('[APP] loadMonthlyReport: Failed to load trend:', trendErr.message);
                 const trendEl = document.getElementById('monthlyTrendChart');
-                if (trendEl) trendEl.parentElement.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">Trend data loading...</p>';
+                if (trendEl) trendEl.parentElement.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No trend data available.</p>';
             }
 
             // 2. Rating averages radar chart (this month only)
@@ -3754,46 +3766,52 @@ async function loadMonthlyReport() {
                     return vals.reduce((a, b) => a + b, 0) / vals.length;
                 });
 
-                renderChart('monthlyRatingTrendChart', {
-                    type: 'radar',
-                    data: {
-                        labels: ratingLabels,
-                        datasets: [{
-                            label: 'Avg Rating',
-                            data: avgRatings.map(v => Math.round(v * 100) / 100),
-                            backgroundColor: 'rgba(244, 121, 32, 0.2)',
-                            borderColor: chartColors.brand,
-                            borderWidth: 2,
-                            pointBackgroundColor: avgRatings.map(v => v >= 4 ? chartColors.green : v >= 3 ? chartColors.amber : chartColors.red),
-                            pointBorderColor: 'transparent',
-                            pointRadius: 4,
-                            pointHoverRadius: 6,
-                        }]
-                    },
-                    options: {
-                        ...defaultChartOptions,
-                        scales: {
-                            r: {
-                                ...defaultScaleConfig,
-                                beginAtZero: true,
-                                max: 5,
-                                ticks: { ...defaultScaleConfig.ticks, stepSize: 1 },
-                                pointLabels: { font: { size: 11, weight: '500' } },
-                                grid: { color: 'rgba(0,0,0,0.07)' },
-                                angleLines: { color: 'rgba(0,0,0,0.07)' },
-                            }
+                const hasAnyRating = avgRatings.some(v => v > 0);
+                if (hasAnyRating) {
+                    renderChart('monthlyRatingTrendChart', {
+                        type: 'radar',
+                        data: {
+                            labels: ratingLabels,
+                            datasets: [{
+                                label: 'Avg Rating',
+                                data: avgRatings.map(v => Math.round(v * 100) / 100),
+                                backgroundColor: 'rgba(244, 121, 32, 0.2)',
+                                borderColor: chartColors.brand,
+                                borderWidth: 2,
+                                pointBackgroundColor: avgRatings.map(v => v >= 4 ? chartColors.green : v >= 3 ? chartColors.amber : chartColors.red),
+                                pointBorderColor: 'transparent',
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                            }]
                         },
-                        plugins: {
-                            ...defaultChartOptions.plugins,
-                            legend: { position: 'bottom', labels: { font: { size: 11 } } },
-                            tooltip: {
-                                callbacks: {
-                                    label: (ctx) => `Avg: ${ctx.parsed.r.toFixed(2)} / 5`
+                        options: {
+                            ...defaultChartOptions,
+                            scales: {
+                                r: {
+                                    ...defaultScaleConfig,
+                                    beginAtZero: true,
+                                    max: 5,
+                                    ticks: { ...defaultScaleConfig.ticks, stepSize: 1 },
+                                    pointLabels: { font: { size: 11, weight: '500' } },
+                                    grid: { color: 'rgba(0,0,0,0.07)' },
+                                    angleLines: { color: 'rgba(0,0,0,0.07)' },
+                                }
+                            },
+                            plugins: {
+                                ...defaultChartOptions.plugins,
+                                legend: { position: 'bottom', labels: { font: { size: 11 } } },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (ctx) => `Avg: ${ctx.parsed.r.toFixed(2)} / 5`
+                                    }
                                 }
                             }
                         }
-                    }
-                });
+                    });
+                } else {
+                    const radarContainer = document.getElementById('monthlyRatingTrendChart')?.closest('div');
+                    if (radarContainer) radarContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No rating data available.</p>';
+                }
 
                 // 3. Delay analysis bar chart (this month)
                 renderChart('monthlyDelayChart', {
@@ -3956,9 +3974,14 @@ async function loadDesignerPerformance() {
                             }
                         }
                     });
+                } else {
+                    const trendContainer = document.getElementById('designerDelayTrendChart')?.closest('div');
+                    if (trendContainer) trendContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No trend data available.</p>';
                 }
             } catch (trendErr) {
                 console.warn('[APP] loadDesignerPerformance: Failed to load trend:', trendErr.message);
+                const trendContainer = document.getElementById('designerDelayTrendChart')?.closest('div');
+                if (trendContainer) trendContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No trend data available.</p>';
             }
 
             // 2. Cross-designer ranking
@@ -3994,10 +4017,12 @@ async function loadDesignerPerformance() {
                         `;
                     }).join('');
                     document.getElementById('designerRankingList').innerHTML = rankingHtml;
+                } else {
+                    document.getElementById('designerRankingList').innerHTML = '<p class="text-sm text-gray-400 py-2">No ranking data available for this period.</p>';
                 }
             } catch (compErr) {
                 console.warn('[APP] loadDesignerPerformance: Failed to load comparison:', compErr.message);
-                document.getElementById('designerRankingList').innerHTML = '<p class="text-sm text-gray-400 py-2">Ranking data unavailable.</p>';
+                document.getElementById('designerRankingList').innerHTML = '<p class="text-sm text-gray-400 py-2">No ranking data available.</p>';
             }
         } catch (chartErr) {
             console.warn('[APP] loadDesignerPerformance: Failed to render charts:', chartErr.message);
