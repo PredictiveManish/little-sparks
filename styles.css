@@ -76,7 +76,7 @@ body {
     position: relative;
 }
 .readonly-field::after {
-    content: '🔒 Read Only';
+    content: 'Read Only';
     position: absolute;
     top: -10px;
     right: 12px;
@@ -160,5 +160,5 @@ input[type="radio"][name="phaseType"]:checked + .phase-type-card .text-brand-500
     transform: scale(0.98);
 }
 .phase-row.drag-over {
-    border-top: 2px solid #F47920;
+    border-top: 2px solid #89481a;
 }

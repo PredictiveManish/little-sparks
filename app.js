@@ -1305,10 +1305,10 @@ function closeDelayReasonModal() {
 }
 
 function toggleDelayResponsibleVisibility() {
-    const reasonInput = document.getElementById('delayReasonInput');
+    // Always show the responsible section — delay accountability is mandatory
     const section = document.getElementById('delayResponsibleSection');
-    if (reasonInput && section) {
-        section.classList.toggle('hidden', !reasonInput.value.trim());
+    if (section) {
+        section.classList.remove('hidden');
     }
 }
 
