@@ -789,6 +789,15 @@ async function populateProjectDetails() {
         document.getElementById('detailClientName').textContent = 'Assigned to ' + getDesignerName(project.assigned_designer_id, DESIGNERS);
         document.getElementById('detailStageBadge').textContent =
             `Stage ${project.stage_index + 1}`;
+        
+        // Show/hide Slack button based on channel connection
+        const slackBtn = document.getElementById('openSlackBtn');
+        if (project.slack_channel_id && project.slack_channel_id.trim() !== '') {
+            slackBtn.classList.remove('hidden');
+        } else {
+            slackBtn.classList.add('hidden');
+        }
+        
         document.getElementById('detailProgress').textContent = project.progress;
         document.getElementById('detailProgressBar').style.width = project.progress + '%';
         document.getElementById('detailProgressBar').className = `h-full rounded-full ${project.progress >= 80 ? (project.status === 'DELAYED' ? 'bg-red-500' : 'bg-green-500') : project.progress >= 40 ? 'bg-brand-500' : 'bg-amber-500'}`;
