@@ -783,6 +783,8 @@ async function populateProjectsTable() {
 async function populateProjectDetails() {
     console.log('[APP] populateProjectDetails: Loading project details for project', selectedProjectId);
     try {
+        DESIGNERS = await api.getDesigners();
+        MANAGERS = await api.getManagers();
         const project = await api.getProject(selectedProjectId);
         console.log('[APP] populateProjectDetails: Project data received', project);
         document.getElementById('detailProjectName').textContent = project.name;
@@ -858,9 +860,28 @@ async function populateProjectDetails() {
                 : getDesignerName(project.assigned_designer_id, DESIGNERS);
 
             const delayReason = sd.delay_reason || '—';
+            const delayResponsible = sd.delay_responsible || [];
             const delayDays = calculateDelayDays(sd.deadline);
             const completedAt = sd.completed_at ? formatDateTime(sd.completed_at) : '—';
             const deadline = sd.deadline ? formatDate(sd.deadline) : '—';
+
+            // Build responsible people names
+            let responsibleNames = '—';
+            if (delayResponsible.length > 0) {
+                const responsibleNamesList = delayResponsible
+                    .map(uid => {
+                        const allDesigners = DESIGNERS || [];
+                        const d = allDesigners.find(d => d.id === uid);
+                        if (d) return d.name;
+                        const allManagers = MANAGERS || [];
+                        const m = allManagers.find(m => m.id === uid);
+                        return m ? m.name : null;
+                    })
+                    .filter(Boolean);
+                if (responsibleNamesList.length > 0) {
+                    responsibleNames = responsibleNamesList.join(', ');
+                }
+            }
 
             let statusClass = 'bg-gray-100 text-gray-500';
             let statusText = 'Locked';
@@ -911,7 +932,7 @@ async function populateProjectDetails() {
                             </button>
                         </div>
                     </div>
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
                         <div>
                             <p class="text-gray-400 mb-0.5">Deadline</p>
                             <p class="font-medium text-gray-700">${deadline}</p>
@@ -927,6 +948,10 @@ async function populateProjectDetails() {
                         <div>
                             <p class="text-gray-400 mb-0.5">Reason</p>
                             <p class="text-gray-500 truncate">${delayReason}</p>
+                        </div>
+                        <div>
+                            <p class="text-gray-400 mb-0.5">Responsible</p>
+                            <p class="text-gray-500 truncate">${responsibleNames}</p>
                         </div>
                     </div>
                 </div>
@@ -961,6 +986,30 @@ async function sendProjectReminder() {
             btn.disabled = false;
             btn.innerHTML = originalText;
         }
+    }
+}
+
+// ============================================
+// OPEN PROJECT SLACK CHANNEL
+// ============================================
+async function openProjectSlackChannel() {
+    if (!selectedProjectId) return;
+    try {
+        const project = await api.getProject(selectedProjectId);
+        if (!project.slack_channel_id || project.slack_channel_id.trim() === '') {
+            showToast('No Slack channel connected for this project');
+            return;
+        }
+        const teamId = project.slack_team_id || (CURRENT_USER && CURRENT_USER.slack_team_id ? CURRENT_USER.slack_team_id : '');
+        if (!teamId) {
+            showToast('Slack team ID not found. Please reconnect Slack.');
+            return;
+        }
+        const slackUrl = `https://app.slack.com/client/${teamId}/${project.slack_channel_id}`;
+        window.open(slackUrl, '_blank');
+    } catch (err) {
+        console.error('[APP] openProjectSlackChannel: failed:', err.message);
+        showToast('Failed to open Slack channel: ' + err.message);
     }
 }
 
@@ -1129,29 +1178,90 @@ async function markStageComplete(stageIndex) {
     pendingCompleteStageIndex = stageIndex;
     document.getElementById('delayReasonInput').value = '';
     
-    // Fetch project to get phase_type-aware stage name
+    // Fetch project to get phase_type-aware stage name and pre-populate responsible checkboxes
     try {
         const project = await api.getProject(selectedProjectId);
         const stages = getStagesForPhaseType(project.phase_type);
         document.getElementById('delayReasonStageLabel').textContent = `Stage: ${stages[stageIndex]}`;
+        
+        // Get the phase data for this stage
+        const phaseData = project.phases[stageIndex];
+        const existingResponsible = phaseData?.delay_responsible || [];
+        
+        // Get all designers and managers
+        const allDesigners = await api.getDesigners();
+        const allManagers = await api.getManagers();
+        
+        // Populate designer checkboxes
+        const designersContainer = document.getElementById('delayResponsibleDesigners');
+        if (designersContainer) {
+            let dHtml = '';
+            allDesigners.forEach(d => {
+                const checked = existingResponsible.includes(d.id) ? 'checked' : '';
+                dHtml += `<label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" class="delay-responsible-checkbox rounded border-gray-300 text-brand-500 focus:ring-brand-500" value="${d.id}" data-role="DESIGNER" ${checked}>
+                    <span class="text-sm text-gray-700">${d.name}</span>
+                </label>`;
+            });
+            designersContainer.innerHTML = dHtml;
+        }
+        
+        // Populate manager checkboxes
+        const managersContainer = document.getElementById('delayResponsibleManagers');
+        if (managersContainer) {
+            let mHtml = '';
+            allManagers.forEach(m => {
+                const checked = existingResponsible.includes(m.id) ? 'checked' : '';
+                mHtml += `<label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" class="delay-responsible-checkbox rounded border-gray-300 text-brand-500 focus:ring-brand-500" value="${m.id}" data-role="MANAGER" ${checked}>
+                    <span class="text-sm text-gray-700">${m.name}</span>
+                </label>`;
+            });
+            managersContainer.innerHTML = mHtml;
+        }
+        
+        // Show/hide the responsible section based on whether delay reason has content
+        toggleDelayResponsibleVisibility();
     } catch (err) {
         document.getElementById('delayReasonStageLabel').textContent = `Stage: ${stageIndex + 1}`;
     }
-    
     document.getElementById('delayReasonModal').classList.remove('hidden');
+    
+    // Add onchange listener to delay reason textarea for toggling responsible section
+    const reasonInput = document.getElementById('delayReasonInput');
+    if (reasonInput) {
+        reasonInput.oninput = toggleDelayResponsibleVisibility;
+    }
 }
 
 function closeDelayReasonModal() {
     document.getElementById('delayReasonModal').classList.add('hidden');
     pendingCompleteStageIndex = null;
+    // Reset responsible checkboxes
+    document.querySelectorAll('.delay-responsible-checkbox').forEach(cb => cb.checked = false);
+}
+
+function toggleDelayResponsibleVisibility() {
+    const reasonInput = document.getElementById('delayReasonInput');
+    const section = document.getElementById('delayResponsibleSection');
+    if (reasonInput && section) {
+        section.classList.toggle('hidden', !reasonInput.value.trim());
+    }
 }
 
 async function confirmMarkComplete() {
     if (pendingCompleteStageIndex === null) return;
     const delayReason = document.getElementById('delayReasonInput').value.trim();
-    console.log('[APP] confirmMarkComplete: Marking stage', pendingCompleteStageIndex, 'complete for project', selectedProjectId, 'delay_reason:', delayReason || '(none)');
+    
+    // Collect checked responsible user IDs
+    const delayResponsible = [];
+    document.querySelectorAll('.delay-responsible-checkbox:checked').forEach(cb => {
+        delayResponsible.push(parseInt(cb.value));
+    });
+    
+    console.log('[APP] confirmMarkComplete: Marking stage', pendingCompleteStageIndex, 'complete for project', selectedProjectId, 'delay_reason:', delayReason || '(none)', 'delay_responsible:', delayResponsible);
     try {
-        await api.completeStage(selectedProjectId, pendingCompleteStageIndex, delayReason || undefined);
+        await api.completeStage(selectedProjectId, pendingCompleteStageIndex, delayReason || undefined, delayResponsible.length > 0 ? delayResponsible : undefined);
         populateProjectDetails();
         
         // Fetch project to get phase_type-aware stage name for toast

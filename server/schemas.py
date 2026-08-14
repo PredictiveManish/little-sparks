@@ -83,8 +83,17 @@ class PhaseResponse(BaseModel):
     deadline: str
     designer_update: str
     delay_reason: str
+    delay_responsible: List[int] = []
     completed_at: Optional[str] = None
     assigned_designer_ids: List[int] = []
+
+    class Config:
+        from_attributes = True
+
+
+class DelayResponsibility(BaseModel):
+    delay_reason: Optional[str] = None
+    delay_responsible: List[int] = []  # User IDs who are responsible for the delay
 
     class Config:
         from_attributes = True
@@ -182,6 +191,8 @@ class DelayTrendPoint(BaseModel):
     month: str
     total_delay_days: int
     delayed_projects: int
+    responsible_designer_ids: List[int] = []
+    responsible_manager_ids: List[int] = []
 
 
 class MonthlyTrendPoint(BaseModel):
@@ -201,6 +212,7 @@ class DesignerComparisonItem(BaseModel):
     delayed: int = 0
     on_time_rate: Optional[float] = None
     avg_delay_days: Optional[float] = None
+    delay_responsibility_count: int = 0
 
 
 class DesignerTrendPoint(BaseModel):
@@ -209,6 +221,7 @@ class DesignerTrendPoint(BaseModel):
     on_time_rate: Optional[float] = None
     stages_completed: int = 0
     avg_delay_days: Optional[float] = None
+    delay_responsibility_count: int = 0
 
 
 # ---------- Stage Actions ----------

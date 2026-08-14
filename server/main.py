@@ -1268,9 +1268,19 @@ def delay_trend(
             if delay_days > 0:
                 month = completed_dt.strftime("%Y-%m")
                 if month not in monthly:
-                    monthly[month] = {"total_delay_days": 0, "delayed_projects": 0}
+                    monthly[month] = {"total_delay_days": 0, "delayed_projects": 0, "responsible_designer_ids": [], "responsible_manager_ids": []}
                 monthly[month]["total_delay_days"] += delay_days
                 monthly[month]["delayed_projects"] += 1
+                # Track responsible user IDs
+                if ph.delay_responsible:
+                    for uid in ph.delay_responsible:
+                        user_obj = db.query(User).filter(User.id == uid).first()
+                        if user_obj:
+                            role = user_obj.role.upper()
+                            if role == "DESIGNER" and uid not in monthly[month]["responsible_designer_ids"]:
+                                monthly[month]["responsible_designer_ids"].append(uid)
+                            elif role == "MANAGER" and uid not in monthly[month]["responsible_manager_ids"]:
+                                monthly[month]["responsible_manager_ids"].append(uid)
         except Exception:
             continue
     result = []
@@ -1279,18 +1289,25 @@ def delay_trend(
             month=month,
             total_delay_days=monthly[month]["total_delay_days"],
             delayed_projects=monthly[month]["delayed_projects"],
+            responsible_designer_ids=monthly[month]["responsible_designer_ids"],
+            responsible_manager_ids=monthly[month]["responsible_manager_ids"],
         ))
     # Zero-fill: generate full 6-month calendar window ending with current month
     if result:
         last_month = datetime.strptime(result[-1].month, "%Y-%m")
         for i in range(6):
-            month_dt = last_month - timedelta(months=i)
+            total_months = last_month.year * 12 + (last_month.month - 1) - i
+            new_year = total_months // 12
+            new_month = total_months % 12 + 1
+            month_dt = datetime(new_year, new_month, 1)
             month_str = month_dt.strftime("%Y-%m")
             if month_str not in monthly:
                 result.append(DelayTrendPoint(
                     month=month_str,
                     total_delay_days=0,
                     delayed_projects=0,
+                    responsible_designer_ids=[],
+                    responsible_manager_ids=[],
                 ))
         result.sort(key=lambda x: x.month)
     return result
@@ -1745,11 +1762,16 @@ async def update_project(
     )
 
 
+class _CompleteStageBody(BaseModel):
+    delay_reason: Optional[str] = None
+    delay_responsible: Optional[List[int]] = None
+
+
 @app.post("/api/projects/{project_id}/stages/{stage_index}/complete")
 async def complete_stage(
     project_id: int,
     stage_index: int,
-    delay_reason: Optional[str] = Query(None),
+    body: _CompleteStageBody = Body(default=_CompleteStageBody()),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1789,12 +1811,16 @@ async def complete_stage(
                 status_code=400, detail="Complete the previous stage first!"
             )
 
-    if delay_reason:
+    if body.delay_reason:
         old_reason = phases[stage_index].delay_reason or ""
         if old_reason and old_reason not in ("On time", ""):
-            phases[stage_index].delay_reason = f"{old_reason} (Revised: {delay_reason})"
+            phases[stage_index].delay_reason = f"{old_reason} (Revised: {body.delay_reason})"
         else:
-            phases[stage_index].delay_reason = delay_reason
+            phases[stage_index].delay_reason = body.delay_reason
+
+    # Store delay responsibility if delay_reason is provided and there's an actual delay
+    if body.delay_responsible and body.delay_responsible != []:
+        phases[stage_index].delay_responsible = body.delay_responsible
 
     now = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
     phases[stage_index].completed_at = now
@@ -6682,9 +6708,14 @@ async def get_designer_comparison(
 
         on_time_rate = None
         avg_delay = None
+        delay_responsibility_count = 0
         if stages_completed > 0:
             on_time_rate = round((on_time / stages_completed) * 100, 1)
             avg_delay = round(total_delay / stages_completed, 1)
+            # Count how many times this designer was marked as responsible
+            for ph in phases:
+                if ph.delay_responsible:
+                    delay_responsibility_count += ph.delay_responsible.count(designer.id)
 
         result.append(DesignerComparisonItem(
             designer_id=designer.id,
@@ -6694,6 +6725,7 @@ async def get_designer_comparison(
             delayed=delayed,
             on_time_rate=on_time_rate,
             avg_delay_days=avg_delay,
+            delay_responsibility_count=delay_responsibility_count,
         ))
 
     # Sort by on_time_rate descending (None values last)
@@ -6742,7 +6774,7 @@ async def get_designer_performance_trend(
             m += 12
             y -= 1
         month_key = f"{y}-{m:02d}"
-        monthly_data[month_key] = {"stages": 0, "delay_days": 0, "on_time": 0}
+        monthly_data[month_key] = {"stages": 0, "delay_days": 0, "on_time": 0, "delay_responsibility_count": 0}
 
     for ph in phases:
         try:
@@ -6766,6 +6798,9 @@ async def get_designer_performance_trend(
             monthly_data[month_key]["delay_days"] += delay_days
             if delay_days == 0:
                 monthly_data[month_key]["on_time"] += 1
+            # Count delay responsibility for this designer
+            if ph.delay_responsible:
+                monthly_data[month_key]["delay_responsibility_count"] += ph.delay_responsible.count(designer_id)
         except Exception:
             continue
 
@@ -6782,6 +6817,7 @@ async def get_designer_performance_trend(
             on_time_rate=on_time_rate,
             stages_completed=data["stages"],
             avg_delay_days=avg_delay,
+            delay_responsibility_count=data["delay_responsibility_count"],
         ))
 
     return result

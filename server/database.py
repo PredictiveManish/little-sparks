@@ -154,7 +154,7 @@ def _migrate_stage_reports_table():
         from sqlalchemy import inspect
 
         inspector = inspect(engine)
-        existing_tables = {t["name"] for t in inspector.get_tables()}
+        existing_tables = {t["name"] for t in inspector.get_table_names()}
         if "stage_reports" in existing_tables:
             return
         logger.info("Adding stage_reports table")
@@ -195,6 +195,14 @@ def _migrate_stage_report_completion_columns():
         )
 
 
+def _migrate_phase_responsible_column():
+    """Add delay_responsible column to phases table if missing.
+    Safe to run on every startup — no-op if already present."""
+    is_sqlite = "sqlite" in DATABASE_URL
+    json_type = "TEXT" if is_sqlite else "JSON"
+    _add_column_if_missing("phases", "delay_responsible", f"{json_type} DEFAULT '[]'")
+
+
 def _migrate_slack_completion_tracker_table():
     """Add slack_completion_tracker table if it doesn't exist.
     Safe to run on every startup — no-op if already present."""
@@ -202,7 +210,7 @@ def _migrate_slack_completion_tracker_table():
         from sqlalchemy import inspect
 
         inspector = inspect(engine)
-        existing_tables = {t["name"] for t in inspector.get_tables()}
+        existing_tables = {t["name"] for t in inspector.get_table_names()}
         if "slack_completion_tracker" in existing_tables:
             return
         logger.info("Adding slack_completion_tracker table")
@@ -227,4 +235,5 @@ def init_db():
     _migrate_stage_reports_table()
     _migrate_stage_report_completion_columns()
     _migrate_slack_completion_tracker_table()
+    _migrate_phase_responsible_column()
     init_wal_mode()
