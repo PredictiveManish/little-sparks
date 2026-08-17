@@ -185,7 +185,7 @@ async function checkAuth() {
 }
 
 function showPage(pageId, { updateUrl = true } = {}) {
-    ['loginPage', 'pendingPage', 'designerLandingPage', 'designerRestrictedPage', 'adminPage', 'mainApp'].forEach(id => {
+    ['loginPage', 'pendingPage', 'designerLandingPage', 'designerRestrictedPage', 'mainApp'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             if (id === pageId) {
@@ -214,7 +214,6 @@ function showPage(pageId, { updateUrl = true } = {}) {
 const PAGE_TO_PATH = {
     loginPage: '/login',
     pendingPage: '/pending',
-    adminPage: '/admin',
     mainApp: '/home',
 };
 
@@ -297,8 +296,8 @@ async function handleSlackCallback() {
                     showPage('pendingPage');
                     document.getElementById('pendingRole').textContent = user.requested_role || 'Designer';
                 } else if (user.role === 'ADMIN') {
-                    showPage('adminPage');
-                    loadPendingUsers();
+                    showPage('mainApp');
+                    navigateTo('dashboard');
                 } else {
                     showPage('mainApp');
                     navigateTo('dashboard');
@@ -343,8 +342,8 @@ async function emailLogin(event) {
                 showPage('pendingPage');
                 document.getElementById('pendingRole').textContent = result.user.requested_role || 'Designer';
             } else if (result.user.role === 'ADMIN') {
-                showPage('adminPage');
-                loadPendingUsers();
+                showPage('mainApp');
+                navigateTo('dashboard');
             } else {
                 showPage('mainApp');
                 navigateTo('dashboard');
@@ -374,82 +373,25 @@ async function logout() {
 // ADMIN: Pending Users
 // ============================================
 
-async function loadPendingUsers() {
-    const container = document.getElementById('pendingUsersList');
-    console.log('[APP] loadPendingUsers: Loading pending users');
-    try {
-        const users = await api.getPendingUsers();
-        console.log('[APP] loadPendingUsers: Received', users?.length || 0, 'pending users');
-        if (!users || users.length === 0) {
-            container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No pending users.</p>';
-            return;
-        }
-        let html = '';
-        users.forEach(u => {
-            html += `
-                <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <div>
-                        <p class="font-semibold text-gray-900">${u.name}</p>
-                        <p class="text-xs text-gray-500">${u.email}</p>
-                        <p class="text-xs text-gray-400 mt-1">Requested: ${u.requested_role || 'Designer'}</p>
-                    </div>
-                    <div class="flex gap-2">
-                        <button onclick="approveUser(${u.id}, 'DESIGNER')" class="px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-medium hover:bg-green-600 transition-colors">
-                            Approve as Designer
-                        </button>
-                        <button onclick="approveUser(${u.id}, 'MANAGER')" class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors">
-                            Approve as Manager
-                        </button>
-                        <button onclick="denyUser(${u.id})" class="px-3 py-1.5 bg-white text-gray-600 rounded-lg text-xs font-medium border border-gray-300 hover:bg-gray-100 transition-colors">
-                            Deny
-                        </button>
-                    </div>
-                </div>
-            `;
-        });
-        container.innerHTML = html;
-    } catch (err) {
-        console.error('[APP] loadPendingUsers: Failed to load pending users:', err.message);
-        container.innerHTML = '<p class="text-sm text-red-400 text-center py-4">Failed to load pending users.</p>';
-    }
-}
-
 async function approveUser(userId, role) {
     if (!confirm(`Approve this user as ${role}?`)) return;
     try {
         await api.approveUser(userId, role);
         showToast('User approved as ' + role);
-        // Refresh the designers page to show the newly approved user
-        if (currentView === 'designers') {
-            populateDesignersPage();
-        } else {
-            loadPendingUsers();
-        }
+        populateDesignersPage();
     } catch (err) {
         showToast('Failed: ' + err.message);
     }
 }
 
-async function rejectUser(userId, btn) {
+async function rejectUser(userId) {
     if (!confirm('Reject this user? They will need to contact an admin again.')) return;
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = 'Rejecting...';
-    }
     try {
         await api.deleteDesigner(userId);
         showToast('User rejected');
-        if (currentView === 'designers') {
-            populateDesignersPage();
-        } else {
-            loadPendingUsers();
-        }
+        populateDesignersPage();
     } catch (err) {
-        showToast('Failed: ' + err.message);
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = 'Reject';
-        }
+        showToast(err.message);
     }
 }
 
@@ -466,7 +408,7 @@ async function denyUser(userId) {
         }
         db.close();
         showToast('User denied');
-        loadPendingUsers();
+        populateDesignersPage();
     } catch (err) {
         console.error('[APP] denyUser: Failed to deny user:', err.message);
         showToast('Failed: ' + err.message);
@@ -582,56 +524,6 @@ async function loadDashboard() {
         document.getElementById('statOnTime').textContent = stats.on_time;
         document.getElementById('statCompleted').textContent = stats.completed;
         document.getElementById('statDelayed').textContent = stats.delayed;
-
-        // Show pending requests card for admin only
-        if (USER_ROLE === 'ADMIN') {
-            try {
-                const pendingUsers = await api.getPendingUsers();
-                const pendingCard = document.getElementById('pendingRequestsCard');
-                const pendingList = document.getElementById('pendingRequestsList');
-                const pendingBadge = document.getElementById('pendingBadge');
-
-                if (pendingUsers && pendingUsers.length > 0) {
-                    pendingCard.classList.remove('hidden');
-                    pendingBadge.textContent = pendingUsers.length;
-                    pendingBadge.classList.remove('hidden');
-
-                    let pendingHtml = '';
-                    pendingUsers.forEach(u => {
-                        pendingHtml += `
-                            <div class="flex items-center justify-between p-4 bg-amber-50 rounded-lg border border-amber-200">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center text-amber-700 font-bold">${u.name.charAt(0)}</div>
-                                    <div>
-                                        <p class="text-sm font-semibold text-gray-900">${u.name}</p>
-                                        <p class="text-xs text-gray-500">${u.email}</p>
-                                        <p class="text-xs text-amber-600 mt-0.5">Requested role: ${u.requested_role || 'Designer'}</p>
-                                    </div>
-                                </div>
-                                <div class="flex gap-2">
-                                    <button onclick="approveUser(${u.id}, 'DESIGNER')" class="px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-medium hover:bg-green-600 transition-colors">
-                                        Approve as Designer
-                                    </button>
-                                    <button onclick="approveUser(${u.id}, 'MANAGER')" class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors">
-                                        Approve as Manager
-                                    </button>
-                                    <button onclick="rejectUser(${u.id})" class="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors border border-red-200">
-                                        Reject
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    pendingList.innerHTML = pendingHtml;
-                } else {
-                    pendingCard.classList.add('hidden');
-                }
-            } catch (pendingErr) {
-                console.warn('[APP] loadDashboard: Failed to load pending users:', pendingErr.message);
-            }
-        } else {
-            document.getElementById('pendingRequestsCard').classList.add('hidden');
-        }
 
         // Dashboard Charts
         try {
@@ -1398,6 +1290,49 @@ async function populateDesignersPage() {
             `;
         });
         container.innerHTML = html;
+
+        // Load pending approvals for admins
+        if (USER_ROLE === 'ADMIN') {
+            try {
+                const pendingUsers = await api.getPendingUsers();
+                const pendingSection = document.getElementById('pendingApprovalsSection');
+                const pendingList = document.getElementById('pendingApprovalsList');
+                const pendingBadge = document.getElementById('pendingBadge');
+                if (pendingUsers && pendingUsers.length > 0) {
+                    pendingSection.classList.remove('hidden');
+                    pendingBadge.textContent = pendingUsers.length;
+                    pendingBadge.classList.remove('hidden');
+                    let pendingHtml = '';
+                    pendingUsers.forEach(u => {
+                        pendingHtml += `
+                            <div class="flex items-center justify-between p-4 bg-amber-50 rounded-lg border border-amber-200">
+                                <div>
+                                    <p class="font-semibold text-gray-900">${u.name}</p>
+                                    <p class="text-xs text-gray-500">${u.email}</p>
+                                    <p class="text-xs text-gray-400 mt-1">Requested: ${u.requested_role || 'Designer'}</p>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="approveUser(${u.id}, 'DESIGNER')" class="px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-medium hover:bg-green-600 transition-colors">
+                                        Approve as Designer
+                                    </button>
+                                    <button onclick="approveUser(${u.id}, 'MANAGER')" class="px-3 py-1.5 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors">
+                                        Approve as Manager
+                                    </button>
+                                    <button onclick="rejectUser(${u.id})" class="px-3 py-1.5 bg-white text-gray-600 rounded-lg text-xs font-medium border border-gray-300 hover:bg-gray-100 transition-colors">
+                                        Deny
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    pendingList.innerHTML = pendingHtml;
+                } else {
+                    pendingSection.classList.add('hidden');
+                }
+            } catch (pendingErr) {
+                console.error('[APP] Failed to load pending approvals:', pendingErr.message);
+            }
+        }
     } catch (err) {
         showToast('Failed to load designers: ' + err.message);
     }
@@ -3638,7 +3573,6 @@ async function loadWeeklyReport() {
         // Categorize stages for operational view
         const updatedStages = [];
         const overdueStages = [];
-        const noUpdateStages = [];
         
         report.reports.forEach(item => {
             const hasActivity = item.activities && item.activities.length > 0;
@@ -3649,8 +3583,6 @@ async function loadWeeklyReport() {
                 updatedStages.push(item);
             } else if (delayed) {
                 overdueStages.push(item);
-            } else if (!hasActivity && item.progress < 100) {
-                noUpdateStages.push(item);
             } else if (hasActivity) {
                 updatedStages.push(item);
             }
@@ -3780,26 +3712,7 @@ async function loadWeeklyReport() {
             html += '</div></div>';
         }
         
-        // Section 3: No update this week
-        if (noUpdateStages.length > 0) {
-            html += '<div class="bg-white rounded-xl border border-amber-200 shadow-sm p-6">';
-            html += '<h3 class="text-sm font-semibold text-amber-700 mb-4">🔔 No Update This Week — Needs Nudge</h3>';
-            html += '<div class="space-y-3">';
-            noUpdateStages.forEach(item => {
-                html += `
-                    <div class="bg-amber-50 rounded-lg p-4 border border-amber-200">
-                        <div class="flex items-center justify-between mb-2">
-                            <h4 class="font-semibold text-amber-900">${item.stage_name}</h4>
-                            <span class="text-xs font-medium px-2 py-1 rounded-full bg-amber-200 text-amber-800">No Activity</span>
-                        </div>
-                        <p class="text-xs text-amber-700">${item.assigned_designer} — Progress: ${item.progress}% — Deadline: ${formatDate(item.deadline)}</p>
-                    </div>
-                `;
-            });
-            html += '</div></div>';
-        }
-        
-        if (updatedStages.length === 0 && overdueStages.length === 0 && noUpdateStages.length === 0) {
+        if (updatedStages.length === 0 && overdueStages.length === 0) {
             html += '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center text-gray-400"><p>No activity detected for this week.</p></div>';
         }
         
@@ -4258,21 +4171,30 @@ async function loadDesignerPerformance() {
         const chartsContainer = document.getElementById('designerPerfCharts');
         if (chartsContainer) chartsContainer.classList.remove('hidden');
 
+        // Update chart title based on period
+        const trendTitle = document.getElementById('designerPerfTrendTitle');
+        if (trendTitle) {
+            trendTitle.textContent = period === 'weekly' ? 'Delay Trend (Last 8 Weeks)' : 'Delay Trend (Last 6 Months)';
+        }
+
         // Render Designer Performance Charts
         try {
-            // 1. 6-month on-time rate trend line
+            // 1. On-time rate trend line (period-aware)
             try {
-                const trendData = await api.getDesignerPerformanceTrend(parseInt(designerId));
+                const trendData = await api.getDesignerPerformanceTrend(parseInt(designerId), period);
                 if (trendData && trendData.length > 0) {
                     const sortedTrend = [...trendData].sort((a, b) => a.month.localeCompare(b.month));
-                    const trendMonths = sortedTrend.map(t => {
+                    const trendLabels = sortedTrend.map(t => {
+                        if (period === 'weekly') {
+                            return t.month;
+                        }
                         const [y, m] = t.month.split('-');
                         return new Date(y, m - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' });
                     });
                     renderChart('designerDelayTrendChart', {
                         type: 'line',
                         data: {
-                            labels: trendMonths,
+                            labels: trendLabels,
                             datasets: [{
                                 label: 'On-Time Rate (%)',
                                 data: sortedTrend.map(t => t.on_time_rate),

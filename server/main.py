@@ -6506,7 +6506,8 @@ async def get_designer_comparison(
     # Build period date range
     if period == "weekly" and week_start and week_end:
         period_start = week_start
-        period_end = week_end
+        week_end_dt = datetime.strptime(week_end, "%Y-%m-%d") + timedelta(days=1)
+        period_end = week_end_dt.strftime("%Y-%m-%d")
     elif period == "monthly" and month and year:
         period_start = f"{year}-{month:02d}-01"
         if month == 12:
@@ -6599,6 +6600,7 @@ async def get_designer_comparison(
 @app.get("/api/designers/{designer_id}/performance/trend", response_model=List[DesignerTrendPoint])
 async def get_designer_performance_trend(
     designer_id: int,
+    period: str = Query("monthly", regex="^(weekly|monthly)$"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -6625,61 +6627,114 @@ async def get_designer_performance_trend(
         .all()
     )
 
-    # Group by month for last 6 months
-    monthly_data = {}
-    now = datetime.now(IST).replace(tzinfo=None)
-    for i in range(6):
-        m = now.month - i
-        y = now.year
-        while m <= 0:
-            m += 12
-            y -= 1
-        month_key = f"{y}-{m:02d}"
-        monthly_data[month_key] = {"stages": 0, "delay_days": 0, "on_time": 0, "delay_responsibility_count": 0}
+    if period == "weekly":
+        # Group by week (ISO week) for last 8 weeks
+        weekly_data = {}
+        now = datetime.now(IST).replace(tzinfo=None)
+        for i in range(8):
+            week_dt = now - timedelta(weeks=i)
+            _, iso_week, _ = week_dt.isocalendar()
+            week_key = f"W{iso_week:02d}"
+            weekly_data[week_key] = {"stages": 0, "delay_days": 0, "on_time": 0, "delay_responsibility_count": 0}
 
-    for ph in phases:
-        try:
-            comp_str = ph.completed_at
-            if isinstance(comp_str, str):
-                comp_str = comp_str[:10]
-            comp_dt = datetime.strptime(comp_str, "%Y-%m-%d")
-            month_key = comp_dt.strftime("%Y-%m")
-            if month_key not in monthly_data:
+        for ph in phases:
+            try:
+                comp_str = ph.completed_at
+                if isinstance(comp_str, str):
+                    comp_str = comp_str[:10]
+                comp_dt = datetime.strptime(comp_str, "%Y-%m-%d")
+                iso_year, iso_week, _ = comp_dt.isocalendar()
+                week_key = f"{iso_year}-W{iso_week:02d}"
+                if week_key not in weekly_data:
+                    continue
+
+                delay_days = 0
+                if ph.deadline:
+                    try:
+                        deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+                        delay_days = max(0, (comp_dt.date() - deadline_dt.date()).days)
+                    except Exception:
+                        pass
+
+                weekly_data[week_key]["stages"] += 1
+                weekly_data[week_key]["delay_days"] += delay_days
+                if delay_days == 0:
+                    weekly_data[week_key]["on_time"] += 1
+                if ph.delay_responsible:
+                    weekly_data[week_key]["delay_responsibility_count"] += ph.delay_responsible.count(designer_id)
+            except Exception:
                 continue
 
-            delay_days = 0
-            if ph.deadline:
-                try:
-                    deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
-                    delay_days = max(0, (comp_dt.date() - deadline_dt.date()).days)
-                except Exception:
-                    pass
+        result = []
+        for week_key in sorted(weekly_data.keys()):
+            data = weekly_data[week_key]
+            on_time_rate = None
+            avg_delay = None
+            if data["stages"] > 0:
+                on_time_rate = round((data["on_time"] / data["stages"]) * 100, 1)
+                avg_delay = round(data["delay_days"] / data["stages"], 1)
+            result.append(DesignerTrendPoint(
+                month=week_key,
+                on_time_rate=on_time_rate,
+                stages_completed=data["stages"],
+                avg_delay_days=avg_delay,
+                delay_responsibility_count=data["delay_responsibility_count"],
+            ))
+    else:
+        # Group by month for last 6 months
+        monthly_data = {}
+        now = datetime.now(IST).replace(tzinfo=None)
+        for i in range(6):
+            m = now.month - i
+            y = now.year
+            while m <= 0:
+                m += 12
+                y -= 1
+            month_key = f"{y}-{m:02d}"
+            monthly_data[month_key] = {"stages": 0, "delay_days": 0, "on_time": 0, "delay_responsibility_count": 0}
 
-            monthly_data[month_key]["stages"] += 1
-            monthly_data[month_key]["delay_days"] += delay_days
-            if delay_days == 0:
-                monthly_data[month_key]["on_time"] += 1
-            # Count delay responsibility for this designer
-            if ph.delay_responsible:
-                monthly_data[month_key]["delay_responsibility_count"] += ph.delay_responsible.count(designer_id)
-        except Exception:
-            continue
+        for ph in phases:
+            try:
+                comp_str = ph.completed_at
+                if isinstance(comp_str, str):
+                    comp_str = comp_str[:10]
+                comp_dt = datetime.strptime(comp_str, "%Y-%m-%d")
+                month_key = comp_dt.strftime("%Y-%m")
+                if month_key not in monthly_data:
+                    continue
 
-    result = []
-    for month_key in sorted(monthly_data.keys(), reverse=True):
-        data = monthly_data[month_key]
-        on_time_rate = None
-        avg_delay = None
-        if data["stages"] > 0:
-            on_time_rate = round((data["on_time"] / data["stages"]) * 100, 1)
-            avg_delay = round(data["delay_days"] / data["stages"], 1)
-        result.append(DesignerTrendPoint(
-            month=month_key,
-            on_time_rate=on_time_rate,
-            stages_completed=data["stages"],
-            avg_delay_days=avg_delay,
-            delay_responsibility_count=data["delay_responsibility_count"],
-        ))
+                delay_days = 0
+                if ph.deadline:
+                    try:
+                        deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+                        delay_days = max(0, (comp_dt.date() - deadline_dt.date()).days)
+                    except Exception:
+                        pass
+
+                monthly_data[month_key]["stages"] += 1
+                monthly_data[month_key]["delay_days"] += delay_days
+                if delay_days == 0:
+                    monthly_data[month_key]["on_time"] += 1
+                if ph.delay_responsible:
+                    monthly_data[month_key]["delay_responsibility_count"] += ph.delay_responsible.count(designer_id)
+            except Exception:
+                continue
+
+        result = []
+        for month_key in sorted(monthly_data.keys(), reverse=True):
+            data = monthly_data[month_key]
+            on_time_rate = None
+            avg_delay = None
+            if data["stages"] > 0:
+                on_time_rate = round((data["on_time"] / data["stages"]) * 100, 1)
+                avg_delay = round(data["delay_days"] / data["stages"], 1)
+            result.append(DesignerTrendPoint(
+                month=month_key,
+                on_time_rate=on_time_rate,
+                stages_completed=data["stages"],
+                avg_delay_days=avg_delay,
+                delay_responsibility_count=data["delay_responsibility_count"],
+            ))
 
     return result
 

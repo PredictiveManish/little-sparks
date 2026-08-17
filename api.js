@@ -126,7 +126,7 @@ const api = {
     },
 
     // Reports — Designer Performance Trend (6 months)
-    getDesignerPerformanceTrend: (designerId) => apiFetch(`/designers/${designerId}/performance/trend`),
+    getDesignerPerformanceTrend: (designerId, period) => apiFetch(`/designers/${designerId}/performance/trend?period=${period}`),
 
     // Report downloads (CSV / PDF) via fetch+blob
     downloadReportCSV: async (endpoint) => {
