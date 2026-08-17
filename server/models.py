@@ -111,6 +111,7 @@ class Phase(Base):
     designer_update = Column(Text, default="")
     delay_reason = Column(Text, default="")
     delay_responsible = Column(JSON, default=list)
+    manager_remarks = Column(Text, nullable=True)
     completed_at = Column(String, default=None, nullable=True)
     assigned_designer_ids = Column(JSON, default=list)
     deadline_reminder_sent = Column(Boolean, default=False)

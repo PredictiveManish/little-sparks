@@ -87,6 +87,7 @@ class PhaseResponse(BaseModel):
     designer_update: str
     delay_reason: str
     delay_responsible: List[int] = []
+    manager_remarks: Optional[str] = None
     completed_at: Optional[str] = None
     assigned_designer_ids: List[int] = []
 
@@ -413,6 +414,7 @@ class PhaseReportItem(BaseModel):
     assigned_designer_ids: List[int] = []
     is_current: bool = False
     delay_days: int = 0
+    manager_remarks: Optional[str] = None
 
 
 class WeeklyReportResponse(BaseModel):
@@ -449,6 +451,7 @@ class WeeklyReportItem(BaseModel):
     progress_change: int = 0
     delay_occurred: bool = False
     delay_days: int = 0
+    manager_remarks: Optional[str] = None
 
 
 class MonthlyReportResponse(BaseModel):
@@ -487,6 +490,7 @@ class MonthlyReportItem(BaseModel):
     avg_ratings: Optional[dict] = None
     rating_trends: Optional[dict] = None
     activities: List[MonthlyActivityItem] = []
+    manager_remarks: Optional[str] = None
 
 
 class DesignerPerformanceResponse(BaseModel):
@@ -515,6 +519,7 @@ class DesignerProjectItem(BaseModel):
     delay_reason: str = ""
     updates_count: int = 0
     delays_count: int = 0
+    manager_remarks: Optional[str] = None
 
 
 # ---------- Slack Completion Tracker ----------

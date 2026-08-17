@@ -77,10 +77,11 @@ const api = {
     getProject: (id) => apiFetch(`/projects/${id}`),
     createProject: (data) => apiFetch('/projects', { method: 'POST', body: data }),
     updateProject: (id, data) => apiFetch(`/projects/${id}`, { method: 'PUT', body: data }),
-    completeStage: (id, stageIndex, delayReason = undefined, delayResponsible = undefined) => {
+    completeStage: (id, stageIndex, delayReason = undefined, delayResponsible = undefined, managerRemarks = undefined) => {
         const body = {};
         if (delayReason !== undefined) body.delay_reason = delayReason;
         if (delayResponsible !== undefined) body.delay_responsible = delayResponsible;
+        if (managerRemarks !== undefined) body.manager_remarks = managerRemarks;
         return apiFetch(`/projects/${id}/stages/${stageIndex}/complete`, { method: 'POST', body });
     },
     unmarkStage: (id, stageIndex) => apiFetch(`/projects/${id}/stages/${stageIndex}/unmark`, { method: 'POST' }),

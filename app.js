@@ -799,6 +799,27 @@ async function populateProjectDetails() {
         });
         tracker.innerHTML = trackerHTML;
 
+        // Manager remarks callout from previous stage
+        const currentPhaseIdx = project.stage_index;
+        const prevPhase = project.phases.find(p => p.stage_index === currentPhaseIdx - 1);
+        let remarksCalloutHTML = '';
+        if (prevPhase && prevPhase.manager_remarks && prevPhase.manager_remarks.trim()) {
+            const prevStageName = stages[prevPhase.stage_index] || `Stage ${prevPhase.stage_index + 1}`;
+            remarksCalloutHTML = `
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+                    <div class="flex items-start gap-3">
+                        <svg class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <div>
+                            <p class="text-sm font-semibold text-amber-800 mb-1">Manager remarks from ${prevStageName}</p>
+                            <p class="text-sm text-amber-700 whitespace-pre-wrap">${prevPhase.manager_remarks}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         // Stage cards
         const cardsContainer = document.getElementById('stageCardsContainer');
         let cardsHTML = '';
@@ -1132,6 +1153,7 @@ async function markStageComplete(stageIndex) {
     console.log('[APP] markStageComplete: Opening delay reason modal for stage', stageIndex, 'on project', selectedProjectId);
     pendingCompleteStageIndex = stageIndex;
     document.getElementById('delayReasonInput').value = '';
+    document.getElementById('managerRemarksInput').value = '';
     
     // Fetch project to get phase_type-aware stage name and pre-populate responsible checkboxes
     try {
@@ -1207,6 +1229,7 @@ function toggleDelayResponsibleVisibility() {
 async function confirmMarkComplete() {
     if (pendingCompleteStageIndex === null) return;
     const delayReason = document.getElementById('delayReasonInput').value.trim();
+    const managerRemarks = document.getElementById('managerRemarksInput').value.trim();
     
     // Collect checked responsible user IDs
     const delayResponsible = [];
@@ -1214,9 +1237,9 @@ async function confirmMarkComplete() {
         delayResponsible.push(parseInt(cb.value));
     });
     
-    console.log('[APP] confirmMarkComplete: Marking stage', pendingCompleteStageIndex, 'complete for project', selectedProjectId, 'delay_reason:', delayReason || '(none)', 'delay_responsible:', delayResponsible);
+    console.log('[APP] confirmMarkComplete: Marking stage', pendingCompleteStageIndex, 'complete for project', selectedProjectId, 'delay_reason:', delayReason || '(none)', 'delay_responsible:', delayResponsible, 'manager_remarks:', managerRemarks || '(none)');
     try {
-        await api.completeStage(selectedProjectId, pendingCompleteStageIndex, delayReason || undefined, delayResponsible.length > 0 ? delayResponsible : undefined);
+        await api.completeStage(selectedProjectId, pendingCompleteStageIndex, delayReason || undefined, delayResponsible.length > 0 ? delayResponsible : undefined, managerRemarks || undefined);
         populateProjectDetails();
         
         // Fetch project to get phase_type-aware stage name for toast
@@ -3601,7 +3624,7 @@ async function loadProjectReport() {
                     datasets: [
                         {
                             label: 'Planned Duration',
-                            data: plannedStarts.map((s, i) => [s, plannedDurations[i]]),
+                            data: plannedStarts.map((s, i) => [s, s + plannedDurations[i]]),
                             backgroundColor: 'rgba(156, 163, 175, 0.3)',
                             borderColor: 'rgba(156, 163, 175, 0.5)',
                             borderWidth: 1,
@@ -3609,7 +3632,7 @@ async function loadProjectReport() {
                         },
                         {
                             label: 'Actual Duration',
-                            data: actualStarts.map((s, i) => [s, actualDurations[i]]),
+                            data: actualStarts.map((s, i) => [s, s + actualDurations[i]]),
                             backgroundColor: actualColors,
                             borderColor: actualColors.map(c => c.replace('0.75', '1')),
                             borderWidth: 1,
@@ -3634,7 +3657,7 @@ async function loadProjectReport() {
                         legend: { position: 'bottom', labels: { font: { size: 11 } } },
                         tooltip: {
                             callbacks: {
-                                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.x}d (offset ${ctx.parsed.yStart}d)`
+                                label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.yStart}d → ${ctx.parsed.x}d`
                             }
                         }
                     }

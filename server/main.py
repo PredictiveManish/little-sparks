@@ -1767,6 +1767,7 @@ async def update_project(
 class _CompleteStageBody(BaseModel):
     delay_reason: Optional[str] = None
     delay_responsible: Optional[List[int]] = None
+    manager_remarks: Optional[str] = None
 
 
 @app.post("/api/projects/{project_id}/stages/{stage_index}/complete")
@@ -1823,6 +1824,9 @@ async def complete_stage(
     # Store delay responsibility if delay_reason is provided and there's an actual delay
     if body.delay_responsible and body.delay_responsible != []:
         phases[stage_index].delay_responsible = body.delay_responsible
+
+    if body.manager_remarks:
+        phases[stage_index].manager_remarks = body.manager_remarks
 
     now = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
     phases[stage_index].completed_at = now
@@ -2652,6 +2656,9 @@ async def notify_stage_completed(db, project_id, stage_index):
             project.slack_channel_id,
         )
     else:
+        completed_phase = next((p for p in phases if p.stage_index == stage_index), None)
+        remarks_text = completed_phase.manager_remarks if completed_phase else None
+
         blocks = [
             {
                 "type": "header",
@@ -2672,8 +2679,18 @@ async def notify_stage_completed(db, project_id, stage_index):
                     ),
                 },
             },
-            {"type": "divider"},
         ]
+
+        if remarks_text:
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f":pushpin: *Manager remarks — please apply these in {next_stage_name}:*\n{remarks_text}",
+                },
+            })
+
+        blocks.append({"type": "divider"})
         await send_slack_notification(
             db,
             project_id,
@@ -6468,6 +6485,28 @@ async def get_project_monthly_trend(
                 pass
         except Exception:
             continue
+
+    # Zero-fill the full month range from project start to deadline (or current month)
+    start_dt = datetime.strptime(project.start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(project.deadline, "%Y-%m-%d")
+    if end_dt < datetime.now():
+        end_dt = datetime.now()
+    
+    all_months = []
+    current = start_dt
+    while current <= end_dt:
+        all_months.append(current.strftime("%Y-%m"))
+        # Move to next month
+        if current.month == 12:
+            current = current.replace(year=current.year + 1, month=1, day=1)
+        else:
+            current = current.replace(month=current.month + 1, day=1)
+    
+    # Insert zero-fill entries for missing months
+    existing_months = set(monthly_data.keys())
+    for month_key in all_months:
+        if month_key not in existing_months:
+            monthly_data[month_key] = {"ratings": [], "delay_days": 0, "delayed_count": 0}
 
     result = []
     for month in sorted(monthly_data.keys()):
