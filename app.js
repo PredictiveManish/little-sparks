@@ -3966,7 +3966,7 @@ async function loadMonthlyReport() {
                     }
                 });
             }
-        } catch (chartErr) {
+        catch (chartErr) {
             console.warn('[APP] loadMonthlyReport: Failed to render charts:', chartErr.message);
         }
     } catch (err) {
