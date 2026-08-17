@@ -759,12 +759,12 @@ async function populateProjectDetails() {
         document.getElementById('detailDeadline').textContent = formatDate(project.deadline);
         document.getElementById('detailStatus').textContent = getStatusText(project.status);
 
-        const stages = getStagesForPhaseType(project.phase_type);
+        const phases = project.phases || [];
 
         // Workflow tracker
         const tracker = document.getElementById('workflowTracker');
         let trackerHTML = '';
-        stages.forEach((stage, idx) => {
+        phases.forEach((phase, idx) => {
             const isCompleted = idx < project.stage_index;
             const isCurrent = idx === project.stage_index;
             const isUpcoming = idx > project.stage_index;
@@ -792,7 +792,7 @@ async function populateProjectDetails() {
                         ${icon}
                     </div>
                     <span class="text-[10px] md:text-xs mt-1.5 text-center ${labelClass} leading-tight max-w-[60px]">${getPhaseDisplayName(project, idx)}</span>
-                    ${idx < stages.length - 1 ? `<div class="absolute top-4 left-[calc(50%+20px)] w-[calc(100%-40px)] h-0.5 ${connectorClass}" style="width:calc(100vw / ${stages.length}); max-width:60px; left:50%;"></div>` : ''}
+                    ${idx < phases.length - 1 ? `<div class="absolute top-4 left-[calc(50%+20px)] w-[calc(100%-40px)] h-0.5 ${connectorClass}" style="width:calc(100vw / ${phases.length}); max-width:60px; left:50%;"></div>` : ''}
                 </div>
             `;
         });
@@ -1432,13 +1432,14 @@ function renderPhaseDeadlines() {
     const startDateInput = document.querySelector('#page-create-project form input[type="date"]');
     const completionInput = document.querySelectorAll('#page-create-project form input[type="date"]')[1];
     const completionDate = completionInput ? completionInput.value : '';
-    const existingInputs = document.querySelectorAll('.phase-deadline-input');
+    const phaseContainer = document.getElementById('phaseDeadlinesContainer');
+    const existingInputs = phaseContainer ? phaseContainer.querySelectorAll('.phase-deadline-input') : [];
     const existingValues = {};
     existingInputs.forEach(input => {
         existingValues[input.dataset.phaseIndex] = input.value;
     });
     const existingNames = {};
-    const existingNameInputs = document.querySelectorAll('.phase-name-input');
+    const existingNameInputs = phaseContainer ? phaseContainer.querySelectorAll('.phase-name-input') : [];
     existingNameInputs.forEach(input => {
         existingNames[input.dataset.phaseIndex] = input.value;
     });
@@ -1452,7 +1453,7 @@ function renderPhaseDeadlines() {
             minDate = startDateInput ? `min="${startDateInput.value}"` : '';
         } else {
             const prevPhaseIndex = index - 1;
-            const prevPhaseInput = document.querySelector(`.phase-deadline-input[data-phase-index="${prevPhaseIndex}"]`);
+            const prevPhaseInput = phaseContainer ? phaseContainer.querySelector(`.phase-deadline-input[data-phase-index="${prevPhaseIndex}"]`) : null;
             const prevValue = prevPhaseInput ? prevPhaseInput.value : '';
             const effectivePrevDate = prevValue || completionDate;
             if (effectivePrevDate) {
@@ -1517,8 +1518,8 @@ function addPhase() {
     const ideationRadio = document.querySelector('input[name="phaseType"][value="IDEATION"]');
     const phaseType = ideationRadio && ideationRadio.checked ? 'IDEATION' : 'PRODUCTION';
     const defaultStages = getStagesForPhaseType(phaseType);
-    const existingInputs = document.querySelectorAll('.phase-deadline-input');
-    const existingNameInputs = document.querySelectorAll('.phase-name-input');
+    const existingInputs = container.querySelectorAll('.phase-deadline-input');
+    const existingNameInputs = container.querySelectorAll('.phase-name-input');
     const count = existingInputs.length;
     
     const startDateInput = document.querySelector('#page-create-project form input[type="date"]');
@@ -1527,7 +1528,7 @@ function addPhase() {
     
     let minDate = '';
     if (count > 0) {
-        const prevPhaseInput = document.querySelector(`.phase-deadline-input[data-phase-index="${count - 1}"]`);
+        const prevPhaseInput = container.querySelector(`.phase-deadline-input[data-phase-index="${count - 1}"]`);
         const prevValue = prevPhaseInput ? prevPhaseInput.value : '';
         if (prevValue) {
             minDate = `min="${prevValue}"`;
@@ -1943,8 +1944,9 @@ async function handleCreateProject(event) {
         return;
     }
 
-    const phaseDeadlineInputs = document.querySelectorAll('.phase-deadline-input');
-    const phaseNameInputs = document.querySelectorAll('.phase-name-input');
+    const phaseContainer = document.getElementById('phaseDeadlinesContainer');
+    const phaseDeadlineInputs = phaseContainer ? phaseContainer.querySelectorAll('.phase-deadline-input') : [];
+    const phaseNameInputs = phaseContainer ? phaseContainer.querySelectorAll('.phase-name-input') : [];
     const phaseDeadlines = [];
     const phaseNames = [];
     phaseDeadlineInputs.forEach(input => {
