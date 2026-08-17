@@ -3085,8 +3085,8 @@ function setReportTab(tab) {
     
     const sections = {
         project: 'reportSectionProject',
-        weekly: 'reportSectionWeekly',
-        monthly: 'reportSectionMonthly',
+        // weekly: 'reportSectionWeekly',
+        // monthly: 'reportSectionMonthly',
         designer: 'reportSectionDesigner',
         export: 'reportSectionExport',
     };
@@ -3104,8 +3104,8 @@ function setReportTab(tab) {
     
     const tabs = {
         project: 'reportTabProject',
-        weekly: 'reportTabWeekly',
-        monthly: 'reportTabMonthly',
+        // weekly: 'reportTabWeekly',
+        // monthly: 'reportTabMonthly',
         designer: 'reportTabDesigner',
         export: 'reportTabExport',
     };
@@ -3338,60 +3338,6 @@ async function loadProjectReport() {
 
         // Render Project Report Charts
         try {
-            // Rating averages radar chart
-            const ratingLabels = ['Costing', 'Willingness', 'Engagement', 'Durability', 'Age Appr.', 'Ease', 'Aesthetics', 'Store'];
-            const ratingKeys = ['costing', 'willingness_to_buy', 'engagement_life', 'durability', 'age_appropriateness', 'ease_of_use', 'aesthetics', 'easy_to_store'];
-            if (report.stage_reports && report.stage_reports.length > 0) {
-                const ratingData = ratingKeys.map(key => {
-                    const vals = report.stage_reports.map(r => r[key]).filter(v => v != null);
-                    return vals.length > 0 ? (vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
-                });
-
-                renderChart('projectRatingChart', {
-                    type: 'radar',
-                    data: {
-                        labels: ratingLabels,
-                        datasets: [{
-                            label: 'Avg Rating',
-                            data: ratingData.map(v => Math.round(v * 100) / 100),
-                            backgroundColor: 'rgba(244, 121, 32, 0.2)',
-                            borderColor: chartColors.brand,
-                            borderWidth: 2,
-                            pointBackgroundColor: ratingData.map(v => v >= 4 ? chartColors.green : v >= 3 ? chartColors.amber : chartColors.red),
-                            pointBorderColor: 'transparent',
-                            pointRadius: 4,
-                            pointHoverRadius: 6,
-                        }]
-                    },
-                    options: {
-                        ...defaultChartOptions,
-                        scales: {
-                            r: {
-                                ...defaultScaleConfig,
-                                beginAtZero: true,
-                                max: 5,
-                                ticks: { ...defaultScaleConfig.ticks, stepSize: 1 },
-                                pointLabels: { font: { size: 11, weight: '500' } },
-                                grid: { color: 'rgba(0,0,0,0.07)' },
-                                angleLines: { color: 'rgba(0,0,0,0.07)' },
-                            }
-                        },
-                        plugins: {
-                            ...defaultChartOptions.plugins,
-                            legend: { position: 'bottom', labels: { font: { size: 11 } } },
-                            tooltip: {
-                                callbacks: {
-                                    label: (ctx) => `Avg: ${ctx.parsed.r.toFixed(2)} / 5`
-                                }
-                            }
-                        }
-                    }
-                });
-            } else {
-                const radarContainer = document.getElementById('projectRatingChart')?.closest('div');
-                if (radarContainer) radarContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No rating data available.</p>';
-            }
-
             // Delay analysis by stage
             const delayLabels = report.phases.map(p => p.stage_name);
             const delayValues = report.phases.map(p => p.delay_days);
@@ -3994,67 +3940,7 @@ async function loadMonthlyReport() {
                 if (trendEl) trendEl.parentElement.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No trend data available.</p>';
             }
 
-            // 2. Rating averages radar chart (this month only)
-            if (report.reports.length > 0) {
-                const ratingKeys = ['costing', 'willingness_to_buy', 'engagement_life', 'durability', 'age_appropriateness', 'ease_of_use', 'aesthetics', 'easy_to_store'];
-                const ratingLabels = ['Costing', 'Willingness', 'Engagement', 'Durability', 'Age Appr.', 'Ease', 'Aesthetics', 'Store'];
-
-                const avgRatings = ratingKeys.map(key => {
-                    const vals = report.reports
-                        .map(r => (r.avg_ratings && r.avg_ratings[key]) !== null && (r.avg_ratings && r.avg_ratings[key]) !== undefined ? r.avg_ratings[key] : null)
-                        .filter(v => v !== null);
-                    if (vals.length === 0) return 0;
-                    return vals.reduce((a, b) => a + b, 0) / vals.length;
-                });
-
-                const hasAnyRating = avgRatings.some(v => v > 0);
-                if (hasAnyRating) {
-                    renderChart('monthlyRatingTrendChart', {
-                        type: 'radar',
-                        data: {
-                            labels: ratingLabels,
-                            datasets: [{
-                                label: 'Avg Rating',
-                                data: avgRatings.map(v => Math.round(v * 100) / 100),
-                                backgroundColor: 'rgba(244, 121, 32, 0.2)',
-                                borderColor: chartColors.brand,
-                                borderWidth: 2,
-                                pointBackgroundColor: avgRatings.map(v => v >= 4 ? chartColors.green : v >= 3 ? chartColors.amber : chartColors.red),
-                                pointBorderColor: 'transparent',
-                                pointRadius: 4,
-                                pointHoverRadius: 6,
-                            }]
-                        },
-                        options: {
-                            ...defaultChartOptions,
-                            scales: {
-                                r: {
-                                    ...defaultScaleConfig,
-                                    beginAtZero: true,
-                                    max: 5,
-                                    ticks: { ...defaultScaleConfig.ticks, stepSize: 1 },
-                                    pointLabels: { font: { size: 11, weight: '500' } },
-                                    grid: { color: 'rgba(0,0,0,0.07)' },
-                                    angleLines: { color: 'rgba(0,0,0,0.07)' },
-                                }
-                            },
-                            plugins: {
-                                ...defaultChartOptions.plugins,
-                                legend: { position: 'bottom', labels: { font: { size: 11 } } },
-                                tooltip: {
-                                    callbacks: {
-                                        label: (ctx) => `Avg: ${ctx.parsed.r.toFixed(2)} / 5`
-                                    }
-                                }
-                            }
-                        }
-                    });
-                } else {
-                    const radarContainer = document.getElementById('monthlyRatingTrendChart')?.closest('div');
-                    if (radarContainer) radarContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No rating data available.</p>';
-                }
-
-                // 3. Delay analysis bar chart (this month)
+            // 3. Delay analysis bar chart (this month)
                 renderChart('monthlyDelayChart', {
                     type: 'bar',
                     data: {
