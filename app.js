@@ -1530,7 +1530,7 @@ function addPhase() {
             <span class="w-6 h-6 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${count + 1}</span>
         </div>
         <div class="flex-1">
-            <input type="text" class="phase-name-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" value="${defaultStages[count] || 'New Phase'}" placeholder="Phase name" />
+            <input type="text" class="phase-name-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" value="" placeholder="Phase name" />
         </div>
         <div class="flex-1">
             <input type="date" class="phase-deadline-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" ${minDate} value="" />
@@ -1620,7 +1620,7 @@ function insertPhaseBelow(index) {
             <span class="w-6 h-6 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${count + 1}</span>
         </div>
         <div class="flex-1">
-            <input type="text" class="phase-name-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" value="${defaultStages[count] || 'New Phase'}" placeholder="Phase name" />
+            <input type="text" class="phase-name-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" value="" placeholder="Phase name" />
         </div>
         <div class="flex-1">
             <input type="date" class="phase-deadline-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" ${minDate} value="" />
@@ -1744,7 +1744,7 @@ function addEditPhase() {
             <span class="w-6 h-6 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${count + 1}</span>
         </div>
         <div class="flex-1">
-            <input type="text" class="phase-name-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" value="${defaultStages[count] || 'New Phase'}" placeholder="Phase name" />
+            <input type="text" class="phase-name-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" value="" placeholder="Phase name" />
         </div>
         <div class="flex-1">
             <input type="date" class="phase-deadline-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" ${minDate} value="" />
@@ -1832,7 +1832,7 @@ function insertEditPhaseBelow(index) {
             <span class="w-6 h-6 rounded-full bg-gray-400 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">${count + 1}</span>
         </div>
         <div class="flex-1">
-            <input type="text" class="phase-name-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" value="${defaultStages[count] || 'New Phase'}" placeholder="Phase name" />
+            <input type="text" class="phase-name-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" value="" placeholder="Phase name" />
         </div>
         <div class="flex-1">
             <input type="date" class="phase-deadline-input w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none transition-colors" data-phase-index="${count}" ${minDate} value="" />
