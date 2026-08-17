@@ -2527,29 +2527,6 @@ async def notify_project_created(
             },
         },
         {"type": "divider"},
-        {
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "View Project"},
-                    "action_id": "view_project",
-                    "value": str(project.id),
-                },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Accept"},
-                    "action_id": "accept_project",
-                    "value": str(project.id),
-                },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Clarify"},
-                    "action_id": "clarify_project",
-                    "value": str(project.id),
-                },
-            ],
-        },
     ]
     await send_slack_notification(
         db, project_id, f"New project: {project.name}", blocks, channel_id
@@ -2614,30 +2591,6 @@ async def send_stage_update_reminder(db, project_id, kind="manual", phase=None):
             },
         },
         {"type": "divider"},
-        {
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Submit Report"},
-                    "action_id": "submit_report",
-                    "value": str(project.id),
-                    "style": "primary",
-                },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Post Update"},
-                    "action_id": "update_notes",
-                    "value": str(project.id),
-                },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Report Delay"},
-                    "action_id": "report_delay",
-                    "value": str(project.id),
-                },
-            ],
-        },
     ]
     fallback_text = f"{headers.get(kind, 'Update Requested')}: {project.name} — {stage_name}"
     await send_slack_notification(db, project_id, fallback_text, blocks, project.slack_channel_id)
@@ -2720,29 +2673,6 @@ async def notify_stage_completed(db, project_id, stage_index):
                 },
             },
             {"type": "divider"},
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Progress"},
-                        "action_id": "view_progress",
-                        "value": str(project.id),
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Project Info"},
-                        "action_id": "view_project",
-                        "value": str(project.id),
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Stage Update"},
-                        "action_id": "stage_update",
-                        "value": str(project.id),
-                    },
-                ],
-            },
         ]
         await send_slack_notification(
             db,
@@ -2783,29 +2713,6 @@ async def notify_stage_unmarked(db, project_id, stage_index):
                 },
             },
             {"type": "divider"},
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Progress"},
-                        "action_id": "view_progress",
-                        "value": str(project.id),
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Complete Stage"},
-                        "action_id": "complete_stage",
-                        "value": str(stage_index),
-                    },
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "Project Info"},
-                        "action_id": "view_project",
-                        "value": str(project.id),
-                    },
-                ],
-            },
         ]
         await send_slack_notification(
             db,
@@ -2900,27 +2807,6 @@ def _build_project_block(project, designer, phases):
 
 def _build_project_attachment(project, designer, phases):
     blocks = [_build_project_block(project, designer, phases)]
-    actions = [
-        {
-            "type": "button",
-            "text": {"type": "plain_text", "text": "Complete Stage"},
-            "action_id": "complete_stage",
-            "value": str(project.stage_index),
-        },
-        {
-            "type": "button",
-            "text": {"type": "plain_text", "text": "Report Delay"},
-            "action_id": "report_delay",
-            "value": str(project.stage_index),
-        },
-        {
-            "type": "button",
-            "text": {"type": "plain_text", "text": "Progress"},
-            "action_id": "view_progress",
-            "value": str(project.id),
-        },
-    ]
-    blocks.append({"type": "actions", "elements": actions})
     return blocks
 
 
@@ -2932,35 +2818,6 @@ def _build_project_card(project, designer, phases):
         },
         _build_project_block(project, designer, phases),
         {"type": "divider"},
-        {
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Complete Stage"},
-                    "action_id": "complete_stage",
-                    "value": str(project.stage_index),
-                },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Report Delay"},
-                    "action_id": "report_delay",
-                    "value": str(project.stage_index),
-                },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Progress"},
-                    "action_id": "view_progress",
-                    "value": str(project.id),
-                },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Update Notes"},
-                    "action_id": "update_notes",
-                    "value": str(project.stage_index),
-                },
-            ],
-        },
     ]
     return blocks
 

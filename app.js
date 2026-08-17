@@ -4335,7 +4335,7 @@ async function loadDesignerPerformance() {
                             <div class="flex items-center gap-3 p-2 rounded-lg border ${rowClass}">
                                 <div class="flex-1 min-w-0">
                                     <div class="flex items-center justify-between mb-1">
-                                        <p class="text-sm font-medium text-gray-900 truncate">${d.designer_name} ${isCurrentDesigner ? '<span class="text-xs text-brand-600">(you)</span>' : ''}</p>
+                                        <p class="text-sm font-medium text-gray-900 truncate">${d.designer_name} ${isCurrentDesigner ? '<span class="text-xs text-brand-600"></span>' : ''}</p>
                                         <p class="text-sm font-semibold ${d.on_time_rate >= 80 ? 'text-green-600' : d.on_time_rate >= 60 ? 'text-amber-600' : 'text-red-600'}">${rate}</p>
                                     </div>
                                     <div class="w-full bg-gray-200 rounded-full h-2 relative">
