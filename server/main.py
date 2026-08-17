@@ -6643,8 +6643,8 @@ async def get_designer_performance_trend(
                 if isinstance(comp_str, str):
                     comp_str = comp_str[:10]
                 comp_dt = datetime.strptime(comp_str, "%Y-%m-%d")
-                iso_year, iso_week, _ = comp_dt.isocalendar()
-                week_key = f"{iso_year}-W{iso_week:02d}"
+                _, iso_week, _ = comp_dt.isocalendar()
+                week_key = f"W{iso_week:02d}"
                 if week_key not in weekly_data:
                     continue
 
@@ -6668,11 +6668,10 @@ async def get_designer_performance_trend(
         result = []
         for week_key in sorted(weekly_data.keys()):
             data = weekly_data[week_key]
-            on_time_rate = None
-            avg_delay = None
-            if data["stages"] > 0:
-                on_time_rate = round((data["on_time"] / data["stages"]) * 100, 1)
-                avg_delay = round(data["delay_days"] / data["stages"], 1)
+            if data["stages"] == 0:
+                continue
+            on_time_rate = round((data["on_time"] / data["stages"]) * 100, 1)
+            avg_delay = round(data["delay_days"] / data["stages"], 1)
             result.append(DesignerTrendPoint(
                 month=week_key,
                 on_time_rate=on_time_rate,
