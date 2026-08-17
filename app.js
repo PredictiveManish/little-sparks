@@ -690,8 +690,7 @@ async function populateProjectsTable() {
         filteredProjects.forEach(p => {
             const statusClass = getStatusColor(p.status);
             const statusText = getStatusText(p.status);
-            const stages = getStagesForPhaseType(p.phase_type);
-            const stageLabel = stages[p.stage_index] || 'N/A';
+            const stageLabel = getPhaseDisplayName(p, p.stage_index);
             const typeBadge = p.phase_type === 'IDEATION'
                 ? '<span class="text-xs font-medium px-2 py-1 rounded-full bg-purple-100 text-purple-700">Ideation</span>'
                 : '<span class="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 text-blue-700">Production</span>';
@@ -792,7 +791,7 @@ async function populateProjectDetails() {
                     <div class="w-8 h-8 rounded-full ${circleClass} flex items-center justify-center text-xs font-bold z-10 relative">
                         ${icon}
                     </div>
-                    <span class="text-[10px] md:text-xs mt-1.5 text-center ${labelClass} leading-tight max-w-[60px]">${stage}</span>
+                    <span class="text-[10px] md:text-xs mt-1.5 text-center ${labelClass} leading-tight max-w-[60px]">${getPhaseDisplayName(project, idx)}</span>
                     ${idx < stages.length - 1 ? `<div class="absolute top-4 left-[calc(50%+20px)] w-[calc(100%-40px)] h-0.5 ${connectorClass}" style="width:calc(100vw / ${stages.length}); max-width:60px; left:50%;"></div>` : ''}
                 </div>
             `;
@@ -804,7 +803,7 @@ async function populateProjectDetails() {
         const prevPhase = project.phases.find(p => p.stage_index === currentPhaseIdx - 1);
         let remarksCalloutHTML = '';
         if (prevPhase && prevPhase.manager_remarks && prevPhase.manager_remarks.trim()) {
-            const prevStageName = stages[prevPhase.stage_index] || `Stage ${prevPhase.stage_index + 1}`;
+            const prevStageName = getPhaseDisplayName(project, prevPhase.stage_index);
             remarksCalloutHTML = `
                 <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
                     <div class="flex items-start gap-3">
@@ -881,7 +880,7 @@ async function populateProjectDetails() {
                         <div class="flex items-center gap-2.5">
                             <span class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${isCompleted ? 'bg-green-500 text-white' : isCurrent ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-400'}">${idx + 1}</span>
                             <div>
-                                <h4 class="text-sm font-semibold text-gray-900">${stages[idx]}</h4>
+                                <h4 class="text-sm font-semibold text-gray-900">${getPhaseDisplayName(project, idx)}</h4>
                                 <span class="text-[10px] font-medium px-1.5 py-0.5 rounded ${statusClass}">${statusText}</span>
                             </div>
                         </div>
@@ -1158,8 +1157,8 @@ async function markStageComplete(stageIndex) {
     // Fetch project to get phase_type-aware stage name and pre-populate responsible checkboxes
     try {
         const project = await api.getProject(selectedProjectId);
-        const stages = getStagesForPhaseType(project.phase_type);
-        document.getElementById('delayReasonStageLabel').textContent = `Stage: ${stages[stageIndex]}`;
+        const stageLabel = getPhaseDisplayName(project, stageIndex);
+        document.getElementById('delayReasonStageLabel').textContent = `Stage: ${stageLabel}`;
         
         // Get the phase data for this stage
         const phaseData = project.phases[stageIndex];
@@ -1245,8 +1244,8 @@ async function confirmMarkComplete() {
         // Fetch project to get phase_type-aware stage name for toast
         try {
             const project = await api.getProject(selectedProjectId);
-            const stages = getStagesForPhaseType(project.phase_type);
-            showToast(`"${stages[pendingCompleteStageIndex]}" marked as complete!`);
+            const stageLabel = getPhaseDisplayName(project);
+            showToast(`"${stageLabel}" marked as complete!`);
         } catch (err) {
             showToast(`Stage ${pendingCompleteStageIndex + 1} marked as complete!`);
         }
@@ -1267,8 +1266,8 @@ async function unmarkStageComplete(stageIndex) {
         // Fetch project to get phase_type-aware stage name for toast
         try {
             const project = await api.getProject(selectedProjectId);
-            const stages = getStagesForPhaseType(project.phase_type);
-            showToast(`"${stages[stageIndex]}" unmarked from complete.`);
+            const stageLabel = getPhaseDisplayName(project);
+            showToast(`"${stageLabel}" unmarked from complete.`);
         } catch (err) {
             showToast(`Stage ${stageIndex + 1} unmarked from complete.`);
         }
@@ -2134,7 +2133,7 @@ function renderEditPhaseDeadlines(project) {
         const phaseData = phases.find(p => p.stage_index === index);
         const minDate = index === 0 ? '' : (index > 0 ? `min="${phases[index - 1]?.deadline || ''}"` : '');
         const existingValue = existingValues[index] || (phaseData ? phaseData.deadline : deadline);
-        const existingName = existingNames[index] || (project.stage_names && project.stage_names[index]) || stage;
+        const existingName = existingNames[index] || (phaseData && phaseData.stage_name) || (project.stage_names && project.stage_names[index]) || stage;
         const phaseId = phaseData ? phaseData.id : '';
         
         html += `
@@ -2274,8 +2273,8 @@ async function openDesignerModal(stageIndex) {
     
     try {
         const project = await api.getProject(selectedProjectId);
-        const stages = getStagesForPhaseType(project.phase_type);
-        document.getElementById('designerModalStageLabel').textContent = `Stage: ${stages[stageIndex]}`;
+        const stageLabel = getPhaseDisplayName(project);
+        document.getElementById('designerModalStageLabel').textContent = `Stage: ${stageLabel}`;
         
         const currentAssignments = project.phases[stageIndex]?.assigned_designer_ids || [];
         tempDesignerSelections = [...currentAssignments];
@@ -2339,8 +2338,8 @@ async function saveDesignerAssignment() {
         
         // Fetch project to get phase_type-aware stage name for toast
         const project = await api.getProject(selectedProjectId);
-        const stages = getStagesForPhaseType(project.phase_type);
-        showToast(`${assignedCount} designer${assignedCount !== 1 ? 's' : ''} assigned to "${stages[designerModalStageIndex]}"`);
+        const stageLabel = getPhaseDisplayName(project);
+        showToast(`${assignedCount} designer${assignedCount !== 1 ? 's' : ''} assigned to "${stageLabel}"`);
     } catch (err) {
         showToast('Failed to assign designers: ' + err.message);
     }
@@ -3095,10 +3094,9 @@ function populateModalStages(projectId) {
         return;
     }
     api.getProject(projectId).then(project => {
-        const stages = getStagesForPhaseType(project.phase_type);
         let html = '<option value="">Select stage...</option>';
-        stages.forEach((stage, idx) => {
-            html += `<option value="${idx}">Stage ${idx + 1} — ${stage}</option>`;
+        (project.phases || []).forEach((phase, idx) => {
+            html += `<option value="${phase.stage_index}">Stage ${phase.stage_index + 1} — ${getPhaseDisplayName(project, phase.stage_index)}</option>`;
         });
         document.getElementById('reportModalStage').innerHTML = html;
     });
@@ -3119,7 +3117,7 @@ async function submitReportFromWeb() {
     }
     
     const project = await api.getProject(parseInt(projectId));
-    const stages = getStagesForPhaseType(project.phase_type);
+    const stageLabel = getPhaseDisplayName(project, parseInt(stageIndex));
     
     const ratingMap = {
         costing: document.getElementById('reportRatingCosting').value,
@@ -3135,7 +3133,7 @@ async function submitReportFromWeb() {
     const reportData = {
         project_id: parseInt(projectId),
         stage_index: parseInt(stageIndex),
-        stage_name: stages[parseInt(stageIndex)] || 'Stage ' + (parseInt(stageIndex) + 1),
+        stage_name: stageLabel,
         submitted_by_user_id: String(CURRENT_USER?.id || ''),
         submitted_by_name: CURRENT_USER?.name || 'Unknown',
         submitted_by_role: CURRENT_USER?.role || 'USER',

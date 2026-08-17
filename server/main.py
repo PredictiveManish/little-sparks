@@ -4009,6 +4009,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 },
                             )
                 elif action_id == "submit_report":
+                    total_phases = len(phases)
                     current_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
                     current_stage = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=current_phase)
                     report_blocks = [
@@ -4020,7 +4021,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             "type": "section",
                             "text": {
                                 "type": "mrkdwn",
-                                "text": f"*{project.name}*\n*Stage:* {current_stage} (Stage {project.stage_index + 1}/9)",
+                                "text": f"*{project.name}*\n*Stage:* {current_stage} (Stage {project.stage_index + 1}/{total_phases})",
                             },
                         },
                         {"type": "divider"},
@@ -4784,7 +4785,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             "type": "section",
                             "text": {
                                 "type": "mrkdwn",
-                                "text": f"*{project.name}*\n*Stage:* {stage_name} → {new_stage_index + 1}/9\nReport logged, stage advanced",
+                                "text": f"*{project.name}*\n*Stage:* {stage_name} → {new_stage_index + 1}/{total_phases}\nReport logged, stage advanced",
                             },
                         },
                     ]

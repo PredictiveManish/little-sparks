@@ -31,6 +31,16 @@ function getStagesForPhaseType(phaseType) {
 
 const WORKFLOW_STAGES = (phaseType) => getStagesForPhaseType(phaseType || 'PRODUCTION');
 
+function getPhaseDisplayName(project, index) {
+    if (!project) return `Stage ${index + 1}`;
+    const phases = project.phases || [];
+    const phase = phases.find(p => p.stage_index === index);
+    if (phase && phase.stage_name) return phase.stage_name;
+    if (project.stage_names && project.stage_names[index]) return project.stage_names[index];
+    const defaults = getStagesForPhaseType(project.phase_type);
+    return defaults[index] || `Stage ${index + 1}`;
+}
+
 function formatDate(dateStr) {
     if (!dateStr) return '—';
     const d = new Date(dateStr);
