@@ -579,8 +579,8 @@ async function loadDashboard() {
                     overdueList.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">Failed to load overdue projects.</p>';
                 }
             }
-            const stageSummaryEl = document.getElementById('stageSummaryTable');
-            if (stageSummaryEl) {
+            const container = document.getElementById('stageSummaryContainer');
+            if (container) {
                 try {
                     const summary = await api.getStageSummary();
                     const total = summary.total_stages;
@@ -596,9 +596,18 @@ async function loadDashboard() {
                     document.getElementById('stageDelayedPct').textContent = pct(summary.stages_delayed);
                     document.getElementById('stageInTimeline').textContent = summary.stages_in_timeline;
                     document.getElementById('stageInTimelinePct').textContent = pct(summary.stages_in_timeline);
+                    
+                    if (total > 0) {
+                        const completedPct = (summary.stages_completed / total) * 100;
+                        const delayedPct = (summary.stages_delayed / total) * 100;
+                        const inTimelinePct = (summary.stages_in_timeline / total) * 100;
+                        document.getElementById('barCompleted').style.width = `${completedPct}%`;
+                        document.getElementById('barDelayed').style.width = `${delayedPct}%`;
+                        document.getElementById('barInTimeline').style.width = `${inTimelinePct}%`;
+                    }
                 } catch (summaryErr) {
                     console.warn('[APP] loadDashboard: Failed to load stage summary:', summaryErr.message);
-                    stageSummaryEl.innerHTML = '<tr><td colspan="3" class="px-4 py-3 text-sm text-gray-400 text-center">Failed to load stage summary.</td></tr>';
+                    container.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">Failed to load stage summary.</p>';
                 }
             }
         } catch (chartErr) {

@@ -1223,6 +1223,7 @@ def stage_summary(
         for phase in p.phases:
             total_stages += 1
             if phase.completed_at:
+                stages_completed += 1
                 delay_days = _compute_phase_delay_days(phase, today_str)
                 if delay_days > 0:
                     stages_delayed += 1
