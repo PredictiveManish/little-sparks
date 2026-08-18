@@ -87,11 +87,11 @@ class PhaseResponse(BaseModel):
     designer_update: str
     delay_reason: str
     delay_responsible: List[int] = []
-    manager_remarks: Optional[str] = None
+    manager_remarks: List[str] = []
     completed_at: Optional[str] = None
     assigned_designer_ids: List[int] = []
 
-    @field_validator('delay_responsible', 'assigned_designer_ids', mode='before')
+    @field_validator('delay_responsible', 'assigned_designer_ids', 'manager_remarks', mode='before')
     @classmethod
     def coerce_json_field(cls, v):
         if isinstance(v, str):
@@ -422,7 +422,7 @@ class PhaseReportItem(BaseModel):
     assigned_designer_ids: List[int] = []
     is_current: bool = False
     delay_days: int = 0
-    manager_remarks: Optional[str] = None
+    manager_remarks: List[str] = []
 
 
 class WeeklyReportResponse(BaseModel):
@@ -459,7 +459,7 @@ class WeeklyReportItem(BaseModel):
     progress_change: int = 0
     delay_occurred: bool = False
     delay_days: int = 0
-    manager_remarks: Optional[str] = None
+    manager_remarks: List[str] = []
 
 
 class MonthlyReportResponse(BaseModel):
@@ -498,7 +498,7 @@ class MonthlyReportItem(BaseModel):
     avg_ratings: Optional[dict] = None
     rating_trends: Optional[dict] = None
     activities: List[MonthlyActivityItem] = []
-    manager_remarks: Optional[str] = None
+    manager_remarks: List[str] = []
 
 
 class DesignerPerformanceResponse(BaseModel):
@@ -513,6 +513,7 @@ class DesignerPerformanceResponse(BaseModel):
     total_stages_completed: int = 0
     total_stages_assigned: int = 0
     total_on_time: int = 0
+    delay_responsibility_count: int = 0
 
 
 class DesignerProjectItem(BaseModel):
@@ -528,7 +529,17 @@ class DesignerProjectItem(BaseModel):
     delay_reason: str = ""
     updates_count: int = 0
     delays_count: int = 0
-    manager_remarks: Optional[str] = None
+    manager_remarks: List[str] = []
+
+
+class DelayResponsibilityDetail(BaseModel):
+    project_id: int
+    project_name: str
+    stage_index: int
+    stage_name: str
+    delay_reason: str = ""
+    delay_days: int = 0
+    completed_at: Optional[str] = None
 
 
 # ---------- Slack Completion Tracker ----------

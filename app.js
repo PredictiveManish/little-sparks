@@ -775,8 +775,12 @@ async function populateProjectDetails() {
         const currentPhaseIdx = project.stage_index;
         const prevPhase = project.phases.find(p => p.stage_index === currentPhaseIdx - 1);
         let remarksCalloutHTML = '';
-        if (prevPhase && prevPhase.manager_remarks && prevPhase.manager_remarks.trim()) {
+        if (prevPhase && prevPhase.manager_remarks && Array.isArray(prevPhase.manager_remarks) && prevPhase.manager_remarks.length > 0) {
             const prevStageName = getPhaseDisplayName(project, prevPhase.stage_index);
+            const remarksHTML = prevPhase.manager_remarks
+                .filter(r => r && r.trim())
+                .map(r => `<li class="text-sm text-amber-700">${r.trim()}</li>`)
+                .join('');
             remarksCalloutHTML = `
                 <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
                     <div class="flex items-start gap-3">
@@ -785,7 +789,7 @@ async function populateProjectDetails() {
                         </svg>
                         <div>
                             <p class="text-sm font-semibold text-amber-800 mb-1">Manager remarks from ${prevStageName}</p>
-                            <p class="text-sm text-amber-700 whitespace-pre-wrap">${prevPhase.manager_remarks}</p>
+                            <ul class="text-sm text-amber-700 space-y-1 list-disc list-inside">${remarksHTML}</ul>
                         </div>
                     </div>
                 </div>
@@ -901,6 +905,14 @@ async function populateProjectDetails() {
                             <p class="text-gray-500 truncate">${responsibleNames}</p>
                         </div>
                     </div>
+                    ${sd.manager_remarks && Array.isArray(sd.manager_remarks) && sd.manager_remarks.filter(r => r && r.trim()).length > 0 ? `
+                    <div class="mt-3 pt-3 border-t border-gray-100">
+                        <p class="text-xs font-medium text-gray-500 mb-1">Manager Remarks</p>
+                        <ul class="text-xs text-gray-600 space-y-0.5 list-disc list-inside">
+                            ${sd.manager_remarks.filter(r => r && r.trim()).map(r => `<li>${r.trim()}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
                 </div>
             `;
         });
@@ -1125,7 +1137,6 @@ async function markStageComplete(stageIndex) {
     console.log('[APP] markStageComplete: Opening delay reason modal for stage', stageIndex, 'on project', selectedProjectId);
     pendingCompleteStageIndex = stageIndex;
     document.getElementById('delayReasonInput').value = '';
-    document.getElementById('managerRemarksInput').value = '';
     
     // Fetch project to get phase_type-aware stage name and pre-populate responsible checkboxes
     try {
@@ -1136,6 +1147,10 @@ async function markStageComplete(stageIndex) {
         // Get the phase data for this stage
         const phaseData = project.phases[stageIndex];
         const existingResponsible = phaseData?.delay_responsible || [];
+        const existingRemarks = phaseData?.manager_remarks || [];
+        
+        // Populate remarks list
+        renderRemarksList(existingRemarks);
         
         // Get all designers and managers
         const allDesigners = await api.getDesigners();
@@ -1183,9 +1198,67 @@ async function markStageComplete(stageIndex) {
     }
 }
 
+function renderRemarksList(remarks) {
+    const container = document.getElementById('remarksList');
+    if (!container) return;
+    
+    if (!remarks || remarks.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let html = '';
+    remarks.forEach((remark, idx) => {
+        if (remark && remark.trim()) {
+            html += `
+                <div class="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                    <span class="text-gray-600 text-sm flex-1">• ${remark.trim()}</span>
+                    <button onclick="removeRemarkPoint(${idx})" class="text-red-400 hover:text-red-600 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            `;
+        }
+    });
+    container.innerHTML = html;
+}
+
+function addRemarkPoint() {
+    const input = document.getElementById('managerRemarksInput');
+    const value = input.value.trim();
+    if (!value) return;
+    
+    const container = document.getElementById('remarksList');
+    const idx = container.children.length;
+    
+    const div = document.createElement('div');
+    div.className = 'flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2';
+    div.innerHTML = `
+        <span class="text-gray-600 text-sm flex-1">• ${value}</span>
+        <button onclick="removeRemarkPoint(${idx})" class="text-red-400 hover:text-red-600 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+        </button>
+    `;
+    container.appendChild(div);
+    input.value = '';
+    input.focus();
+}
+
+function removeRemarkPoint(idx) {
+    const container = document.getElementById('remarksList');
+    if (container.children[idx]) {
+        container.children[idx].remove();
+    }
+}
+
 function closeDelayReasonModal() {
     document.getElementById('delayReasonModal').classList.add('hidden');
     pendingCompleteStageIndex = null;
+    document.getElementById('remarksList').innerHTML = '';
     // Reset responsible checkboxes
     document.querySelectorAll('.delay-responsible-checkbox').forEach(cb => cb.checked = false);
 }
@@ -1201,7 +1274,13 @@ function toggleDelayResponsibleVisibility() {
 async function confirmMarkComplete() {
     if (pendingCompleteStageIndex === null) return;
     const delayReason = document.getElementById('delayReasonInput').value.trim();
-    const managerRemarks = document.getElementById('managerRemarksInput').value.trim();
+    
+    // Collect remarks from the dynamic list
+    const managerRemarks = [];
+    document.querySelectorAll('#remarksList div span:first-child').forEach(span => {
+        const text = span.textContent.replace('• ', '').trim();
+        if (text) managerRemarks.push(text);
+    });
     
     // Collect checked responsible user IDs
     const delayResponsible = [];
@@ -1209,9 +1288,9 @@ async function confirmMarkComplete() {
         delayResponsible.push(parseInt(cb.value));
     });
     
-    console.log('[APP] confirmMarkComplete: Marking stage', pendingCompleteStageIndex, 'complete for project', selectedProjectId, 'delay_reason:', delayReason || '(none)', 'delay_responsible:', delayResponsible, 'manager_remarks:', managerRemarks || '(none)');
+    console.log('[APP] confirmMarkComplete: Marking stage', pendingCompleteStageIndex, 'complete for project', selectedProjectId, 'delay_reason:', delayReason || '(none)', 'delay_responsible:', delayResponsible, 'manager_remarks:', managerRemarks);
     try {
-        await api.completeStage(selectedProjectId, pendingCompleteStageIndex, delayReason || undefined, delayResponsible.length > 0 ? delayResponsible : undefined, managerRemarks || undefined);
+        await api.completeStage(selectedProjectId, pendingCompleteStageIndex, delayReason || undefined, delayResponsible.length > 0 ? delayResponsible : undefined, managerRemarks.length > 0 ? managerRemarks : undefined);
         populateProjectDetails();
         
         // Fetch project to get phase_type-aware stage name for toast
@@ -4179,7 +4258,7 @@ async function loadDesignerPerformance() {
         let html = `
             <h2 class="text-xl font-semibold text-gray-800 mb-3">Summary</h2>
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                     <div class="text-center p-4 bg-green-50 rounded-lg">
                         <p class="text-3xl font-bold text-green-600">${onTimeRate}%</p>
                         <p class="text-xs text-green-600 mt-1">On-Time Delivery</p>
@@ -4195,6 +4274,10 @@ async function loadDesignerPerformance() {
                     <div class="text-center p-4 bg-red-50 rounded-lg">
                         <p class="text-2xl font-bold text-red-600">${report.total_delays}</p>
                         <p class="text-xs text-red-600 mt-1">Delayed Completed Stages</p>
+                    </div>
+                    <div class="text-center p-4 bg-amber-50 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors" onclick="showResponsibilityDetails(${report.designer_id}, '${period}', '${report.period_start}', '${report.period_end}')">
+                        <p class="text-2xl font-bold text-amber-600">${report.delay_responsibility_count || 0}</p>
+                        <p class="text-xs text-amber-600 mt-1">Responsible for Delay</p>
                     </div>
                 </div>
             </div>
@@ -4359,4 +4442,50 @@ function calculateDelayDays(deadline) {
     const deadlineDate = new Date(deadline + 'T00:00:00');
     const diffMs = today - deadlineDate;
     return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+}
+
+async function showResponsibilityDetails(designerId, period, periodStart, periodEnd) {
+    try {
+        const params = new URLSearchParams();
+        params.set('period', period);
+        if (period === 'weekly') {
+            params.set('week_start', periodStart);
+            params.set('week_end', periodEnd);
+        } else {
+            params.set('month', periodStart.split('-')[1]);
+            params.set('year', periodStart.split('-')[0]);
+        }
+        const details = await api.getDesignerResponsibilityDetails(designerId, params);
+        
+        const modal = document.getElementById('responsibilityDetailsModal');
+        const list = document.getElementById('responsibilityDetailsList');
+        const title = document.getElementById('responsibilityDetailsTitle');
+        
+        title.textContent = `Responsible for Delay — ${designers.find(d => d.id === designerId)?.name || 'Designer'}`;
+        
+        if (!details || details.length === 0) {
+            list.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No delays this designer was marked responsible for.</p>';
+        } else {
+            list.innerHTML = details.map(d => `
+                <div class="p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                    <div class="flex items-center justify-between mb-1">
+                        <p class="text-sm font-semibold text-gray-900">${d.project_name}</p>
+                        <span class="text-xs text-gray-500">${d.completed_at || 'N/A'}</span>
+                    </div>
+                    <p class="text-xs text-gray-600">Stage: <span class="font-medium">${d.stage_name}</span> (Index: ${d.stage_index})</p>
+                    ${d.delay_reason ? `<p class="text-xs text-red-600 mt-1">Reason: ${d.delay_reason}</p>` : ''}
+                    ${d.delay_days > 0 ? `<p class="text-xs text-red-500">Delayed by ${d.delay_days} day(s)</p>` : ''}
+                </div>
+            `).join('');
+        }
+        
+        modal.classList.remove('hidden');
+    } catch (err) {
+        console.error('[APP] showResponsibilityDetails: Failed:', err.message);
+        showToast('Failed to load responsibility details: ' + err.message);
+    }
+}
+
+function closeResponsibilityDetailsModal() {
+    document.getElementById('responsibilityDetailsModal').classList.add('hidden');
 }

@@ -102,6 +102,7 @@ from .schemas import (
     DesignerComparisonItem,
     DesignerTrendPoint,
     StageSummary,
+    DelayResponsibilityDetail,
 )
 
 # ---------- Init ----------
@@ -1810,7 +1811,7 @@ async def update_project(
 class _CompleteStageBody(BaseModel):
     delay_reason: Optional[str] = None
     delay_responsible: Optional[List[int]] = None
-    manager_remarks: Optional[str] = None
+    manager_remarks: Optional[List[str]] = None
 
 
 @app.post("/api/projects/{project_id}/stages/{stage_index}/complete")
@@ -1869,7 +1870,11 @@ async def complete_stage(
         phases[stage_index].delay_responsible = body.delay_responsible
 
     if body.manager_remarks:
-        phases[stage_index].manager_remarks = body.manager_remarks
+        existing = phases[stage_index].manager_remarks or []
+        for remark in body.manager_remarks:
+            if remark.strip() and remark.strip() not in existing:
+                existing.append(remark.strip())
+        phases[stage_index].manager_remarks = existing
 
     now = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
     phases[stage_index].completed_at = now
@@ -6259,10 +6264,12 @@ async def get_designer_weekly_performance(
             total_updates=0,
             total_delays=0,
             total_stages_completed=0,
+            total_stages_assigned=0,
             total_on_time=0,
         )
     
     project_ids = [p.id for p in projects]
+    total_stages_assigned = db.query(Phase).filter(Phase.project_id.in_(project_ids)).count()
     
     # Get all phases for these projects that were completed in the week
     phases = (
@@ -6279,12 +6286,17 @@ async def get_designer_weekly_performance(
     total_stages_completed = 0
     total_delays = 0
     total_on_time = 0
+    delay_responsibility_count = 0
     items = []
     
     for ph in phases:
         proj = db.query(Project).filter(Project.id == ph.project_id).first()
         if not proj:
             continue
+        
+        # Count how many times this designer was marked as responsible
+        if ph.delay_responsible:
+            delay_responsibility_count += ph.delay_responsible.count(designer_id)
         
         # Calculate delay
         delay_days = 0
@@ -6334,6 +6346,7 @@ async def get_designer_weekly_performance(
             delay_reason=ph.delay_reason or "",
             updates_count=updates_count,
             delays_count=delays_count,
+            manager_remarks=ph.manager_remarks or [],
         ))
     
     return DesignerPerformanceResponse(
@@ -6345,7 +6358,9 @@ async def get_designer_weekly_performance(
         total_updates=len(items),
         total_delays=total_delays,
         total_stages_completed=total_stages_completed,
+        total_stages_assigned=total_stages_assigned,
         total_on_time=total_on_time,
+        delay_responsibility_count=delay_responsibility_count,
     )
 
 
@@ -6384,10 +6399,12 @@ async def get_designer_monthly_performance(
             total_updates=0,
             total_delays=0,
             total_stages_completed=0,
+            total_stages_assigned=0,
             total_on_time=0,
         )
     
     project_ids = [p.id for p in projects]
+    total_stages_assigned = db.query(Phase).filter(Phase.project_id.in_(project_ids)).count()
     
     # Get all phases for these projects that were completed in the month
     phases = (
@@ -6404,12 +6421,17 @@ async def get_designer_monthly_performance(
     total_stages_completed = 0
     total_delays = 0
     total_on_time = 0
+    delay_responsibility_count = 0
     items = []
     
     for ph in phases:
         proj = db.query(Project).filter(Project.id == ph.project_id).first()
         if not proj:
             continue
+        
+        # Count how many times this designer was marked as responsible
+        if ph.delay_responsible:
+            delay_responsibility_count += ph.delay_responsible.count(designer_id)
         
         # Calculate delay
         delay_days = 0
@@ -6459,6 +6481,7 @@ async def get_designer_monthly_performance(
             delay_reason=ph.delay_reason or "",
             updates_count=updates_count,
             delays_count=delays_count,
+            manager_remarks=ph.manager_remarks or [],
         ))
     
     return DesignerPerformanceResponse(
@@ -6470,7 +6493,9 @@ async def get_designer_monthly_performance(
         total_updates=len(items),
         total_delays=total_delays,
         total_stages_completed=total_stages_completed,
+        total_stages_assigned=total_stages_assigned,
         total_on_time=total_on_time,
+        delay_responsibility_count=delay_responsibility_count,
     )
 
 
@@ -6702,6 +6727,84 @@ async def get_designer_comparison(
 
     # Sort by on_time_rate descending (None values last)
     result.sort(key=lambda x: x.on_time_rate if x.on_time_rate is not None else -1, reverse=True)
+    return result
+
+
+@app.get("/api/designers/{designer_id}/responsibility-details", response_model=List[DelayResponsibilityDetail])
+async def get_designer_responsibility_details(
+    designer_id: int,
+    period: str = Query("monthly", regex="^(weekly|monthly)$"),
+    week_start: Optional[str] = Query(None),
+    week_end: Optional[str] = Query(None),
+    month: Optional[int] = Query(None),
+    year: Optional[int] = Query(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    designer = db.query(User).filter(User.id == designer_id).first()
+    if not designer:
+        raise HTTPException(status_code=404, detail="Designer not found")
+    
+    # Determine period date range
+    if period == "weekly" and week_start and week_end:
+        period_start = week_start
+        period_end = week_end
+    elif period == "monthly" and month and year:
+        period_start = f"{year}-{month:02d}-01"
+        if month == 12:
+            period_end = f"{year + 1}-01-01"
+        else:
+            period_end = f"{year}-{month + 1:02d}-01"
+    else:
+        now = datetime.now(IST).replace(tzinfo=None)
+        period_start = now.strftime("%Y-%m-01")
+        if now.month == 12:
+            period_end = f"{now.year + 1}-01-01"
+        else:
+            period_end = f"{now.year}-{now.month + 1:02d}-01"
+    
+    # Find all projects assigned to this designer
+    projects = db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
+    project_ids = [p.id for p in projects]
+    
+    # Get all phases for these projects
+    phases = db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
+    
+    result = []
+    for ph in phases:
+        # Check if designer was marked as responsible
+        if ph.delay_responsible and designer_id in ph.delay_responsible:
+            proj = db.query(Project).filter(Project.id == ph.project_id).first()
+            if not proj:
+                continue
+            
+            # Calculate delay days
+            delay_days = 0
+            if ph.completed_at and ph.deadline:
+                try:
+                    completed_str = ph.completed_at
+                    if "T" not in completed_str:
+                        completed_str = completed_str[:10]
+                    completed_dt = datetime.strptime(completed_str, "%Y-%m-%d")
+                    deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+                    delay_days = max(0, (completed_dt.date() - deadline_dt.date()).days)
+                except Exception:
+                    pass
+            
+            stage_name = _get_current_stage_name(ph.stage_index, proj.phase_type, proj.stage_names, phase=ph)
+            
+            result.append(DelayResponsibilityDetail(
+                project_id=proj.id,
+                project_name=proj.name,
+                stage_index=ph.stage_index,
+                stage_name=stage_name,
+                delay_reason=ph.delay_reason or "",
+                delay_days=delay_days,
+                completed_at=ph.completed_at,
+            ))
+    
+    # Sort by completed_at descending (most recent first)
+    result.sort(key=lambda x: x.completed_at or "", reverse=True)
     return result
 
 
