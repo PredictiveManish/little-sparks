@@ -390,11 +390,44 @@
             </div>
 
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-8">
-                <h3 class="text-sm font-semibold text-gray-700 mb-4">Delay Trend (Last 6 Months)</h3>
-                <div id="delayTrendContainer">
-                    <div class="relative" style="height: 280px;">
-                        <canvas id="dashboardDelayTrendChart"></canvas>
-                    </div>
+                <h3 class="text-sm font-semibold text-gray-700 mb-4">Stage Summary</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr class="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                <th class="px-4 py-3">Metric</th>
+                                <th class="px-4 py-3">Count</th>
+                                <th class="px-4 py-3">Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stageSummaryTable" class="divide-y divide-gray-100 text-sm">
+                            <tr>
+                                <td class="px-4 py-3 font-medium text-gray-900">Total Stages Assigned</td>
+                                <td class="px-4 py-3 text-gray-700" id="stageTotal">-</td>
+                                <td class="px-4 py-3 text-gray-500">100%</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium text-gray-900">Stages Completed</td>
+                                <td class="px-4 py-3 text-gray-700" id="stageCompleted">-</td>
+                                <td class="px-4 py-3 text-gray-500" id="stageCompletedPct">-</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium text-gray-900">Stages On Time</td>
+                                <td class="px-4 py-3 text-gray-700" id="stageOnTime">-</td>
+                                <td class="px-4 py-3 text-gray-500" id="stageOnTimePct">-</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium text-gray-900">Stages Delayed</td>
+                                <td class="px-4 py-3 text-gray-700" id="stageDelayed">-</td>
+                                <td class="px-4 py-3 text-gray-500" id="stageDelayedPct">-</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium text-gray-900">Currently In Timeline</td>
+                                <td class="px-4 py-3 text-gray-700" id="stageInTimeline">-</td>
+                                <td class="px-4 py-3 text-gray-500" id="stageInTimelinePct">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 

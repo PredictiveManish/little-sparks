@@ -101,6 +101,7 @@ from .schemas import (
     MonthlyTrendPoint,
     DesignerComparisonItem,
     DesignerTrendPoint,
+    StageSummary,
 )
 
 # ---------- Init ----------
@@ -1204,6 +1205,40 @@ def dashboard_stats(
         on_time=on_time,
         completed=completed,
         delayed=delayed,
+    )
+
+
+@app.get("/api/dashboard/stage-summary", response_model=StageSummary)
+def stage_summary(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    projects = get_user_owned_project_query(db, user).all()
+    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
+    total_stages = 0
+    stages_completed = 0
+    stages_on_time = 0
+    stages_delayed = 0
+    stages_in_timeline = 0
+    for p in projects:
+        for phase in p.phases:
+            total_stages += 1
+            if phase.completed_at:
+                delay_days = _compute_phase_delay_days(phase, today_str)
+                if delay_days > 0:
+                    stages_delayed += 1
+                else:
+                    stages_on_time += 1
+            else:
+                if today_str > phase.deadline:
+                    stages_delayed += 1
+                else:
+                    stages_in_timeline += 1
+    return StageSummary(
+        total_stages=total_stages,
+        stages_completed=stages_completed,
+        stages_on_time=stages_on_time,
+        stages_delayed=stages_delayed,
+        stages_in_timeline=stages_in_timeline,
     )
 
 

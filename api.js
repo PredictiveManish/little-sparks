@@ -69,7 +69,7 @@ const api = {
     // Dashboard
     getDashboardStats: () => apiFetch('/dashboard/stats'),
     getOverdueProjects: () => apiFetch('/dashboard/overdue-projects'),
-    getDelayTrend: () => apiFetch('/dashboard/delay-trend'),
+    getStageSummary: () => apiFetch('/dashboard/stage-summary'),
 
     // Projects
     getProjects: () => apiFetch('/projects'),

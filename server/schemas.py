@@ -193,6 +193,14 @@ class DashboardStats(BaseModel):
     delayed: int
 
 
+class StageSummary(BaseModel):
+    total_stages: int
+    stages_completed: int
+    stages_on_time: int
+    stages_delayed: int
+    stages_in_timeline: int
+
+
 class OverdueProject(BaseModel):
     id: int
     name: str

@@ -579,62 +579,26 @@ async function loadDashboard() {
                     overdueList.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">Failed to load overdue projects.</p>';
                 }
             }
-            const trendChartEl = document.getElementById('dashboardDelayTrendChart');
-            if (trendChartEl) {
+            const stageSummaryEl = document.getElementById('stageSummaryTable');
+            if (stageSummaryEl) {
                 try {
-                    const trend = await api.getDelayTrend();
-                    if (trend.length > 0) {
-                        const sortedTrend = [...trend].sort((a, b) => a.month.localeCompare(b.month));
-                        const months = sortedTrend.map(t => {
-                            const [y, m] = t.month.split('-');
-                            return new Date(y, m - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' });
-                        });
-                        renderChart('dashboardDelayTrendChart', {
-                            type: 'line',
-                            data: {
-                                labels: months,
-                                datasets: [{
-                                    label: 'Total Delay Days',
-                                    data: sortedTrend.map(t => t.total_delay_days),
-                                    borderColor: chartColors.red,
-                                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                                    fill: true,
-                                    tension: 0.3,
-                                    pointRadius: 4,
-                                    pointHoverRadius: 6,
-                                    borderWidth: 2,
-                                }, {
-                                    label: 'Delayed Projects',
-                                    data: sortedTrend.map(t => t.delayed_projects),
-                                    borderColor: chartColors.amber,
-                                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                                    fill: true,
-                                    tension: 0.3,
-                                    pointRadius: 4,
-                                    pointHoverRadius: 6,
-                                    borderWidth: 2,
-                                    yAxisID: 'y1',
-                                }]
-                            },
-                            options: {
-                                ...defaultChartOptions,
-                                scales: {
-                                    x: { ...defaultScaleConfig, grid: { display: false }, reverse: false },
-                                    y: { ...defaultScaleConfig, beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, title: { display: true, text: 'Delay Days', font: { size: 11 } } },
-                                    y1: { ...defaultScaleConfig, beginAtZero: true, position: 'right', grid: { display: false }, title: { display: true, text: 'Projects', font: { size: 11 } } }
-                                },
-                                plugins: {
-                                    ...defaultChartOptions.plugins,
-                                    legend: { position: 'bottom', labels: { font: { size: 11 } } }
-                                }
-                            }
-                        });
-                    } else {
-                        document.getElementById('delayTrendContainer').innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No delay data available yet.</p>';
+                    const summary = await api.getStageSummary();
+                    const total = summary.total_stages;
+                    function pct(val) {
+                        return total > 0 ? `(${((val / total) * 100).toFixed(1)}%)` : '(0.0%)';
                     }
-                } catch (trendErr) {
-                    console.warn('[APP] loadDashboard: Failed to load delay trend:', trendErr.message);
-                    document.getElementById('delayTrendContainer').innerHTML = '<p class="text-sm text-gray-400 text-center py-4">Failed to load delay trend.</p>';
+                    document.getElementById('stageTotal').textContent = total;
+                    document.getElementById('stageCompleted').textContent = summary.stages_completed;
+                    document.getElementById('stageCompletedPct').textContent = pct(summary.stages_completed);
+                    document.getElementById('stageOnTime').textContent = summary.stages_on_time;
+                    document.getElementById('stageOnTimePct').textContent = pct(summary.stages_on_time);
+                    document.getElementById('stageDelayed').textContent = summary.stages_delayed;
+                    document.getElementById('stageDelayedPct').textContent = pct(summary.stages_delayed);
+                    document.getElementById('stageInTimeline').textContent = summary.stages_in_timeline;
+                    document.getElementById('stageInTimelinePct').textContent = pct(summary.stages_in_timeline);
+                } catch (summaryErr) {
+                    console.warn('[APP] loadDashboard: Failed to load stage summary:', summaryErr.message);
+                    stageSummaryEl.innerHTML = '<tr><td colspan="3" class="px-4 py-3 text-sm text-gray-400 text-center">Failed to load stage summary.</td></tr>';
                 }
             }
         } catch (chartErr) {
