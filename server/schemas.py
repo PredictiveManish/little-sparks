@@ -503,6 +503,7 @@ class DesignerPerformanceResponse(BaseModel):
     total_updates: int = 0
     total_delays: int = 0
     total_stages_completed: int = 0
+    total_stages_assigned: int = 0
     total_on_time: int = 0
 
 

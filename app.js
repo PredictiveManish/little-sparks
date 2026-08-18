@@ -4204,6 +4204,7 @@ async function loadDesignerPerformance() {
         const delayRate = 100 - onTimeRate;
         
         let html = `
+            <h2 class="text-xl font-semibold text-gray-800 mb-3">Summary</h2>
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div class="text-center p-4 bg-green-50 rounded-lg">
@@ -4211,16 +4212,16 @@ async function loadDesignerPerformance() {
                         <p class="text-xs text-green-600 mt-1">On-Time Delivery</p>
                     </div>
                     <div class="text-center p-4 bg-brand-50 rounded-lg">
-                        <p class="text-3xl font-bold text-brand-600">${report.total_stages_completed}</p>
-                        <p class="text-xs text-gray-500 mt-1">Stages Completed</p>
+                        <p class="text-3xl font-bold text-brand-600">${report.total_stages_completed}/${report.total_stages_assigned}</p>
+                        <p class="text-xs text-gray-500 mt-1">Stages Completed / Assigned</p>
                     </div>
                     <div class="text-center p-4 bg-green-50 rounded-lg">
                         <p class="text-2xl font-bold text-green-600">${report.total_on_time}</p>
-                        <p class="text-xs text-green-600 mt-1">On Time</p>
+                        <p class="text-xs text-green-600 mt-1">On Time Completed Stages</p>
                     </div>
                     <div class="text-center p-4 bg-red-50 rounded-lg">
                         <p class="text-2xl font-bold text-red-600">${report.total_delays}</p>
-                        <p class="text-xs text-red-600 mt-1">Delayed</p>
+                        <p class="text-xs text-red-600 mt-1">Delayed Completed Stages</p>
                     </div>
                 </div>
             </div>
