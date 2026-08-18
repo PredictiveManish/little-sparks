@@ -94,6 +94,8 @@ class PhaseResponse(BaseModel):
     @field_validator('delay_responsible', 'assigned_designer_ids', 'manager_remarks', mode='before')
     @classmethod
     def coerce_json_field(cls, v):
+        if v is None:
+            return []
         if isinstance(v, str):
             try:
                 parsed = json.loads(v)
