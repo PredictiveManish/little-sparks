@@ -7706,36 +7706,46 @@ def get_designer_delayed_stages(
     if not designer:
         raise HTTPException(status_code=404, detail="Designer not found")
 
-    projects = db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
+    all_projects = get_user_owned_project_query(db, user).all()
+    project_ids = [p.id for p in all_projects]
     result = []
-    for p in projects:
-        for ph in p.phases:
-            if ph.completed_at and ph.deadline:
-                delay_days = 0
-                try:
-                    completed_str = ph.completed_at
-                    if "T" not in completed_str:
-                        completed_str = completed_str[:10]
-                    completed_dt = datetime.strptime(completed_str, "%Y-%m-%d")
+    phases = db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
+    for ph in phases:
+        if not ph.assigned_designer_ids or designer_id not in ph.assigned_designer_ids:
+            continue
+        if ph.completed_at and ph.deadline:
+            delay_days = 0
+            try:
+                completed_dt = None
+                for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"]:
+                    try:
+                        completed_dt = datetime.strptime(ph.completed_at, fmt)
+                        break
+                    except ValueError:
+                        pass
+                if completed_dt:
                     deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
                     delay_days = max(0, (completed_dt.date() - deadline_dt.date()).days)
-                except Exception:
-                    pass
-                if delay_days > 0:
-                    stage_name = _get_current_stage_name(
-                        ph.stage_index, p.phase_type, p.stage_names, phase=ph
+            except Exception:
+                pass
+            if delay_days > 0:
+                proj = db.query(Project).filter(Project.id == ph.project_id).first()
+                if not proj:
+                    continue
+                stage_name = _get_current_stage_name(
+                    ph.stage_index, proj.phase_type, proj.stage_names, phase=ph
+                )
+                result.append(
+                    DelayResponsibilityDetail(
+                        project_id=proj.id,
+                        project_name=proj.name,
+                        stage_index=ph.stage_index,
+                        stage_name=stage_name,
+                        delay_reason=ph.delay_reason or "",
+                        delay_days=delay_days,
+                        completed_at=ph.completed_at,
                     )
-                    result.append(
-                        DelayResponsibilityDetail(
-                            project_id=p.id,
-                            project_name=p.name,
-                            stage_index=ph.stage_index,
-                            stage_name=stage_name,
-                            delay_reason=ph.delay_reason or "",
-                            delay_days=delay_days,
-                            completed_at=ph.completed_at,
-                        )
-                    )
+                )
     result.sort(key=lambda x: x.completed_at or "", reverse=True)
     return result
 
@@ -7795,22 +7805,21 @@ async def get_designer_performance_trend(
     if not designer:
         raise HTTPException(status_code=404, detail="Designer not found")
 
-    projects = (
-        db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
-    )
-    if not projects:
-        return []
-
-    project_ids = [p.id for p in projects]
+    all_projects = get_user_owned_project_query(db, user).all()
+    project_ids = [p.id for p in all_projects]
     phases = (
         db.query(Phase)
         .filter(
             Phase.project_id.in_(project_ids),
             Phase.completed_at.isnot(None),
+            Phase.assigned_designer_ids != None,
         )
         .order_by(Phase.completed_at)
         .all()
     )
+    phases = [ph for ph in phases if designer_id in ph.assigned_designer_ids]
+    if not phases:
+        return []
 
     if period == "weekly":
         # Group by week (ISO week) for last 8 weeks
