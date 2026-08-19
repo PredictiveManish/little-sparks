@@ -592,7 +592,7 @@ async function loadDashboard() {
                     const onTimeProgress = summary.stages_on_time_progress ?? 0;
                     const delayedCompleted = summary.stages_delayed_completed ?? 0;
                     const delayedProgress = summary.stages_delayed_progress ?? 0;
-                    document.getElementById('stageCompleted').textContent = `${summary.stages_completed} (${onTimeCompleted}/${delayedCompleted})`;
+                    document.getElementById('stageCompleted').textContent = summary.stages_completed;
                     document.getElementById('stageCompletedPct').textContent = pct(summary.stages_completed);
                     document.getElementById('stageOnTime').textContent = `${onTimeCompleted}/${onTimeProgress}`;
                     document.getElementById('stageOnTimePct').textContent = pct(onTimeCompleted + onTimeProgress);
