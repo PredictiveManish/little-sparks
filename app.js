@@ -4375,7 +4375,7 @@ async function loadDesignerPerformance() {
                         <p class="text-2xl font-bold text-green-600">${report.total_on_time}</p>
                         <p class="text-xs text-green-600 mt-1">On Time Completed Stages</p>
                     </div>
-                    <div class="text-center p-4 bg-red-50 rounded-lg">
+                    <div class="text-center p-4 bg-red-50 rounded-lg cursor-pointer hover:bg-red-100 transition-colors" onclick="showDesignerDelayedStages(${report.designer_id})">
                         <p class="text-2xl font-bold text-red-600">${report.total_delays}</p>
                         <p class="text-xs text-red-600 mt-1">Delayed Completed Stages</p>
                     </div>
@@ -4628,6 +4628,41 @@ async function showGlobalResponsibilityDetails() {
         modal.classList.remove('hidden');
     } catch (err) {
         console.error('[APP] showGlobalResponsibilityDetails: Failed:', err.message);
+        showToast('Failed to load delayed stages: ' + err.message);
+    }
+}
+
+async function showDesignerDelayedStages(designerId) {
+    try {
+        const delayedStages = await api.getDesignerDelayedStages(designerId);
+        
+        const modal = document.getElementById('responsibilityDetailsModal');
+        const list = document.getElementById('responsibilityDetailsList');
+        const title = document.getElementById('responsibilityDetailsTitle');
+        
+        const allDesigners = await api.getDesigners();
+        const designerName = allDesigners.find(d => d.id === designerId)?.name || 'Designer';
+        title.textContent = `Delayed Stages — ${designerName}`;
+        
+        if (!delayedStages || delayedStages.length === 0) {
+            list.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No delayed stages for this designer.</p>';
+        } else {
+            list.innerHTML = delayedStages.map(d => `
+                <div class="p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                    <div class="flex items-center justify-between mb-1">
+                        <p class="text-sm font-semibold text-gray-900">${d.project_name}</p>
+                        <span class="text-xs text-gray-500">${d.completed_at || 'N/A'}</span>
+                    </div>
+                    <p class="text-xs text-gray-600">Stage: <span class="font-medium">${d.stage_name}</span> (Index: ${d.stage_index})</p>
+                    ${d.delay_reason ? `<p class="text-xs text-red-600 mt-1">Reason: ${d.delay_reason}</p>` : ''}
+                    ${d.delay_days > 0 ? `<p class="text-xs text-red-500">Delayed by ${d.delay_days} day(s)</p>` : ''}
+                </div>
+            `).join('');
+        }
+        
+        modal.classList.remove('hidden');
+    } catch (err) {
+        console.error('[APP] showDesignerDelayedStages: Failed:', err.message);
         showToast('Failed to load delayed stages: ' + err.message);
     }
 }

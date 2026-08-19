@@ -73,8 +73,7 @@ const api = {
     getOverdueProjects: () => apiFetch('/dashboard/overdue-projects'),
     getStageSummary: () => apiFetch('/dashboard/stage-summary'),
     getDelayedStages: () => apiFetch('/dashboard/delayed-stages'),
-    getDelayedStages: () => apiFetch('/dashboard/delayed-stages'),
-    getDelayedStages: () => apiFetch('/dashboard/delayed-stages'),
+    getDesignerDelayedStages: (designerId) => apiFetch(`/designers/${designerId}/delayed-stages`),
 
     // Projects
     getProjects: () => apiFetch('/projects'),
