@@ -11,6 +11,7 @@ let tempDesignerSelections = [];
 let DESIGNERS = [];
 let CURRENT_USER = null;
 let USER_ROLE = null;
+let USER_EMAIL = null;
 let tempManagerSelections = [];
 let tempEditManagerSelections = [];
 // _editProjectCache removed - phase type is now read-only on edit page
@@ -155,6 +156,7 @@ async function checkAuth() {
         if (user) {
             CURRENT_USER = user;
             USER_ROLE = user.role;
+            USER_EMAIL = user.email;
             updateSidebarUser(user);
             applyRoleBasedNavVisibility();
             if (user.role === 'PENDING') {
@@ -291,6 +293,7 @@ async function handleSlackCallback() {
             if (user) {
                 CURRENT_USER = user;
                 USER_ROLE = user.role;
+                USER_EMAIL = user.email;
                 updateSidebarUser(user);
                 if (user.role === 'PENDING') {
                     showPage('pendingPage');
@@ -337,6 +340,7 @@ async function emailLogin(event) {
         if (result && result.user) {
             CURRENT_USER = result.user;
             USER_ROLE = result.user.role;
+            USER_EMAIL = result.user.email;
             updateSidebarUser(result.user);
             if (result.user.role === 'PENDING') {
                 showPage('pendingPage');
