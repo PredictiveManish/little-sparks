@@ -2087,6 +2087,15 @@ async def assign_designers_to_phase(
 # ---------- Designers ----------
 
 
+@app.get("/api/admin/users", response_model=List[UserResponse])
+def get_all_users(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    users = db.query(User).all()
+    return [UserResponse.model_validate(u) for u in users]
+
+
 @app.get("/api/designers", response_model=List[UserResponse])
 def get_designers(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)

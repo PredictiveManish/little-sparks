@@ -429,7 +429,7 @@ function navigateTo(view, projectId = null) {
         'create-project': 'page-create-project',
         'project-details': 'page-project-details',
         'edit-project': 'page-edit-project',
-        'designers': 'page-designers',
+        'designers': 'page-users',
         'settings': 'page-settings',
         'slack-messages': 'page-slack-messages',
         'slack-settings': 'page-slack-settings',
@@ -1348,29 +1348,64 @@ function toggleAddDesignerForm() {
 
 async function populateDesignersPage() {
     try {
-        DESIGNERS = await api.getDesigners();
-        const container = document.getElementById('designersGrid');
-        let html = '';
-        DESIGNERS.forEach(d => {
-            html += `
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex items-center gap-4 hover:shadow-md transition-shadow">
-                    <div class="w-12 h-12 rounded-full ${d.color} flex items-center justify-center text-white font-bold text-lg flex-shrink-0">${d.initials}</div>
-                    <div class="flex-1 min-w-0">
-                        <p class="font-semibold text-gray-900">${d.name}</p>
-                        <p class="text-xs text-gray-500">${d.specialty}</p>
-                    </div>
-                    <button onclick="removeDesigner(${d.id})" class="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0" title="Remove designer">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                        </svg>
-                    </button>
-                </div>
-            `;
-        });
-        container.innerHTML = html;
-
-        // Load pending approvals for admins
         if (USER_ROLE === 'ADMIN') {
+            // Admin sees all users
+            const allUsers = await api.getAllUsers();
+            const tbody = document.getElementById('usersTableBody');
+            if (!tbody) return;
+            
+            let html = '';
+            allUsers.forEach(u => {
+                const roleColors = {
+                    'ADMIN': 'bg-purple-100 text-purple-700',
+                    'MANAGER': 'bg-blue-100 text-blue-700',
+                    'DESIGNER': 'bg-green-100 text-green-700',
+                    'PENDING': 'bg-amber-100 text-amber-700'
+                };
+                const roleColor = roleColors[u.role?.toUpperCase()] || 'bg-gray-100 text-gray-700';
+                const isPending = u.role?.toUpperCase() === 'PENDING';
+                const isCurrentUser = u.email === USER_EMAIL;
+                
+                html += `
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full ${u.color || 'bg-gray-400'} flex items-center justify-center text-white font-bold text-sm flex-shrink-0">${u.initials || 'U'}</div>
+                                <div class="min-w-0">
+                                    <p class="font-semibold text-gray-900 text-sm">${u.name}</p>
+                                    <p class="text-xs text-gray-500 truncate">${u.email}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium ${roleColor}">${u.role || 'Unknown'}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <p class="text-sm text-gray-600">${u.specialty || '—'}</p>
+                        </td>
+                        <td class="px-6 py-4">
+                            ${isPending ? '<span class="text-xs text-amber-600 font-medium">⏳ Pending</span>' : '<span class="text-xs text-green-600 font-medium">✓ Active</span>'}
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                ${isPending ? `
+                                    <button onclick="approveUser(${u.id}, 'DESIGNER')" class="px-2.5 py-1 bg-green-500 text-white rounded text-xs font-medium hover:bg-green-600 transition-colors">Approve as Designer</button>
+                                    <button onclick="approveUser(${u.id}, 'MANAGER')" class="px-2.5 py-1 bg-blue-500 text-white rounded text-xs font-medium hover:bg-blue-600 transition-colors">Approve as Manager</button>
+                                ` : ''}
+                                ${!isPending && !isCurrentUser && u.role?.toUpperCase() !== 'ADMIN' ? `
+                                    <button onclick="promoteToAdmin(${u.id})" class="px-2.5 py-1 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 transition-colors">Promote to Admin</button>
+                                ` : ''}
+                                ${!isPending && !isCurrentUser ? `
+                                    <button onclick="removeUser(${u.id})" class="px-2.5 py-1 bg-white text-red-600 rounded text-xs font-medium border border-red-300 hover:bg-red-50 transition-colors">Remove</button>
+                                ` : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+            
+            // Also load pending approvals section for admins
             try {
                 const pendingUsers = await api.getPendingUsers();
                 const pendingSection = document.getElementById('pendingApprovalsSection');
@@ -1410,9 +1445,33 @@ async function populateDesignersPage() {
             } catch (pendingErr) {
                 console.error('[APP] Failed to load pending approvals:', pendingErr.message);
             }
+        } else {
+            // Manager sees only designers
+            DESIGNERS = await api.getDesigners();
+            const container = document.getElementById('designersGrid');
+            if (!container) return;
+            
+            let html = '';
+            DESIGNERS.forEach(d => {
+                html += `
+                    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex items-center gap-4 hover:shadow-md transition-shadow">
+                        <div class="w-12 h-12 rounded-full ${d.color} flex items-center justify-center text-white font-bold text-lg flex-shrink-0">${d.initials}</div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold text-gray-900">${d.name}</p>
+                            <p class="text-xs text-gray-500">${d.specialty}</p>
+                        </div>
+                        <button onclick="removeDesigner(${d.id})" class="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors flex-shrink-0" title="Remove designer">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                        </button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
         }
     } catch (err) {
-        showToast('Failed to load designers: ' + err.message);
+        showToast('Failed to load users: ' + err.message);
     }
 }
 
@@ -1450,6 +1509,28 @@ async function handleAddDesigner(event) {
         showToast(`Designer "${name}" added successfully!`);
     } catch (err) {
         showToast(err.message);
+    }
+}
+
+async function removeUser(userId) {
+    if (!confirm('Remove this user? This action cannot be undone.')) return;
+    try {
+        await api.deleteDesigner(userId);
+        populateDesignersPage();
+        showToast('User removed.');
+    } catch (err) {
+        showToast(err.message);
+    }
+}
+
+async function promoteToAdmin(userId) {
+    if (!confirm('Promote this user to ADMIN? This grants full access.')) return;
+    try {
+        await api.promoteToAdmin(userId);
+        showToast('User promoted to Admin');
+        populateDesignersPage();
+    } catch (err) {
+        showToast('Failed: ' + err.message);
     }
 }
 

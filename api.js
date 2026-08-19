@@ -66,6 +66,7 @@ const api = {
     getPendingUsers: () => apiFetch('/admin/pending-users'),
     approveUser: (userId, role) => apiFetch('/admin/users/approve', { method: 'POST', body: { user_id: userId, role } }),
     promoteToAdmin: (userId) => apiFetch('/admin/users/promote', { method: 'POST', body: { user_id: userId } }),
+    getAllUsers: () => apiFetch('/admin/users'),
 
     // Dashboard
     getDashboardStats: () => apiFetch('/dashboard/stats'),
