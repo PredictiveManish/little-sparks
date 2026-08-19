@@ -188,35 +188,33 @@ SCHEDULER_INTERVAL_SECONDS = int(os.getenv("SCHEDULER_INTERVAL_SECONDS", "300"))
 argon2_hasher = argon2.PasswordHasher()
 
 # ---------- Seed admin user on startup (only if not exists) ----------
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "manish.tiwari.09@zohomail.in")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "Manish@smartivity123")
-ADMIN_NAME = os.getenv("ADMIN_NAME", "Manish Tiwari")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
+ADMIN_NAME = os.getenv("ADMIN_NAME", "Admin")
 
-db = SessionLocal()
-try:
-    existing = db.query(User).filter(User.email == ADMIN_EMAIL).first()
-    if not existing:
-        user = User(
-            name=ADMIN_NAME,
-            email=ADMIN_EMAIL,
-            password_hash=argon2_hasher.hash(ADMIN_PASSWORD),
-            role="ADMIN",
-            specialty="Product Manager",
-            initials="MT",
-            color="bg-purple-500",
-        )
-        db.add(user)
-        db.commit()
-        print(f"Admin user created: {ADMIN_EMAIL}")
-    else:
-        if existing.role.upper() != "ADMIN":
-            existing.role = "ADMIN" # type: ignore[assignment]
+if ADMIN_EMAIL and ADMIN_PASSWORD:
+    db = SessionLocal()
+    try:
+        existing = db.query(User).filter(User.email == ADMIN_EMAIL).first()
+        if not existing:
+            user = User(
+                name=ADMIN_NAME,
+                email=ADMIN_EMAIL,
+                password_hash=argon2_hasher.hash(ADMIN_PASSWORD),
+                role="ADMIN",
+                specialty="Product Manager",
+                initials="MT",
+                color="bg-purple-500",
+            )
+            db.add(user)
             db.commit()
-            print(f"Admin role corrected: {ADMIN_EMAIL}")
+            print(f"Admin user created: {ADMIN_EMAIL}")
         else:
-            print(f"Admin user already exists: {ADMIN_EMAIL}")
-finally:
-    db.close()
+            if existing.role.upper() != "ADMIN":
+                existing.role = "ADMIN" # type: ignore[assignment]
+                db.commit()
+    finally:
+        db.close()
 
 
 def hash_password(password: str) -> str:
@@ -1142,6 +1140,23 @@ def approve_user(
     if data.role not in VALID_ROLES - {"PENDING"}:
         raise HTTPException(status_code=400, detail="Invalid role")
     target.role = data.role
+    db.commit()
+    db.refresh(target)
+    return UserResponse.model_validate(target)
+
+
+@app.post("/api/admin/users/promote")
+def promote_user_to_admin(
+    data: ApproveUserRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    target = db.query(User).filter(User.id == data.user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.role.upper() == "ADMIN":
+        raise HTTPException(status_code=400, detail="User is already an admin")
+    target.role = "ADMIN"
     db.commit()
     db.refresh(target)
     return UserResponse.model_validate(target)
