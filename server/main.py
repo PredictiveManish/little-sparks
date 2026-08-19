@@ -1147,7 +1147,7 @@ def approve_user(
 
 @app.post("/api/admin/users/promote")
 def promote_user_to_admin(
-    data: ApproveUserRequest,
+    data: PromoteUserRequest,
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
 ):

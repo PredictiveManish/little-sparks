@@ -68,6 +68,10 @@ class ApproveUserRequest(BaseModel):
     role: str
 
 
+class PromoteUserRequest(BaseModel):
+    user_id: int
+
+
 # ---------- Phase ----------
 
 
