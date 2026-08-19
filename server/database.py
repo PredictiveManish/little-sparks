@@ -114,7 +114,7 @@ def _add_column_if_missing(table_name, column_name, column_ddl):
         from sqlalchemy import inspect
 
         inspector = inspect(engine)
-        existing_columns = {c.name for c in inspector.get_columns(table_name)}
+        existing_columns = {getattr(c, 'name', c.get('name') if isinstance(c, dict) else c) for c in inspector.get_columns(table_name)}
         if column_name in existing_columns:
             return
         logger.info("Adding column %s.%s", table_name, column_name)
