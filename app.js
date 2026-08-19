@@ -588,18 +588,22 @@ async function loadDashboard() {
                         return total > 0 ? `(${((val / total) * 100).toFixed(1)}%)` : '(0.0%)';
                     }
                     document.getElementById('stageTotal').textContent = total;
-                    document.getElementById('stageCompleted').textContent = `${summary.stages_completed} (${summary.stages_on_time_completed}/${summary.stages_delayed_completed})`;
+                    const onTimeCompleted = summary.stages_on_time_completed ?? 0;
+                    const onTimeProgress = summary.stages_on_time_progress ?? 0;
+                    const delayedCompleted = summary.stages_delayed_completed ?? 0;
+                    const delayedProgress = summary.stages_delayed_progress ?? 0;
+                    document.getElementById('stageCompleted').textContent = `${summary.stages_completed} (${onTimeCompleted}/${delayedCompleted})`;
                     document.getElementById('stageCompletedPct').textContent = pct(summary.stages_completed);
-                    document.getElementById('stageOnTime').textContent = `${summary.stages_on_time_completed}/${summary.stages_on_time_progress}`;
-                    document.getElementById('stageOnTimePct').textContent = pct(summary.stages_on_time_completed + summary.stages_on_time_progress);
-                    document.getElementById('stageDelayed').textContent = `${summary.stages_delayed_completed}/${summary.stages_delayed_progress}`;
-                    document.getElementById('stageDelayedPct').textContent = pct(summary.stages_delayed_completed + summary.stages_delayed_progress);
+                    document.getElementById('stageOnTime').textContent = `${onTimeCompleted}/${onTimeProgress}`;
+                    document.getElementById('stageOnTimePct').textContent = pct(onTimeCompleted + onTimeProgress);
+                    document.getElementById('stageDelayed').textContent = `${delayedCompleted}/${delayedProgress}`;
+                    document.getElementById('stageDelayedPct').textContent = pct(delayedCompleted + delayedProgress);
                     document.getElementById('stageInTimeline').textContent = summary.stages_in_timeline;
                     document.getElementById('stageInTimelinePct').textContent = pct(summary.stages_in_timeline);
                     
                     if (total > 0) {
                         const completedPct = (summary.stages_completed / total) * 100;
-                        const delayedPct = ((summary.stages_delayed_completed + summary.stages_delayed_progress) / total) * 100;
+                        const delayedPct = ((delayedCompleted + delayedProgress) / total) * 100;
                         const inTimelinePct = (summary.stages_in_timeline / total) * 100;
                         document.getElementById('barCompleted').style.width = `${completedPct}%`;
                         document.getElementById('barDelayed').style.width = `${delayedPct}%`;
