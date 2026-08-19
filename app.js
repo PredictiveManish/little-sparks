@@ -3407,9 +3407,12 @@ function toggleDesignerPerfDateInputs() {
     if (period === 'weekly') {
         weeklyInputs.classList.remove('hidden');
         monthlyInputs.classList.add('hidden');
-    } else {
+    } else if (period === 'monthly') {
         weeklyInputs.classList.add('hidden');
         monthlyInputs.classList.remove('hidden');
+    } else {
+        weeklyInputs.classList.add('hidden');
+        monthlyInputs.classList.add('hidden');
     }
 }
 
@@ -4334,6 +4337,9 @@ async function loadDesignerPerformance() {
             }
             report = await api.getDesignerWeeklyPerformance(parseInt(designerId), weekStart, weekEnd);
             endpoint = `/reports/designer/${designerId}/performance/download?period=weekly&week_start=${weekStart}&week_end=${weekEnd}`;
+        } else if (period === 'overall') {
+            report = await api.getDesignerOverallPerformance(parseInt(designerId));
+            endpoint = `/reports/designer/${designerId}/performance/download?period=overall`;
         } else {
             const month = document.getElementById('designerPerfMonth').value;
             const year = document.getElementById('designerPerfYear').value;
@@ -4381,11 +4387,13 @@ async function loadDesignerPerformance() {
             </div>
         `;
         
-        // Cross-designer ranking
-        html += '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">';
-        html += '<h3 class="text-sm font-semibold text-gray-700 mb-4">📊 Team Ranking — On-Time Rate</h3>';
-        html += '<div id="designerRankingList" class="space-y-2"><p class="text-sm text-gray-400 py-2">Loading ranking...</p></div>';
-        html += '</div>';
+        // Cross-designer ranking (skip for overall)
+        if (period !== 'overall') {
+            html += '<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">';
+            html += '<h3 class="text-sm font-semibold text-gray-700 mb-4">📊 Team Ranking — On-Time Rate</h3>';
+            html += '<div id="designerRankingList" class="space-y-2"><p class="text-sm text-gray-400 py-2">Loading ranking...</p></div>';
+            html += '</div>';
+        }
         
         html += '<div id="designerPerfContentExtra" class="space-y-6">'; // charts go here
         
@@ -4398,7 +4406,7 @@ async function loadDesignerPerformance() {
         // Update chart title based on period
         const trendTitle = document.getElementById('designerPerfTrendTitle');
         if (trendTitle) {
-            trendTitle.textContent = period === 'weekly' ? 'Delay Trend (Last 8 Weeks)' : 'Delay Trend (Last 6 Months)';
+            trendTitle.textContent = period === 'weekly' ? 'Delay Trend (Last 8 Weeks)' : period === 'overall' ? 'Delay Trend (Since Joined)' : 'Delay Trend (Last 6 Months)';
         }
 
         // Render Designer Performance Charts
@@ -4458,49 +4466,51 @@ async function loadDesignerPerformance() {
                 if (trendContainer) trendContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No trend data available.</p>';
             }
 
-            // 2. Cross-designer ranking — team-average comparison
-            try {
-                const periodParams = period === 'weekly'
-                    ? { weekStart: document.getElementById('designerPerfWeekStart').value, weekEnd: document.getElementById('designerPerfWeekEnd').value }
-                    : { month: document.getElementById('designerPerfMonth').value, year: document.getElementById('designerPerfYear').value };
-                const comparisonData = await api.getDesignerComparison(period, periodParams.weekStart, periodParams.weekEnd, periodParams.month, periodParams.year);
-                if (comparisonData && comparisonData.length > 0) {
-                    const teamAvg = comparisonData.reduce((s, d) => s + (d.on_time_rate || 0), 0) / comparisonData.length;
-                    const sorted = [...comparisonData].sort((a, b) => (b.on_time_rate || 0) - (a.on_time_rate || 0));
-                    const rankingHtml = sorted.map((d) => {
-                        const isCurrentDesigner = d.designer_id === parseInt(designerId);
-                        const rate = d.on_time_rate !== null ? d.on_time_rate + '%' : 'N/A';
-                        const barWidth = d.on_time_rate !== null ? d.on_time_rate : 0;
-                        const barColor = d.on_time_rate >= 80 ? 'bg-green-500' : d.on_time_rate >= 60 ? 'bg-amber-500' : 'bg-red-500';
-                        const diffFromAvg = d.on_time_rate !== null ? (d.on_time_rate - teamAvg).toFixed(1) : 0;
-                        const diffLabel = d.on_time_rate !== null
-                            ? (parseFloat(diffFromAvg) >= 0 ? '+' : '') + diffFromAvg + 'pp vs team avg'
-                            : 'N/A';
-                        const rowClass = isCurrentDesigner ? 'bg-brand-50 border-brand-200' : 'border-gray-100';
-                        return `
-                            <div class="flex items-center gap-3 p-2 rounded-lg border ${rowClass}">
-                                <div class="flex-1 min-w-0">
-                                    <div class="flex items-center justify-between mb-1">
-                                        <p class="text-sm font-medium text-gray-900 truncate">${d.designer_name} ${isCurrentDesigner ? '<span class="text-xs text-brand-600"></span>' : ''}</p>
-                                        <p class="text-sm font-semibold ${d.on_time_rate >= 80 ? 'text-green-600' : d.on_time_rate >= 60 ? 'text-amber-600' : 'text-red-600'}">${rate}</p>
+            // 2. Cross-designer ranking — team-average comparison (skip for overall)
+            if (period !== 'overall') {
+                try {
+                    const periodParams = period === 'weekly'
+                        ? { weekStart: document.getElementById('designerPerfWeekStart').value, weekEnd: document.getElementById('designerPerfWeekEnd').value }
+                        : { month: document.getElementById('designerPerfMonth').value, year: document.getElementById('designerPerfYear').value };
+                    const comparisonData = await api.getDesignerComparison(period, periodParams.weekStart, periodParams.weekEnd, periodParams.month, periodParams.year);
+                    if (comparisonData && comparisonData.length > 0) {
+                        const teamAvg = comparisonData.reduce((s, d) => s + (d.on_time_rate || 0), 0) / comparisonData.length;
+                        const sorted = [...comparisonData].sort((a, b) => (b.on_time_rate || 0) - (a.on_time_rate || 0));
+                        const rankingHtml = sorted.map((d) => {
+                            const isCurrentDesigner = d.designer_id === parseInt(designerId);
+                            const rate = d.on_time_rate !== null ? d.on_time_rate + '%' : 'N/A';
+                            const barWidth = d.on_time_rate !== null ? d.on_time_rate : 0;
+                            const barColor = d.on_time_rate >= 80 ? 'bg-green-500' : d.on_time_rate >= 60 ? 'bg-amber-500' : 'bg-red-500';
+                            const diffFromAvg = d.on_time_rate !== null ? (d.on_time_rate - teamAvg).toFixed(1) : 0;
+                            const diffLabel = d.on_time_rate !== null
+                                ? (parseFloat(diffFromAvg) >= 0 ? '+' : '') + diffFromAvg + 'pp vs team avg'
+                                : 'N/A';
+                            const rowClass = isCurrentDesigner ? 'bg-brand-50 border-brand-200' : 'border-gray-100';
+                            return `
+                                <div class="flex items-center gap-3 p-2 rounded-lg border ${rowClass}">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center justify-between mb-1">
+                                            <p class="text-sm font-medium text-gray-900 truncate">${d.designer_name} ${isCurrentDesigner ? '<span class="text-xs text-brand-600"></span>' : ''}</p>
+                                            <p class="text-sm font-semibold ${d.on_time_rate >= 80 ? 'text-green-600' : d.on_time_rate >= 60 ? 'text-amber-600' : 'text-red-600'}">${rate}</p>
+                                        </div>
+                                        <div class="w-full bg-gray-200 rounded-full h-2 relative">
+                                            <div class="${barColor} h-2 rounded-full" style="width:${barWidth}%"></div>
+                                            <div class="absolute top-0 bottom-0 w-0.5 bg-gray-400" style="left:${teamAvg}%"></div>
+                                        </div>
+                                        <p class="text-xs text-gray-500 mt-0.5">${diffLabel} · ${d.stages_completed} stages · ${d.on_time} on-time · ${d.delayed} delayed${d.avg_delay_days !== null ? ' · ' + d.avg_delay_days + 'd avg delay' : ''}</p>
                                     </div>
-                                    <div class="w-full bg-gray-200 rounded-full h-2 relative">
-                                        <div class="${barColor} h-2 rounded-full" style="width:${barWidth}%"></div>
-                                        <div class="absolute top-0 bottom-0 w-0.5 bg-gray-400" style="left:${teamAvg}%"></div>
-                                    </div>
-                                    <p class="text-xs text-gray-500 mt-0.5">${diffLabel} · ${d.stages_completed} stages · ${d.on_time} on-time · ${d.delayed} delayed${d.avg_delay_days !== null ? ' · ' + d.avg_delay_days + 'd avg delay' : ''}</p>
                                 </div>
-                            </div>
-                        `;
-                    }).join('');
-                    const teamAvgHtml = `<p class="text-xs text-gray-500 mt-3 text-center">Team average: <span class="font-semibold text-gray-700">${teamAvg.toFixed(1)}%</span> — gray line indicates team average</p>`;
-                    document.getElementById('designerRankingList').innerHTML = rankingHtml + teamAvgHtml;
-                } else {
-                    document.getElementById('designerRankingList').innerHTML = '<p class="text-sm text-gray-400 py-2">No ranking data available for this period.</p>';
+                            `;
+                        }).join('');
+                        const teamAvgHtml = `<p class="text-xs text-gray-500 mt-3 text-center">Team average: <span class="font-semibold text-gray-700">${teamAvg.toFixed(1)}%</span> — gray line indicates team average</p>`;
+                        document.getElementById('designerRankingList').innerHTML = rankingHtml + teamAvgHtml;
+                    } else {
+                        document.getElementById('designerRankingList').innerHTML = '<p class="text-sm text-gray-400 py-2">No ranking data available for this period.</p>';
+                    }
+                } catch (compErr) {
+                    console.warn('[APP] loadDesignerPerformance: Failed to load comparison:', compErr.message);
+                    document.getElementById('designerRankingList').innerHTML = '<p class="text-sm text-gray-400 py-2">No ranking data available.</p>';
                 }
-            } catch (compErr) {
-                console.warn('[APP] loadDesignerPerformance: Failed to load comparison:', compErr.message);
-                document.getElementById('designerRankingList').innerHTML = '<p class="text-sm text-gray-400 py-2">No ranking data available.</p>';
             }
         } catch (chartErr) {
             console.warn('[APP] loadDesignerPerformance: Failed to render charts:', chartErr.message);
@@ -4587,4 +4597,37 @@ async function showResponsibilityDetails(designerId, period, periodStart, period
 
 function closeResponsibilityDetailsModal() {
     document.getElementById('responsibilityDetailsModal').classList.add('hidden');
+}
+
+async function showGlobalResponsibilityDetails() {
+    try {
+        const delayedStages = await api.getDelayedStages();
+        
+        const modal = document.getElementById('responsibilityDetailsModal');
+        const list = document.getElementById('responsibilityDetailsList');
+        const title = document.getElementById('responsibilityDetailsTitle');
+        
+        title.textContent = 'Delayed Stages — All Projects';
+        
+        if (!delayedStages || delayedStages.length === 0) {
+            list.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No delayed stages found.</p>';
+        } else {
+            list.innerHTML = delayedStages.map(d => `
+                <div class="p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                    <div class="flex items-center justify-between mb-1">
+                        <p class="text-sm font-semibold text-gray-900">${d.project_name}</p>
+                        <span class="text-xs text-gray-500">${d.completed_at || 'N/A'}</span>
+                    </div>
+                    <p class="text-xs text-gray-600">Stage: <span class="font-medium">${d.stage_name}</span> (Index: ${d.stage_index})</p>
+                    ${d.delay_reason ? `<p class="text-xs text-red-600 mt-1">Reason: ${d.delay_reason}</p>` : ''}
+                    ${d.delay_days > 0 ? `<p class="text-xs text-red-500">Delayed by ${d.delay_days} day(s)</p>` : ''}
+                </div>
+            `).join('');
+        }
+        
+        modal.classList.remove('hidden');
+    } catch (err) {
+        console.error('[APP] showGlobalResponsibilityDetails: Failed:', err.message);
+        showToast('Failed to load delayed stages: ' + err.message);
+    }
 }

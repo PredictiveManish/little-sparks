@@ -72,6 +72,9 @@ const api = {
     getDashboardStats: () => apiFetch('/dashboard/stats'),
     getOverdueProjects: () => apiFetch('/dashboard/overdue-projects'),
     getStageSummary: () => apiFetch('/dashboard/stage-summary'),
+    getDelayedStages: () => apiFetch('/dashboard/delayed-stages'),
+    getDelayedStages: () => apiFetch('/dashboard/delayed-stages'),
+    getDelayedStages: () => apiFetch('/dashboard/delayed-stages'),
 
     // Projects
     getProjects: () => apiFetch('/projects'),
@@ -114,6 +117,10 @@ const api = {
     // Reports — Designer Performance (monthly)
     getDesignerMonthlyPerformance: (designerId, month, year) =>
         apiFetch(`/designers/${designerId}/performance/monthly?month=${month}&year=${year}`),
+
+    // Reports — Designer Performance (overall)
+    getDesignerOverallPerformance: (designerId) =>
+        apiFetch(`/designers/${designerId}/performance/overall`),
 
     // Reports — Project Monthly Trend (6-12 months)
     getProjectMonthlyTrend: (projectId) => apiFetch(`/projects/${projectId}/monthly-trend`),

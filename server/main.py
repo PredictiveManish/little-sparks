@@ -7220,6 +7220,132 @@ async def get_designer_monthly_performance(
     )
 
 
+@app.get(
+    "/api/designers/{designer_id}/performance/overall",
+    response_model=DesignerPerformanceResponse,
+)
+async def get_designer_overall_performance(
+    designer_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    designer = db.query(User).filter(User.id == designer_id).first()
+    if not designer:
+        raise HTTPException(status_code=404, detail="Designer not found")
+
+    projects = (
+        db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
+    )
+
+    if not projects:
+        return DesignerPerformanceResponse(
+            designer_id=designer.id,
+            designer_name=designer.name,
+            period_start=designer.created_at.strftime("%Y-%m-%d") if designer.created_at else "N/A",
+            period_end=datetime.now(IST).strftime("%Y-%m-%d"),
+            projects=[],
+            total_updates=0,
+            total_delays=0,
+            total_stages_completed=0,
+            total_stages_assigned=0,
+            total_on_time=0,
+        )
+
+    project_ids = [p.id for p in projects]
+    total_stages_assigned = (
+        db.query(Phase).filter(Phase.project_id.in_(project_ids)).count()
+    )
+
+    phases = (
+        db.query(Phase)
+        .filter(
+            Phase.project_id.in_(project_ids),
+            Phase.completed_at.isnot(None),
+        )
+        .all()
+    )
+
+    total_stages_completed = 0
+    total_delays = 0
+    total_on_time = 0
+    delay_responsibility_count = 0
+    items = []
+
+    for ph in phases:
+        proj = db.query(Project).filter(Project.id == ph.project_id).first()
+        if not proj:
+            continue
+
+        if ph.delay_responsible:
+            delay_responsibility_count += ph.delay_responsible.count(designer_id)
+
+        delay_days = 0
+        if ph.completed_at and ph.deadline:
+            try:
+                completed_dt = None
+                for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"]:
+                    try:
+                        completed_dt = datetime.strptime(ph.completed_at, fmt)
+                        break
+                    except ValueError:
+                        pass
+                if completed_dt:
+                    deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+                    diff = (completed_dt.date() - deadline_dt.date()).days
+                    delay_days = max(0, diff)
+            except Exception:
+                pass
+
+        total_stages_completed += 1
+        if delay_days > 0:
+            total_delays += 1
+        else:
+            total_on_time += 1
+
+        updates_count = (
+            db.query(SlackActivity)
+            .filter(SlackActivity.project_id == ph.project_id)
+            .count()
+        )
+
+        project_phases = db.query(Phase).filter(Phase.project_id == ph.project_id).all()
+        delays_count = sum(1 for p in project_phases if p.delay_reason)
+
+        items.append(
+            DesignerProjectItem(
+                project_id=proj.id,
+                project_name=proj.name,
+                stage_index=ph.stage_index,
+                stage_name=_get_current_stage_name(
+                    ph.stage_index, proj.phase_type, proj.stage_names, phase=ph
+                ),
+                status=proj.status,
+                progress=proj.progress,
+                deadline=ph.deadline,
+                completed_at=ph.completed_at,
+                delay_days=delay_days,
+                delay_reason=ph.delay_reason or "",
+                updates_count=updates_count,
+                delays_count=delays_count,
+                manager_remarks=ph.manager_remarks or [],
+            )
+        )
+
+    return DesignerPerformanceResponse(
+        designer_id=designer.id,
+        designer_name=designer.name,
+        period_start=designer.created_at.strftime("%Y-%m-%d") if designer.created_at else "N/A",
+        period_end=datetime.now(IST).strftime("%Y-%m-%d"),
+        projects=items,
+        total_updates=len(items),
+        total_delays=total_delays,
+        total_stages_completed=total_stages_completed,
+        total_stages_assigned=total_stages_assigned,
+        total_on_time=total_on_time,
+        delay_responsibility_count=delay_responsibility_count,
+    )
+
+
 # ---------- Monthly Trend for a Project ----------
 
 
@@ -7566,6 +7692,44 @@ async def get_designer_responsibility_details(
             )
 
     # Sort by completed_at descending (most recent first)
+    result.sort(key=lambda x: x.completed_at or "", reverse=True)
+    return result
+
+
+@app.get("/api/dashboard/delayed-stages", response_model=List[DelayResponsibilityDetail])
+def get_all_delayed_stages(
+    user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
+    projects = get_user_owned_project_query(db, user).all()
+    result = []
+    for p in projects:
+        for ph in p.phases:
+            if ph.completed_at and ph.delay_responsible and len(ph.delay_responsible) > 0:
+                delay_days = 0
+                if ph.deadline:
+                    try:
+                        completed_str = ph.completed_at
+                        if "T" not in completed_str:
+                            completed_str = completed_str[:10]
+                        completed_dt = datetime.strptime(completed_str, "%Y-%m-%d")
+                        deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+                        delay_days = max(0, (completed_dt.date() - deadline_dt.date()).days)
+                    except Exception:
+                        pass
+                stage_name = _get_current_stage_name(
+                    ph.stage_index, p.phase_type, p.stage_names, phase=ph
+                )
+                result.append(
+                    DelayResponsibilityDetail(
+                        project_id=p.id,
+                        project_name=p.name,
+                        stage_index=ph.stage_index,
+                        stage_name=stage_name,
+                        delay_reason=ph.delay_reason or "",
+                        delay_days=delay_days,
+                        completed_at=ph.completed_at,
+                    )
+                )
     result.sort(key=lambda x: x.completed_at or "", reverse=True)
     return result
 
