@@ -596,22 +596,40 @@ async function loadDashboard() {
                     const onTimeProgress = summary.stages_on_time_progress ?? 0;
                     const delayedCompleted = summary.stages_delayed_completed ?? 0;
                     const delayedProgress = summary.stages_delayed_progress ?? 0;
-                    document.getElementById('stageCompleted').textContent = summary.stages_completed;
-                    document.getElementById('stageCompletedPct').textContent = pct(summary.stages_completed);
+                    const totalCompleted = summary.stages_completed;
+                    const totalInProgress = onTimeProgress + delayedProgress;
+                    
+                    document.getElementById('stageCompleted').textContent = totalCompleted;
+                    document.getElementById('stageCompletedPct').textContent = pct(totalCompleted);
+                    document.getElementById('stageInProgress').textContent = totalInProgress;
+                    document.getElementById('stageInProgressPct').textContent = pct(totalInProgress);
                     document.getElementById('stageOnTime').textContent = `${onTimeCompleted}/${onTimeProgress}`;
                     document.getElementById('stageOnTimePct').textContent = pct(onTimeCompleted + onTimeProgress);
                     document.getElementById('stageDelayed').textContent = `${delayedCompleted}/${delayedProgress}`;
                     document.getElementById('stageDelayedPct').textContent = pct(delayedCompleted + delayedProgress);
-                    document.getElementById('stageInTimeline').textContent = summary.stages_in_timeline;
-                    document.getElementById('stageInTimelinePct').textContent = pct(summary.stages_in_timeline);
                     
                     if (total > 0) {
-                        const completedPct = (summary.stages_completed / total) * 100;
-                        const delayedPct = ((delayedCompleted + delayedProgress) / total) * 100;
-                        const inTimelinePct = (summary.stages_in_timeline / total) * 100;
-                        document.getElementById('barCompleted').style.width = `${completedPct}%`;
-                        document.getElementById('barDelayed').style.width = `${delayedPct}%`;
-                        document.getElementById('barInTimeline').style.width = `${inTimelinePct}%`;
+                        const completedPct = (totalCompleted / total) * 100;
+                        const onTimeProgressPct = (onTimeProgress / total) * 100;
+                        const delayedProgressPct = (delayedProgress / total) * 100;
+                        const inTimelinePct = (totalInProgress / total) * 100;
+                        
+                        const barCompleted = document.getElementById('barCompleted');
+                        const barOnTimeProgress = document.getElementById('barOnTimeProgress');
+                        const barDelayedProgress = document.getElementById('barDelayedProgress');
+                        const barInTimeline = document.getElementById('barInTimeline');
+                        
+                        barCompleted.style.width = `${completedPct}%`;
+                        barCompleted.querySelector(':scope > div').textContent = `${totalCompleted} (${completedPct.toFixed(1)}%)`;
+                        
+                        barOnTimeProgress.style.width = `${onTimeProgressPct}%`;
+                        barOnTimeProgress.querySelector(':scope > div').textContent = `${onTimeProgress} OT`;
+                        
+                        barDelayedProgress.style.width = `${delayedProgressPct}%`;
+                        barDelayedProgress.querySelector(':scope > div').textContent = `${delayedProgress} DL`;
+                        
+                        barInTimeline.style.width = `${inTimelinePct}%`;
+                        barInTimeline.querySelector(':scope > div').textContent = `${totalInProgress} In Prog`;
                     }
                 } catch (summaryErr) {
                     console.warn('[APP] loadDashboard: Failed to load stage summary:', summaryErr.message);
