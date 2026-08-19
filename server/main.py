@@ -7836,32 +7836,32 @@ def get_all_delayed_stages(
     result = []
     for p in projects:
         for ph in p.phases:
-            if ph.completed_at and ph.delay_responsible and len(ph.delay_responsible) > 0:
+            if ph.completed_at and ph.deadline:
                 delay_days = 0
-                if ph.deadline:
-                    try:
-                        completed_str = ph.completed_at
-                        if "T" not in completed_str:
-                            completed_str = completed_str[:10]
-                        completed_dt = datetime.strptime(completed_str, "%Y-%m-%d")
-                        deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
-                        delay_days = max(0, (completed_dt.date() - deadline_dt.date()).days)
-                    except Exception:
-                        pass
-                stage_name = _get_current_stage_name(
-                    ph.stage_index, p.phase_type, p.stage_names, phase=ph
-                )
-                result.append(
-                    DelayResponsibilityDetail(
-                        project_id=p.id,
-                        project_name=p.name,
-                        stage_index=ph.stage_index,
-                        stage_name=stage_name,
-                        delay_reason=ph.delay_reason or "",
-                        delay_days=delay_days,
-                        completed_at=ph.completed_at,
+                try:
+                    completed_str = ph.completed_at
+                    if "T" not in completed_str:
+                        completed_str = completed_str[:10]
+                    completed_dt = datetime.strptime(completed_str, "%Y-%m-%d")
+                    deadline_dt = datetime.strptime(ph.deadline, "%Y-%m-%d")
+                    delay_days = max(0, (completed_dt.date() - deadline_dt.date()).days)
+                except Exception:
+                    pass
+                if delay_days > 0:
+                    stage_name = _get_current_stage_name(
+                        ph.stage_index, p.phase_type, p.stage_names, phase=ph
                     )
-                )
+                    result.append(
+                        DelayResponsibilityDetail(
+                            project_id=p.id,
+                            project_name=p.name,
+                            stage_index=ph.stage_index,
+                            stage_name=stage_name,
+                            delay_reason=ph.delay_reason or "",
+                            delay_days=delay_days,
+                            completed_at=ph.completed_at,
+                        )
+                    )
     result.sort(key=lambda x: x.completed_at or "", reverse=True)
     return result
 
