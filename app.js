@@ -1300,7 +1300,7 @@ async function confirmMarkComplete() {
         // Fetch project to get phase_type-aware stage name for toast
         try {
             const project = await api.getProject(selectedProjectId);
-            const stageLabel = getPhaseDisplayName(project);
+            const stageLabel = getPhaseDisplayName(project, pendingCompleteStageIndex);
             showToast(`"${stageLabel}" marked as complete!`);
         } catch (err) {
             showToast(`Stage ${pendingCompleteStageIndex + 1} marked as complete!`);
