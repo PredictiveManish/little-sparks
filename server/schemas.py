@@ -198,8 +198,10 @@ class DashboardStats(BaseModel):
 class StageSummary(BaseModel):
     total_stages: int
     stages_completed: int
-    stages_on_time: int
-    stages_delayed: int
+    stages_on_time_completed: int
+    stages_on_time_progress: int
+    stages_delayed_completed: int
+    stages_delayed_progress: int
     stages_in_timeline: int
 
 

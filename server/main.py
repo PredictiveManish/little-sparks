@@ -1217,9 +1217,10 @@ def stage_summary(
     today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
     total_stages = 0
     stages_completed = 0
-    stages_on_time = 0
-    stages_delayed = 0
-    stages_in_timeline = 0
+    stages_on_time_completed = 0
+    stages_on_time_progress = 0
+    stages_delayed_completed = 0
+    stages_delayed_progress = 0
     for p in projects:
         for phase in p.phases:
             total_stages += 1
@@ -1227,19 +1228,22 @@ def stage_summary(
                 stages_completed += 1
                 delay_days = _compute_phase_delay_days(phase, today_str)
                 if delay_days > 0:
-                    stages_delayed += 1
+                    stages_delayed_completed += 1
                 else:
-                    stages_on_time += 1
+                    stages_on_time_completed += 1
             else:
                 if today_str > phase.deadline:
-                    stages_delayed += 1
+                    stages_delayed_progress += 1
                 else:
-                    stages_in_timeline += 1
+                    stages_on_time_progress += 1
+    stages_in_timeline = stages_on_time_progress + stages_delayed_progress
     return StageSummary(
         total_stages=total_stages,
         stages_completed=stages_completed,
-        stages_on_time=stages_on_time,
-        stages_delayed=stages_delayed,
+        stages_on_time_completed=stages_on_time_completed,
+        stages_on_time_progress=stages_on_time_progress,
+        stages_delayed_completed=stages_delayed_completed,
+        stages_delayed_progress=stages_delayed_progress,
         stages_in_timeline=stages_in_timeline,
     )
 
