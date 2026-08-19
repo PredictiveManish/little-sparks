@@ -7838,10 +7838,15 @@ async def get_designer_performance_trend(
 
         for ph in phases:
             try:
-                comp_str = ph.completed_at
-                if isinstance(comp_str, str):
-                    comp_str = comp_str[:10]
-                comp_dt = datetime.strptime(comp_str, "%Y-%m-%d")
+                comp_dt = None
+                for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"]:
+                    try:
+                        comp_dt = datetime.strptime(ph.completed_at, fmt)
+                        break
+                    except ValueError:
+                        pass
+                if not comp_dt:
+                    continue
                 _, iso_week, _ = comp_dt.isocalendar()
                 week_key = f"W{iso_week:02d}"
                 if week_key not in weekly_data:
@@ -7902,10 +7907,15 @@ async def get_designer_performance_trend(
 
         for ph in phases:
             try:
-                comp_str = ph.completed_at
-                if isinstance(comp_str, str):
-                    comp_str = comp_str[:10]
-                comp_dt = datetime.strptime(comp_str, "%Y-%m-%d")
+                comp_dt = None
+                for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"]:
+                    try:
+                        comp_dt = datetime.strptime(ph.completed_at, fmt)
+                        break
+                    except ValueError:
+                        pass
+                if not comp_dt:
+                    continue
                 month_key = comp_dt.strftime("%Y-%m")
                 if month_key not in monthly_data:
                     continue
