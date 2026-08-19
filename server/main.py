@@ -442,7 +442,7 @@ def filter_user_projects(db, user, project_ids):
 # ---------- Cookie helpers ----------
 
 
-def set_session_cookie(response: Response, session_token: str):
+def set_session_(response: Response, session_token: str):
     is_dev = os.getenv("ENV") == "development"
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
