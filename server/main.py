@@ -1,6 +1,21 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Cookie, Response, Query, Body
+from fastapi import (
+    FastAPI,
+    Depends,
+    HTTPException,
+    status,
+    Request,
+    Cookie,
+    Response,
+    Query,
+    Body,
+)
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, JSONResponse, FileResponse, StreamingResponse
+from fastapi.responses import (
+    RedirectResponse,
+    JSONResponse,
+    FileResponse,
+    StreamingResponse,
+)
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional
@@ -212,7 +227,7 @@ if ADMIN_EMAIL and ADMIN_PASSWORD:
             print(f"Admin user created: {ADMIN_EMAIL}")
         else:
             if existing.role.upper() != "ADMIN":
-                existing.role = "ADMIN" # type: ignore[assignment]
+                existing.role = "ADMIN"  # type: ignore[assignment]
                 db.commit()
     finally:
         db.close()
@@ -253,7 +268,9 @@ def create_session_token() -> str:
 
 def create_session(user_id: int, db: Session) -> SessionModel:
     token = create_session_token()
-    expires = datetime.now(IST).replace(tzinfo=None) + timedelta(days=SESSION_LIFETIME_DAYS)
+    expires = datetime.now(IST).replace(tzinfo=None) + timedelta(
+        days=SESSION_LIFETIME_DAYS
+    )
     session = SessionModel(
         session_token=token,
         user_id=user_id,
@@ -287,8 +304,10 @@ def get_session_from_token(token: str, db: Session) -> Optional[SessionModel]:
     if not session:
         logger.warning("Session not found for token: %s...", token[:20])
         return None
-    if session.expires_at and session.expires_at < datetime.now(IST).replace(tzinfo=None): # pyright: ignore[reportGeneralTypeIssues]
-        session.revoked = True # pyright: ignore[reportAttributeAccessIssue]
+    if session.expires_at and session.expires_at < datetime.now(IST).replace(
+        tzinfo=None
+    ):  # pyright: ignore[reportGeneralTypeIssues]
+        session.revoked = True  # pyright: ignore[reportAttributeAccessIssue]
         db.commit()
         logger.warning(
             "Session expired: user_id=%s, session_id=%s, expired_at=%s",
@@ -514,9 +533,9 @@ async def refresh_slack_token(db):
             if new_refresh_token:
                 config.refresh_token = encrypt_token(new_refresh_token)
             if expires_in:
-                config.token_expires_at = datetime.now(IST).replace(tzinfo=None) + timedelta(
-                    seconds=expires_in
-                )
+                config.token_expires_at = datetime.now(IST).replace(
+                    tzinfo=None
+                ) + timedelta(seconds=expires_in)
             db.commit()
         logger.info(
             "[SLACK REFRESH] Token refreshed successfully | team_id=%s | new_token=%s... | expires_in=%ss",
@@ -1202,7 +1221,9 @@ def _compute_phase_delay_days(phase, today_str):
         try:
             deadline_dt = datetime.strptime(phase.deadline, "%Y-%m-%d")
             if today_str > phase.deadline:
-                return (datetime.now(IST).replace(tzinfo=None).date() - deadline_dt.date()).days
+                return (
+                    datetime.now(IST).replace(tzinfo=None).date() - deadline_dt.date()
+                ).days
         except Exception:
             pass
     return 0
@@ -1214,9 +1235,15 @@ def dashboard_stats(
 ):
     projects = get_user_owned_project_query(db, user).all()
     today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
-    completed = sum(1 for p in projects if _compute_project_status(p, today_str) == "COMPLETED")
-    delayed = sum(1 for p in projects if _compute_project_status(p, today_str) == "DELAYED")
-    on_time = sum(1 for p in projects if _compute_project_status(p, today_str) == "ON_TRACK")
+    completed = sum(
+        1 for p in projects if _compute_project_status(p, today_str) == "COMPLETED"
+    )
+    delayed = sum(
+        1 for p in projects if _compute_project_status(p, today_str) == "DELAYED"
+    )
+    on_time = sum(
+        1 for p in projects if _compute_project_status(p, today_str) == "ON_TRACK"
+    )
     return DashboardStats(
         active_projects=len(projects),
         on_time=on_time,
@@ -1282,22 +1309,22 @@ def overdue_projects(
             except Exception:
                 days_overdue = 0
             designer = db.query(User).filter(User.id == p.assigned_designer_id).first()
-            result.append(OverdueProject(
-                id=p.id,
-                name=p.name,
-                assigned_designer=designer.name if designer else "Unassigned",
-                deadline=p.deadline,
-                days_overdue=days_overdue,
-                stage_index=p.stage_index,
-            ))
+            result.append(
+                OverdueProject(
+                    id=p.id,
+                    name=p.name,
+                    assigned_designer=designer.name if designer else "Unassigned",
+                    deadline=p.deadline,
+                    days_overdue=days_overdue,
+                    stage_index=p.stage_index,
+                )
+            )
     result.sort(key=lambda x: x.days_overdue, reverse=True)
     return result
 
 
 @app.get("/api/dashboard/delay-trend", response_model=List[DelayTrendPoint])
-def delay_trend(
-    user: User = Depends(get_current_user), db: Session = Depends(get_db)
-):
+def delay_trend(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     projects = get_user_owned_project_query(db, user).all()
     project_ids = {p.id for p in projects}
     phases = (
@@ -1322,7 +1349,12 @@ def delay_trend(
             if delay_days > 0:
                 month = completed_dt.strftime("%Y-%m")
                 if month not in monthly:
-                    monthly[month] = {"total_delay_days": 0, "delayed_projects": 0, "responsible_designer_ids": [], "responsible_manager_ids": []}
+                    monthly[month] = {
+                        "total_delay_days": 0,
+                        "delayed_projects": 0,
+                        "responsible_designer_ids": [],
+                        "responsible_manager_ids": [],
+                    }
                 monthly[month]["total_delay_days"] += delay_days
                 monthly[month]["delayed_projects"] += 1
                 # Track responsible user IDs
@@ -1331,21 +1363,30 @@ def delay_trend(
                         user_obj = db.query(User).filter(User.id == uid).first()
                         if user_obj:
                             role = user_obj.role.upper()
-                            if role == "DESIGNER" and uid not in monthly[month]["responsible_designer_ids"]:
+                            if (
+                                role == "DESIGNER"
+                                and uid
+                                not in monthly[month]["responsible_designer_ids"]
+                            ):
                                 monthly[month]["responsible_designer_ids"].append(uid)
-                            elif role == "MANAGER" and uid not in monthly[month]["responsible_manager_ids"]:
+                            elif (
+                                role == "MANAGER"
+                                and uid not in monthly[month]["responsible_manager_ids"]
+                            ):
                                 monthly[month]["responsible_manager_ids"].append(uid)
         except Exception:
             continue
     result = []
     for month in sorted(monthly.keys()):
-        result.append(DelayTrendPoint(
-            month=month,
-            total_delay_days=monthly[month]["total_delay_days"],
-            delayed_projects=monthly[month]["delayed_projects"],
-            responsible_designer_ids=monthly[month]["responsible_designer_ids"],
-            responsible_manager_ids=monthly[month]["responsible_manager_ids"],
-        ))
+        result.append(
+            DelayTrendPoint(
+                month=month,
+                total_delay_days=monthly[month]["total_delay_days"],
+                delayed_projects=monthly[month]["delayed_projects"],
+                responsible_designer_ids=monthly[month]["responsible_designer_ids"],
+                responsible_manager_ids=monthly[month]["responsible_manager_ids"],
+            )
+        )
     # Zero-fill: generate full 6-month calendar window ending with current month
     if result:
         last_month = datetime.strptime(result[-1].month, "%Y-%m")
@@ -1356,13 +1397,15 @@ def delay_trend(
             month_dt = datetime(new_year, new_month, 1)
             month_str = month_dt.strftime("%Y-%m")
             if month_str not in monthly:
-                result.append(DelayTrendPoint(
-                    month=month_str,
-                    total_delay_days=0,
-                    delayed_projects=0,
-                    responsible_designer_ids=[],
-                    responsible_manager_ids=[],
-                ))
+                result.append(
+                    DelayTrendPoint(
+                        month=month_str,
+                        total_delay_days=0,
+                        delayed_projects=0,
+                        responsible_designer_ids=[],
+                        responsible_manager_ids=[],
+                    )
+                )
         result.sort(key=lambda x: x.month)
     return result
 
@@ -1477,9 +1520,9 @@ async def create_project(
     if user.role.upper() == "DESIGNER":
         raise HTTPException(status_code=403, detail="Designers cannot create projects")
 
-    if data.deadline and datetime.strptime(data.deadline, "%Y-%m-%d") < datetime.strptime(
-        data.start_date, "%Y-%m-%d"
-    ):
+    if data.deadline and datetime.strptime(
+        data.deadline, "%Y-%m-%d"
+    ) < datetime.strptime(data.start_date, "%Y-%m-%d"):
         raise HTTPException(
             status_code=400,
             detail="Expected Completion date cannot be before Start Date",
@@ -1548,7 +1591,6 @@ async def create_project(
         .order_by(Phase.stage_index)
         .all()
     )
-
 
     async def _notify():
         with SessionLocal() as bg_db:
@@ -1623,7 +1665,10 @@ async def update_project(
     if data.description is not None and data.description != project.description:
         changes.append(f"Description updated")
         project.description = data.description
-    if data.assigned_designer_id is not None and data.assigned_designer_id != project.assigned_designer_id:
+    if (
+        data.assigned_designer_id is not None
+        and data.assigned_designer_id != project.assigned_designer_id
+    ):
         changes.append(f"Designer updated")
         project.assigned_designer_id = data.assigned_designer_id
     if data.start_date is not None and data.start_date != project.start_date:
@@ -1659,7 +1704,12 @@ async def update_project(
                 existing_phases[i].stage_name = stage_name
                 # Preserve existing deadline
             else:
-                new_phase = Phase(project_id=project_id, stage_index=i, stage_name=stage_name, deadline=data.deadline or project.deadline)
+                new_phase = Phase(
+                    project_id=project_id,
+                    stage_index=i,
+                    stage_name=stage_name,
+                    deadline=data.deadline or project.deadline,
+                )
                 db.add(new_phase)
         # Commit phase rebuild changes before continuing
         db.flush()
@@ -1669,7 +1719,10 @@ async def update_project(
     if data.phases is not None:
         # Build index of existing phases by primary key (phase_id) when available,
         # falling back to stage_index for backward compatibility with older data.
-        existing_by_pk = {p.id: p for p in db.query(Phase).filter(Phase.project_id == project_id).all()}
+        existing_by_pk = {
+            p.id: p
+            for p in db.query(Phase).filter(Phase.project_id == project_id).all()
+        }
         existing_by_idx = {p.stage_index: p for p in existing_by_pk.values()}
 
         # Collect incoming phase_ids and indices
@@ -1687,7 +1740,11 @@ async def update_project(
                     if pd.phase_id == ph_id:
                         referenced = True
                         break
-                    if pd.phase_id is None and existing_by_idx.get(pd.stage_index, None) and existing_by_idx[pd.stage_index].id == ph_id:
+                    if (
+                        pd.phase_id is None
+                        and existing_by_idx.get(pd.stage_index, None)
+                        and existing_by_idx[pd.stage_index].id == ph_id
+                    ):
                         referenced = True
                         break
                 if not referenced:
@@ -1698,7 +1755,10 @@ async def update_project(
         for phase_data in data.phases:
             # Try to find existing phase by phase_id first
             phase = None
-            if phase_data.phase_id is not None and phase_data.phase_id in existing_by_pk:
+            if (
+                phase_data.phase_id is not None
+                and phase_data.phase_id in existing_by_pk
+            ):
                 phase = existing_by_pk[phase_data.phase_id]
             elif phase_data.stage_index in existing_by_idx:
                 phase = existing_by_idx[phase_data.stage_index]
@@ -1710,7 +1770,9 @@ async def update_project(
                 if phase_data.deadline:
                     old_deadline = phase.deadline
                     phase.deadline = phase_data.deadline
-                    changes.append(f"Phase {phase.stage_index + 1} deadline: {old_deadline} → {phase.deadline}")
+                    changes.append(
+                        f"Phase {phase.stage_index + 1} deadline: {old_deadline} → {phase.deadline}"
+                    )
             else:
                 new_phase = Phase(
                     project_id=project_id,
@@ -1724,13 +1786,17 @@ async def update_project(
         # Update delay_reason on the current active phase
         current_phase = (
             db.query(Phase)
-            .filter(Phase.project_id == project_id, Phase.stage_index == project.stage_index)
+            .filter(
+                Phase.project_id == project_id, Phase.stage_index == project.stage_index
+            )
             .first()
         )
         if current_phase:
             old_reason = current_phase.delay_reason or ""
             if old_reason and old_reason not in ("On time", ""):
-                current_phase.delay_reason = f"{old_reason} (Revised: {data.delay_reason})"
+                current_phase.delay_reason = (
+                    f"{old_reason} (Revised: {data.delay_reason})"
+                )
             else:
                 current_phase.delay_reason = data.delay_reason
             changes.append(f"Delay reason updated")
@@ -1780,8 +1846,17 @@ async def update_project(
             .order_by(Phase.stage_index)
             .all()
         )
-        current_phase = project_phases[project.stage_index] if project.stage_index < len(project_phases) else None
-        current_stage = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=current_phase)
+        current_phase = (
+            project_phases[project.stage_index]
+            if project.stage_index < len(project_phases)
+            else None
+        )
+        current_stage = _get_current_stage_name(
+            project.stage_index,
+            project.phase_type,
+            project.stage_names,
+            phase=current_phase,
+        )
 
         async def _notify_update():
             with SessionLocal() as bg_db:
@@ -1881,7 +1956,9 @@ async def complete_stage(
     if body.delay_reason:
         old_reason = phases[stage_index].delay_reason or ""
         if old_reason and old_reason not in ("On time", ""):
-            phases[stage_index].delay_reason = f"{old_reason} (Revised: {body.delay_reason})"
+            phases[
+                stage_index
+            ].delay_reason = f"{old_reason} (Revised: {body.delay_reason})"
         else:
             phases[stage_index].delay_reason = body.delay_reason
 
@@ -1918,9 +1995,15 @@ async def complete_stage(
     designer_name = designer.name if designer else "Unassigned"
     now_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M")
     completed_phase = next((p for p in phases if p.stage_index == stage_index), None)
-    completed_stage_name = _get_current_stage_name(stage_index, project.phase_type, project.stage_names, phase=completed_phase)
-    next_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
-    next_stage_name = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=next_phase)
+    completed_stage_name = _get_current_stage_name(
+        stage_index, project.phase_type, project.stage_names, phase=completed_phase
+    )
+    next_phase = (
+        phases[project.stage_index] if project.stage_index < len(phases) else None
+    )
+    next_stage_name = _get_current_stage_name(
+        project.stage_index, project.phase_type, project.stage_names, phase=next_phase
+    )
 
     if project.progress == 100:
         notify = (
@@ -2011,7 +2094,9 @@ async def unmark_stage(
     designer_name = designer.name if designer else "Unassigned"
     now_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M")
     unmarked_phase = phases[stage_index] if stage_index < len(phases) else None
-    unmarked_stage_name = _get_current_stage_name(stage_index, project.phase_type, project.stage_names, phase=unmarked_phase)
+    unmarked_stage_name = _get_current_stage_name(
+        stage_index, project.phase_type, project.stage_names, phase=unmarked_phase
+    )
 
     notify = (
         f"*Stage Unmarked*\n\n"
@@ -2106,9 +2191,7 @@ def get_designers(
 
 
 @app.get("/api/managers", response_model=List[UserResponse])
-def get_managers(
-    user: User = Depends(get_current_user), db: Session = Depends(get_db)
-):
+def get_managers(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     users = db.query(User).filter(User.role.in_(["MANAGER", "ADMIN"])).all()
     return [UserResponse.model_validate(u) for u in users]
 
@@ -2235,7 +2318,9 @@ def _get_stages_for_phase_type(phase_type):
     return PRODUCTION_STAGES
 
 
-def _get_current_stage_name(stage_index, phase_type=None, custom_names=None, phase=None):
+def _get_current_stage_name(
+    stage_index, phase_type=None, custom_names=None, phase=None
+):
     if phase and phase.stage_name:
         return phase.stage_name
     if custom_names and stage_index < len(custom_names):
@@ -2286,9 +2371,7 @@ def verify_slack_signature(timestamp, signature, body, signing_secret):
             )
         return match
     except Exception as e:
-        logger.error(
-            "[SLACK WEBHOOK] Error during signature verification: %s", e
-        )
+        logger.error("[SLACK WEBHOOK] Error during signature verification: %s", e)
         return False
 
 
@@ -2574,7 +2657,9 @@ async def notify_project_created(
         manager_name = "Admin"
     stage_list = ""
     for i, phase in enumerate(phases):
-        stage_name = _get_current_stage_name(i, project.phase_type, project.stage_names, phase=phase)
+        stage_name = _get_current_stage_name(
+            i, project.phase_type, project.stage_names, phase=phase
+        )
         stage_list += f"{i + 1}. *{stage_name}*\n   _Deadline: {phase.deadline}_\n"
     description_text = (
         project.description if project.description else "No description provided."
@@ -2636,10 +2721,17 @@ async def send_stage_update_reminder(db, project_id, kind="manual", phase=None):
     current_phase = (
         phases[project.stage_index] if project.stage_index < len(phases) else None
     )
-    stage_name = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=current_phase)
+    stage_name = _get_current_stage_name(
+        project.stage_index,
+        project.phase_type,
+        project.stage_names,
+        phase=current_phase,
+    )
     designer_name = designer.name if designer else "Unassigned"
     designer_mention = (
-        f"<@{designer.slack_user_id}>" if designer and designer.slack_user_id else designer_name
+        f"<@{designer.slack_user_id}>"
+        if designer and designer.slack_user_id
+        else designer_name
     )
 
     headers = {
@@ -2659,7 +2751,10 @@ async def send_stage_update_reminder(db, project_id, kind="manual", phase=None):
     blocks = [
         {
             "type": "header",
-            "text": {"type": "plain_text", "text": headers.get(kind, "Update Requested")},
+            "text": {
+                "type": "plain_text",
+                "text": headers.get(kind, "Update Requested"),
+            },
         },
         {
             "type": "section",
@@ -2676,8 +2771,12 @@ async def send_stage_update_reminder(db, project_id, kind="manual", phase=None):
         },
         {"type": "divider"},
     ]
-    fallback_text = f"{headers.get(kind, 'Update Requested')}: {project.name} — {stage_name}"
-    await send_slack_notification(db, project_id, fallback_text, blocks, project.slack_channel_id)
+    fallback_text = (
+        f"{headers.get(kind, 'Update Requested')}: {project.name} — {stage_name}"
+    )
+    await send_slack_notification(
+        db, project_id, fallback_text, blocks, project.slack_channel_id
+    )
     return True
 
 
@@ -2707,10 +2806,21 @@ async def notify_stage_completed(db, project_id, stage_index):
     if not config:
         return
     if project.slack_channel_id:
-        completed_phase = next((p for p in phases if p.stage_index == stage_index), None)
-        completed_stage_name = _get_current_stage_name(stage_index, project.phase_type, project.stage_names, phase=completed_phase)
-        next_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
-        next_stage_name = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=next_phase)
+        completed_phase = next(
+            (p for p in phases if p.stage_index == stage_index), None
+        )
+        completed_stage_name = _get_current_stage_name(
+            stage_index, project.phase_type, project.stage_names, phase=completed_phase
+        )
+        next_phase = (
+            phases[project.stage_index] if project.stage_index < len(phases) else None
+        )
+        next_stage_name = _get_current_stage_name(
+            project.stage_index,
+            project.phase_type,
+            project.stage_names,
+            phase=next_phase,
+        )
     if project.progress == 100:
         blocks = [
             {
@@ -2738,7 +2848,9 @@ async def notify_stage_completed(db, project_id, stage_index):
             project.slack_channel_id,
         )
     else:
-        completed_phase = next((p for p in phases if p.stage_index == stage_index), None)
+        completed_phase = next(
+            (p for p in phases if p.stage_index == stage_index), None
+        )
         remarks_text = completed_phase.manager_remarks if completed_phase else None
 
         blocks = [
@@ -2764,13 +2876,15 @@ async def notify_stage_completed(db, project_id, stage_index):
         ]
 
         if remarks_text:
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f":pushpin: *Manager remarks — please apply these in {next_stage_name}:*\n{remarks_text}",
-                },
-            })
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f":pushpin: *Manager remarks — please apply these in {next_stage_name}:*\n{remarks_text}",
+                    },
+                }
+            )
 
         blocks.append({"type": "divider"})
         await send_slack_notification(
@@ -2791,7 +2905,9 @@ async def notify_stage_unmarked(db, project_id, stage_index):
         return
     if project.slack_channel_id:
         unmarked_phase = phases[stage_index] if stage_index < len(phases) else None
-        unmarked_stage_name = _get_current_stage_name(stage_index, project.phase_type, project.stage_names, phase=unmarked_phase)
+        unmarked_stage_name = _get_current_stage_name(
+            stage_index, project.phase_type, project.stage_names, phase=unmarked_phase
+        )
         blocks = [
             {
                 "type": "header",
@@ -2832,7 +2948,12 @@ async def notify_designers_assigned(db, project_id, stage_index, designer_ids):
         return
     if not project.slack_channel_id:
         return
-    stage_name = _get_current_stage_name(stage_index, project.phase_type, project.stage_names, phase=phases[stage_index] if stage_index < len(phases) else None)
+    stage_name = _get_current_stage_name(
+        stage_index,
+        project.phase_type,
+        project.stage_names,
+        phase=phases[stage_index] if stage_index < len(phases) else None,
+    )
     assigned_names = []
     for did in designer_ids:
         d = db.query(User).filter(User.id == did).first()
@@ -2881,8 +3002,15 @@ async def notify_designers_assigned(db, project_id, stage_index, designer_ids):
 
 
 def _build_project_block(project, designer, phases):
-    current_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
-    current_stage = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=current_phase)
+    current_phase = (
+        phases[project.stage_index] if project.stage_index < len(phases) else None
+    )
+    current_stage = _get_current_stage_name(
+        project.stage_index,
+        project.phase_type,
+        project.stage_names,
+        phase=current_phase,
+    )
     designer_name = designer.name if designer else "Unassigned"
     stages_completed = sum(1 for p in phases if p.completed_at)
     total_stages = len(phases)
@@ -3108,7 +3236,9 @@ async def slack_install_callback(
             config.refresh_token = encrypt_token(refresh_token)
             logger.info("[SLACK INSTALL] Stored refresh_token (token rotation enabled)")
         if expires_in:
-            config.token_expires_at = datetime.now(IST).replace(tzinfo=None) + timedelta(seconds=expires_in)
+            config.token_expires_at = datetime.now(IST).replace(
+                tzinfo=None
+            ) + timedelta(seconds=expires_in)
             logger.info("[SLACK INSTALL] Token expires at: %s", config.token_expires_at)
         # Signing secret is app-level (from Basic Information), not returned by oauth.v2.access.
         # Only set it if it hasn't been configured yet and we have one from env.
@@ -3134,7 +3264,9 @@ async def slack_install_callback(
             config.refresh_token = encrypt_token(refresh_token)
             logger.info("[SLACK INSTALL] Stored refresh_token (token rotation enabled)")
         if expires_in:
-            config.token_expires_at = datetime.now(IST).replace(tzinfo=None) + timedelta(seconds=expires_in)
+            config.token_expires_at = datetime.now(IST).replace(
+                tzinfo=None
+            ) + timedelta(seconds=expires_in)
             logger.info("[SLACK INSTALL] Token expires at: %s", config.token_expires_at)
         db.add(config)
         db.commit()
@@ -3256,7 +3388,9 @@ def get_slack_messages(
     db: Session = Depends(get_db),
 ):
     if user.role.upper() == "DESIGNER":
-        raise HTTPException(status_code=403, detail="Designers cannot access Slack messages")
+        raise HTTPException(
+            status_code=403, detail="Designers cannot access Slack messages"
+        )
     messages = (
         db.query(SlackMessage)
         .filter(SlackMessage.project_id == project_id)
@@ -3280,7 +3414,9 @@ async def get_slack_channel_history(
         raise HTTPException(status_code=404, detail="Project not found")
 
     if user.role.upper() == "DESIGNER":
-        raise HTTPException(status_code=403, detail="Designers cannot access Slack messages")
+        raise HTTPException(
+            status_code=403, detail="Designers cannot access Slack messages"
+        )
 
     if not project.slack_channel_id:
         return {"messages": [], "channel_id": "", "has_channel": False}
@@ -3294,7 +3430,9 @@ async def get_slack_channel_history(
 
     try:
         result = await slack_api_call(
-            db, "conversations.history", {"channel": project.slack_channel_id, "limit": 100}
+            db,
+            "conversations.history",
+            {"channel": project.slack_channel_id, "limit": 100},
         )
     except RuntimeError as e:
         logger.warning("[SLACK HISTORY] Slack API error | error=%s", str(e))
@@ -3330,7 +3468,9 @@ async def get_slack_channel_history(
         user_name = ""
         if msg.get("user") and msg["user"] not in user_cache:
             try:
-                user_result = await slack_api_call(db, "users.info", {"user": msg["user"]})
+                user_result = await slack_api_call(
+                    db, "users.info", {"user": msg["user"]}
+                )
             except RuntimeError:
                 user_cache[msg["user"]] = "Unknown"
                 continue
@@ -3373,24 +3513,44 @@ async def cancel_slack_completion(
     db: Session = Depends(get_db),
 ):
     if user.role.upper() not in ("MANAGER", "ADMIN"):
-        raise HTTPException(status_code=403, detail="Only managers can cancel completion requests")
+        raise HTTPException(
+            status_code=403, detail="Only managers can cancel completion requests"
+        )
 
-    tracker = db.query(SlackCompletionTracker).filter(
-        SlackCompletionTracker.id == tracker_id
-    ).first()
+    tracker = (
+        db.query(SlackCompletionTracker)
+        .filter(SlackCompletionTracker.id == tracker_id)
+        .first()
+    )
     if not tracker:
         raise HTTPException(status_code=404, detail="Completion request not found")
     if tracker.status != "PENDING":
-        raise HTTPException(status_code=400, detail=f"Completion request is already {tracker.status}")
+        raise HTTPException(
+            status_code=400, detail=f"Completion request is already {tracker.status}"
+        )
 
     tracker.status = "CANCELLED"
     db.commit()
 
     project = db.query(Project).filter(Project.id == tracker.project_id).first()
     if project and project.slack_channel_id:
-        tracker_phases = db.query(Phase).filter(Phase.project_id == tracker.project_id).order_by(Phase.stage_index).all()
-        tracker_phase = tracker_phases[tracker.stage_index] if tracker.stage_index < len(tracker_phases) else None
-        cancel_stage_name = _get_current_stage_name(tracker.stage_index, tracker.project.phase_type, tracker.project.stage_names, phase=tracker_phase)
+        tracker_phases = (
+            db.query(Phase)
+            .filter(Phase.project_id == tracker.project_id)
+            .order_by(Phase.stage_index)
+            .all()
+        )
+        tracker_phase = (
+            tracker_phases[tracker.stage_index]
+            if tracker.stage_index < len(tracker_phases)
+            else None
+        )
+        cancel_stage_name = _get_current_stage_name(
+            tracker.stage_index,
+            tracker.project.phase_type,
+            tracker.project.stage_names,
+            phase=tracker_phase,
+        )
         cancel_text = (
             f"❌ *Completion Request Cancelled*\n\n"
             f"Stage: {cancel_stage_name}\n"
@@ -3399,7 +3559,8 @@ async def cancel_slack_completion(
         )
         try:
             await slack_api_call(
-                db, "chat.postMessage",
+                db,
+                "chat.postMessage",
                 {"channel": project.slack_channel_id, "text": cancel_text},
             )
         except Exception as e:
@@ -3407,9 +3568,13 @@ async def cancel_slack_completion(
 
     logger.info(
         "[CANCEL] Completion request cancelled | tracker=%d | project=%d | by=%s",
-        tracker_id, tracker.project_id, user.name,
+        tracker_id,
+        tracker.project_id,
+        user.name,
     )
-    return SlackCompletionCancelResponse(success=True, message="Completion request cancelled")
+    return SlackCompletionCancelResponse(
+        success=True, message="Completion request cancelled"
+    )
 
 
 # ---------- Slack Webhook Endpoint ----------
@@ -3499,18 +3664,28 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
         ts = payload.get("ts", "")
         logger.info(
             "[SLACK WEBHOOK] Incoming message | channel=%s | user=%s | ts=%s",
-            channel_id, user_id, ts,
+            channel_id,
+            user_id,
+            ts,
         )
         # Find project by channel
-        project = db.query(Project).filter(
-            Project.slack_channel_id == channel_id
-        ).first()
+        project = (
+            db.query(Project).filter(Project.slack_channel_id == channel_id).first()
+        )
         if project:
             # Parse structured info from message
-            status_match = re.search(r'(?:^|\n)Status:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
-            blockers_match = re.search(r'(?:^|\n)Blockers:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
-            update_match = re.search(r'(?:^|\n)Update:\s*(.+?)(?:\n|$)', text, re.IGNORECASE)
-            progress_match = re.search(r'(?:^|\n)Progress:\s*(\d+)%?', text, re.IGNORECASE)
+            status_match = re.search(
+                r"(?:^|\n)Status:\s*(.+?)(?:\n|$)", text, re.IGNORECASE
+            )
+            blockers_match = re.search(
+                r"(?:^|\n)Blockers:\s*(.+?)(?:\n|$)", text, re.IGNORECASE
+            )
+            update_match = re.search(
+                r"(?:^|\n)Update:\s*(.+?)(?:\n|$)", text, re.IGNORECASE
+            )
+            progress_match = re.search(
+                r"(?:^|\n)Progress:\s*(\d+)%?", text, re.IGNORECASE
+            )
 
             status_text = status_match.group(1).strip() if status_match else None
             blockers_text = blockers_match.group(1).strip() if blockers_match else None
@@ -3534,7 +3709,13 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 channel_id=channel_id,
                 text=text,
                 ts=ts,
-                raw_json={"status": status_text, "blockers": blockers_text, "update": update_text, "progress": progress_val, "raw": text},
+                raw_json={
+                    "status": status_text,
+                    "blockers": blockers_text,
+                    "update": update_text,
+                    "progress": progress_val,
+                    "raw": text,
+                },
             )
             db.add(parsed_msg)
 
@@ -3565,12 +3746,14 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         project.progress = progress_val
                         if progress_val == 100:
                             project.status = "COMPLETED"
-                        elif project.deadline < datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d"):
+                        elif project.deadline < datetime.now(IST).replace(
+                            tzinfo=None
+                        ).strftime("%Y-%m-%d"):
                             project.status = "DELAYED"
                         else:
                             project.status = "ON_TRACK"
 
-            # ========== Slack Message-Based Auto-Tracking Add-On ==========
+            # Slack Message-Based Auto-Tracking Add-On
             text_lower = text.lower()
 
             # Get user role to determine if designer or manager
@@ -3583,7 +3766,13 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
             if not user_obj:
                 all_users = db.query(User).all()
                 for u in all_users:
-                    if u.name and u.name.lower().replace(" ", "") in text_lower.replace(" ", "") or text_lower.replace(" ", "") in u.name.lower().replace(" ", ""):
+                    if (
+                        u.name
+                        and u.name.lower().replace(" ", "")
+                        in text_lower.replace(" ", "")
+                        or text_lower.replace(" ", "")
+                        in u.name.lower().replace(" ", "")
+                    ):
                         user_obj = u
                         user_role = u.role.upper()
                         is_manager = user_role in ("MANAGER", "ADMIN")
@@ -3593,9 +3782,17 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
             if current_phase and not is_manager:
                 # --- Auto-detect delay keywords ---
                 delay_patterns = [
-                    r'\bdelay\b', r'\bdelayed\b', r"\bwon't make it\b", r"\bbehind\b",
-                    r'\bdelay:\b', r'\bbehind schedule\b', r'\bcannot meet\b',
-                    r'\bnot on track\b', r'\bat risk\b', r'\bissue\b', r'\bblocker\b',
+                    r"\bdelay\b",
+                    r"\bdelayed\b",
+                    r"\bwon't make it\b",
+                    r"\bbehind\b",
+                    r"\bdelay:\b",
+                    r"\bbehind schedule\b",
+                    r"\bcannot meet\b",
+                    r"\bnot on track\b",
+                    r"\bat risk\b",
+                    r"\bissue\b",
+                    r"\bblocker\b",
                 ]
                 delay_match = False
                 for pattern in delay_patterns:
@@ -3605,19 +3802,28 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 if delay_match:
                     existing_delay = current_phase.delay_reason or ""
                     if existing_delay and existing_delay not in ("On time", ""):
-                        current_phase.delay_reason = f"{existing_delay} | {text.strip()}"
+                        current_phase.delay_reason = (
+                            f"{existing_delay} | {text.strip()}"
+                        )
                     else:
                         current_phase.delay_reason = text.strip()
                     project.status = "DELAYED"
                     logger.info(
                         "[AUTO-TRACKING] Delay detected in message | project=%s | phase=%d | reason=%s",
-                        project.name, current_phase.stage_index, text.strip()[:100],
+                        project.name,
+                        current_phase.stage_index,
+                        text.strip()[:100],
                     )
 
                 # --- Auto-detect update keywords (non-structured messages) ---
                 update_patterns = [
-                    r'\bupdate\b', r'\bprogress\b', r'\bworking on\b', r'\bstatus is\b',
-                    r'\bupdate:\b', r'\bupdate -\b', r'\bupdate:\b',
+                    r"\bupdate\b",
+                    r"\bprogress\b",
+                    r"\bworking on\b",
+                    r"\bstatus is\b",
+                    r"\bupdate:\b",
+                    r"\bupdate -\b",
+                    r"\bupdate:\b",
                 ]
                 update_match = False
                 for pattern in update_patterns:
@@ -3627,21 +3833,32 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 if update_match and not update_text:
                     existing_update = current_phase.designer_update or ""
                     if existing_update and existing_update not in ("",):
-                        current_phase.designer_update = f"{existing_update}\n{text.strip()}"
+                        current_phase.designer_update = (
+                            f"{existing_update}\n{text.strip()}"
+                        )
                     else:
                         current_phase.designer_update = text.strip()
                     logger.info(
                         "[AUTO-TRACKING] Update detected in message | project=%s | phase=%d",
-                        project.name, current_phase.stage_index,
+                        project.name,
+                        current_phase.stage_index,
                     )
 
                 # --- Auto-detect designer completion intent ---
                 designer_complete_patterns = [
-                    r'\bcomplete\b', r'\bdone\b', r'\bfinished\b', r'\bready\b',
-                    r'\bcompleted\b', r'\bstage complete\b', r'\bstage done\b',
-                    r'\bthis stage is complete\b', r'\bcould complete\b',
-                    r'\bcould complete this\b', r'\bcan complete\b',
-                    r'\bready to move\b', r'\bready to move to\b',
+                    r"\bcomplete\b",
+                    r"\bdone\b",
+                    r"\bfinished\b",
+                    r"\bready\b",
+                    r"\bcompleted\b",
+                    r"\bstage complete\b",
+                    r"\bstage done\b",
+                    r"\bthis stage is complete\b",
+                    r"\bcould complete\b",
+                    r"\bcould complete this\b",
+                    r"\bcan complete\b",
+                    r"\bready to move\b",
+                    r"\bready to move to\b",
                 ]
                 designer_complete_match = False
                 for pattern in designer_complete_patterns:
@@ -3650,10 +3867,14 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         break
                 if designer_complete_match and is_designer:
                     # Check if there's already a pending tracker for this project
-                    existing_tracker = db.query(SlackCompletionTracker).filter(
-                        SlackCompletionTracker.project_id == project.id,
-                        SlackCompletionTracker.status == "PENDING",
-                    ).first()
+                    existing_tracker = (
+                        db.query(SlackCompletionTracker)
+                        .filter(
+                            SlackCompletionTracker.project_id == project.id,
+                            SlackCompletionTracker.status == "PENDING",
+                        )
+                        .first()
+                    )
                     if not existing_tracker:
                         tracker = SlackCompletionTracker(
                             project_id=project.id,
@@ -3667,11 +3888,22 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         db.commit()
                         logger.info(
                             "[AUTO-TRACKING] Designer completion request | project=%s | stage=%d | designer=%s",
-                            project.name, project.stage_index, user_name or "Unknown",
+                            project.name,
+                            project.stage_index,
+                            user_name or "Unknown",
                         )
                         # Post a message in channel asking for manager confirmation
-                        auto_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
-                        stage_name = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=auto_phase)
+                        auto_phase = (
+                            phases[project.stage_index]
+                            if project.stage_index < len(phases)
+                            else None
+                        )
+                        stage_name = _get_current_stage_name(
+                            project.stage_index,
+                            project.phase_type,
+                            project.stage_names,
+                            phase=auto_phase,
+                        )
                         confirm_text = (
                             f"*Stage Completion Request*\n\n"
                             f"*{user_name}* requests to complete: *{stage_name}*\n"
@@ -3680,19 +3912,34 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         )
                         try:
                             await slack_api_call(
-                                db, "chat.postMessage",
-                                {"channel": project.slack_channel_id, "text": confirm_text},
+                                db,
+                                "chat.postMessage",
+                                {
+                                    "channel": project.slack_channel_id,
+                                    "text": confirm_text,
+                                },
                             )
                         except Exception as e:
-                            logger.warning("[AUTO-TRACKING] Failed to post confirmation request | error=%s", e)
+                            logger.warning(
+                                "[AUTO-TRACKING] Failed to post confirmation request | error=%s",
+                                e,
+                            )
 
             # --- Auto-detect manager confirmation ---
             if is_manager:
                 manager_confirm_patterns = [
-                    r'\bcompleted\b', r'\bapproved\b', r'\bgo ahead\b',
-                    r'\bproceed\b', r'\bconfirmed\b', r'\blooks good\b',
-                    r'\bgo for it\b', r'\blet\'s go\b', r'\bmove ahead\b',
-                    r'\bmove ahead\b', r'\bstage complete\b', r'\bapprove\b',
+                    r"\bcompleted\b",
+                    r"\bapproved\b",
+                    r"\bgo ahead\b",
+                    r"\bproceed\b",
+                    r"\bconfirmed\b",
+                    r"\blooks good\b",
+                    r"\bgo for it\b",
+                    r"\blet\'s go\b",
+                    r"\bmove ahead\b",
+                    r"\bmove ahead\b",
+                    r"\bstage complete\b",
+                    r"\bapprove\b",
                 ]
                 manager_confirm_match = False
                 for pattern in manager_confirm_patterns:
@@ -3701,10 +3948,14 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         break
                 if manager_confirm_match:
                     # Find pending tracker for this project
-                    tracker = db.query(SlackCompletionTracker).filter(
-                        SlackCompletionTracker.project_id == project.id,
-                        SlackCompletionTracker.status == "PENDING",
-                    ).first()
+                    tracker = (
+                        db.query(SlackCompletionTracker)
+                        .filter(
+                            SlackCompletionTracker.project_id == project.id,
+                            SlackCompletionTracker.status == "PENDING",
+                        )
+                        .first()
+                    )
                     if tracker:
                         # Confirm the completion
                         tracker.status = "CONFIRMED"
@@ -3728,13 +3979,17 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 if not prev_phase.completed_at:
                                     logger.warning(
                                         "[AUTO-TRACKING] Previous stage not completed | project=%s | prev_stage=%d",
-                                        project.name, stage_idx - 1,
+                                        project.name,
+                                        stage_idx - 1,
                                     )
                                     try:
                                         await slack_api_call(
-                                            db, "chat.postMessage",
-                                             {"channel": project.slack_channel_id,
-                                              "text": f"Cannot complete stage {stage_idx + 1} — previous stage is not completed yet."},
+                                            db,
+                                            "chat.postMessage",
+                                            {
+                                                "channel": project.slack_channel_id,
+                                                "text": f"Cannot complete stage {stage_idx + 1} — previous stage is not completed yet.",
+                                            },
                                         )
                                     except Exception:
                                         pass
@@ -3742,15 +3997,25 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                     db.commit()
                                 else:
                                     # Complete the stage
-                                    now = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
+                                    now = (
+                                        datetime.now(IST)
+                                        .replace(tzinfo=None)
+                                        .strftime("%Y-%m-%dT%H:%M:%S")
+                                    )
                                     phases[stage_idx].completed_at = now
 
                                     total = len(phases)
-                                    completed = sum(1 for ph in phases if ph.completed_at)
+                                    completed = sum(
+                                        1 for ph in phases if ph.completed_at
+                                    )
                                     project.progress = round((completed / total) * 100)
                                     project.stage_index = min(stage_idx + 1, total - 1)
 
-                                    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
+                                    today_str = (
+                                        datetime.now(IST)
+                                        .replace(tzinfo=None)
+                                        .strftime("%Y-%m-%d")
+                                    )
                                     if project.progress == 100:
                                         project.status = "COMPLETED"
                                     elif project.deadline < today_str:
@@ -3760,14 +4025,36 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
 
                                     db.commit()
 
-                                    designer = db.query(User).filter(
-                                        User.id == project.assigned_designer_id
-                                    ).first()
-                                    designer_name = designer.name if designer else "Unassigned"
-                                    completed_phase = phases[stage_idx] if stage_idx < len(phases) else None
-                                    completed_stage_name = _get_current_stage_name(stage_idx, project.phase_type, project.stage_names, phase=completed_phase)
-                                    next_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
-                                    next_stage_name = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=next_phase)
+                                    designer = (
+                                        db.query(User)
+                                        .filter(User.id == project.assigned_designer_id)
+                                        .first()
+                                    )
+                                    designer_name = (
+                                        designer.name if designer else "Unassigned"
+                                    )
+                                    completed_phase = (
+                                        phases[stage_idx]
+                                        if stage_idx < len(phases)
+                                        else None
+                                    )
+                                    completed_stage_name = _get_current_stage_name(
+                                        stage_idx,
+                                        project.phase_type,
+                                        project.stage_names,
+                                        phase=completed_phase,
+                                    )
+                                    next_phase = (
+                                        phases[project.stage_index]
+                                        if project.stage_index < len(phases)
+                                        else None
+                                    )
+                                    next_stage_name = _get_current_stage_name(
+                                        project.stage_index,
+                                        project.phase_type,
+                                        project.stage_names,
+                                        phase=next_phase,
+                                    )
 
                                     if project.progress == 100:
                                         notify_text = (
@@ -3790,28 +4077,44 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
 
                                     try:
                                         await slack_api_call(
-                                            db, "chat.postMessage",
-                                            {"channel": project.slack_channel_id, "text": notify_text},
+                                            db,
+                                            "chat.postMessage",
+                                            {
+                                                "channel": project.slack_channel_id,
+                                                "text": notify_text,
+                                            },
                                         )
                                     except Exception as e:
-                                        logger.warning("[AUTO-TRACKING] Failed to post confirmation | error=%s", e)
+                                        logger.warning(
+                                            "[AUTO-TRACKING] Failed to post confirmation | error=%s",
+                                            e,
+                                        )
 
                                     # Background notification
                                     async def _notify_stage():
                                         with SessionLocal() as bg_db:
                                             try:
-                                                await notify_stage_completed(bg_db, project.id, stage_idx)
+                                                await notify_stage_completed(
+                                                    bg_db, project.id, stage_idx
+                                                )
                                             except Exception:
                                                 pass
+
                                     await _notify_stage()
 
                                     logger.info(
                                         "[AUTO-TRACKING] Stage auto-completed via message | project=%s | stage=%d | manager=%s",
-                                        project.name, stage_idx, user_name or "Unknown",
+                                        project.name,
+                                        stage_idx,
+                                        user_name or "Unknown",
                                     )
                             else:
                                 # Stage 0 — no previous stage check needed
-                                now = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
+                                now = (
+                                    datetime.now(IST)
+                                    .replace(tzinfo=None)
+                                    .strftime("%Y-%m-%dT%H:%M:%S")
+                                )
                                 phases[stage_idx].completed_at = now
 
                                 total = len(phases)
@@ -3819,7 +4122,11 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 project.progress = round((completed / total) * 100)
                                 project.stage_index = min(stage_idx + 1, total - 1)
 
-                                today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
+                                today_str = (
+                                    datetime.now(IST)
+                                    .replace(tzinfo=None)
+                                    .strftime("%Y-%m-%d")
+                                )
                                 if project.progress == 100:
                                     project.status = "COMPLETED"
                                 elif project.deadline < today_str:
@@ -3829,14 +4136,36 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
 
                                 db.commit()
 
-                                designer = db.query(User).filter(
-                                    User.id == project.assigned_designer_id
-                                ).first()
-                                designer_name = designer.name if designer else "Unassigned"
-                                completed_phase = phases[stage_idx] if stage_idx < len(phases) else None
-                                completed_stage_name = _get_current_stage_name(stage_idx, project.phase_type, project.stage_names, phase=completed_phase)
-                                next_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
-                                next_stage_name = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=next_phase)
+                                designer = (
+                                    db.query(User)
+                                    .filter(User.id == project.assigned_designer_id)
+                                    .first()
+                                )
+                                designer_name = (
+                                    designer.name if designer else "Unassigned"
+                                )
+                                completed_phase = (
+                                    phases[stage_idx]
+                                    if stage_idx < len(phases)
+                                    else None
+                                )
+                                completed_stage_name = _get_current_stage_name(
+                                    stage_idx,
+                                    project.phase_type,
+                                    project.stage_names,
+                                    phase=completed_phase,
+                                )
+                                next_phase = (
+                                    phases[project.stage_index]
+                                    if project.stage_index < len(phases)
+                                    else None
+                                )
+                                next_stage_name = _get_current_stage_name(
+                                    project.stage_index,
+                                    project.phase_type,
+                                    project.stage_names,
+                                    phase=next_phase,
+                                )
 
                                 if project.progress == 100:
                                     notify_text = (
@@ -3859,23 +4188,35 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
 
                                 try:
                                     await slack_api_call(
-                                        db, "chat.postMessage",
-                                        {"channel": project.slack_channel_id, "text": notify_text},
+                                        db,
+                                        "chat.postMessage",
+                                        {
+                                            "channel": project.slack_channel_id,
+                                            "text": notify_text,
+                                        },
                                     )
                                 except Exception as e:
-                                    logger.warning("[AUTO-TRACKING] Failed to post confirmation | error=%s", e)
+                                    logger.warning(
+                                        "[AUTO-TRACKING] Failed to post confirmation | error=%s",
+                                        e,
+                                    )
 
                                 async def _notify_stage():
                                     with SessionLocal() as bg_db:
                                         try:
-                                            await notify_stage_completed(bg_db, project.id, stage_idx)
+                                            await notify_stage_completed(
+                                                bg_db, project.id, stage_idx
+                                            )
                                         except Exception:
                                             pass
+
                                 await _notify_stage()
 
                                 logger.info(
                                     "[AUTO-TRACKING] Stage 0 auto-completed via message | project=%s | stage=%d | manager=%s",
-                                    project.name, stage_idx, user_name or "Unknown",
+                                    project.name,
+                                    stage_idx,
+                                    user_name or "Unknown",
                                 )
 
             db.commit()
@@ -3963,7 +4304,12 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     if stage_idx > 0:
                         prev_phase = phases[stage_idx - 1]
                         if not prev_phase.completed_at:
-                            prev_name = _get_current_stage_name(stage_idx - 1, project.phase_type, project.stage_names, phase=prev_phase)
+                            prev_name = _get_current_stage_name(
+                                stage_idx - 1,
+                                project.phase_type,
+                                project.stage_names,
+                                phase=prev_phase,
+                            )
                             logger.info(
                                 "[SLACK WEBHOOK] Previous stage not completed | prev_stage=%s",
                                 prev_name,
@@ -3977,13 +4323,19 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                     }
                                 ],
                             }
-                    now = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
+                    now = (
+                        datetime.now(IST)
+                        .replace(tzinfo=None)
+                        .strftime("%Y-%m-%dT%H:%M:%S")
+                    )
                     phases[stage_idx].completed_at = now
                     total = len(phases)
                     completed = sum(1 for ph in phases if ph.completed_at)
                     project.progress = round((completed / total) * 100)
                     project.stage_index = min(stage_idx + 1, total - 1)
-                    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
+                    today_str = (
+                        datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
+                    )
                     if project.progress == 100:
                         project.status = "COMPLETED"
                     elif project.deadline < today_str:
@@ -4026,8 +4378,17 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 },
                             )
                     else:
-                        next_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
-                        next_stage = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=next_phase)
+                        next_phase = (
+                            phases[project.stage_index]
+                            if project.stage_index < len(phases)
+                            else None
+                        )
+                        next_stage = _get_current_stage_name(
+                            project.stage_index,
+                            project.phase_type,
+                            project.stage_names,
+                            phase=next_phase,
+                        )
                         blocks = [
                             {
                                 "type": "header",
@@ -4080,12 +4441,24 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             )
                 elif action_id == "submit_report":
                     total_phases = len(phases)
-                    current_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
-                    current_stage = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=current_phase)
+                    current_phase = (
+                        phases[project.stage_index]
+                        if project.stage_index < len(phases)
+                        else None
+                    )
+                    current_stage = _get_current_stage_name(
+                        project.stage_index,
+                        project.phase_type,
+                        project.stage_names,
+                        phase=current_phase,
+                    )
                     report_blocks = [
                         {
                             "type": "header",
-                            "text": {"type": "plain_text", "text": "Stage Evaluation Report"},
+                            "text": {
+                                "type": "plain_text",
+                                "text": "Stage Evaluation Report",
+                            },
                         },
                         {
                             "type": "section",
@@ -4105,7 +4478,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text",                             "text": "1 Costing of the product (1-5)"},
+                            "label": {
+                                "type": "plain_text",
+                                "text": "1 Costing of the product (1-5)",
+                            },
                             "optional": True,
                         },
                         {
@@ -4118,7 +4494,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text",                             "text": "2 Willingness to buy (1-5)"},
+                            "label": {
+                                "type": "plain_text",
+                                "text": "2 Willingness to buy (1-5)",
+                            },
                             "optional": True,
                         },
                         {
@@ -4131,7 +4510,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text",                             "text": "3 Engagement life (1-5)"},
+                            "label": {
+                                "type": "plain_text",
+                                "text": "3 Engagement life (1-5)",
+                            },
                             "optional": True,
                         },
                         {
@@ -4144,7 +4526,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text",                             "text": "4 Durability (1-5)"},
+                            "label": {
+                                "type": "plain_text",
+                                "text": "4 Durability (1-5)",
+                            },
                             "optional": True,
                         },
                         {
@@ -4157,7 +4542,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text",                             "text": "5 Age Appropriateness (1-5)"},
+                            "label": {
+                                "type": "plain_text",
+                                "text": "5 Age Appropriateness (1-5)",
+                            },
                             "optional": True,
                         },
                         {
@@ -4170,7 +4558,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text",                             "text": "6 Ease of use (1-5)"},
+                            "label": {
+                                "type": "plain_text",
+                                "text": "6 Ease of use (1-5)",
+                            },
                             "optional": True,
                         },
                         {
@@ -4183,7 +4574,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text",                             "text": "7 Aesthetics of the Products (1-5)"},
+                            "label": {
+                                "type": "plain_text",
+                                "text": "7 Aesthetics of the Products (1-5)",
+                            },
                             "optional": True,
                         },
                         {
@@ -4196,7 +4590,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "max_value": "5",
                                 "is_decimal_allowed": False,
                             },
-                            "label": {"type": "plain_text",                             "text": "8 Easy to store / Travel Friendliness (1-5)"},
+                            "label": {
+                                "type": "plain_text",
+                                "text": "8 Easy to store / Travel Friendliness (1-5)",
+                            },
                             "optional": True,
                         },
                         {"type": "divider"},
@@ -4208,7 +4605,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "action_id": "report_notes",
                                 "multi_line": True,
                             },
-                            "label": {"type": "plain_text",                             "text": "Additional notes / observations"},
+                            "label": {
+                                "type": "plain_text",
+                                "text": "Additional notes / observations",
+                            },
                             "optional": True,
                         },
                     ]
@@ -4221,8 +4621,14 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                                 "view": {
                                     "type": "modal",
                                     "callback_id": f"stage_report_form_{project_id}_{project.stage_index}",
-                                    "title": {"type": "plain_text",                                     "text": "Stage Evaluation Report"},
-                                    "submit": {"type": "plain_text", "text": "Submit Report"},
+                                    "title": {
+                                        "type": "plain_text",
+                                        "text": "Stage Evaluation Report",
+                                    },
+                                    "submit": {
+                                        "type": "plain_text",
+                                        "text": "Submit Report",
+                                    },
                                     "close": {"type": "plain_text", "text": "Cancel"},
                                     "blocks": report_blocks,
                                     "clear_on_close": True,
@@ -4328,11 +4734,22 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             },
                         )
                 elif action_id == "view_progress":
-                    today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
+                    today_str = (
+                        datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
+                    )
                     stages_completed = sum(1 for p in phases if p.completed_at)
                     total_stages = len(phases)
-                    current_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
-                    current_stage = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=current_phase)
+                    current_phase = (
+                        phases[project.stage_index]
+                        if project.stage_index < len(phases)
+                        else None
+                    )
+                    current_stage = _get_current_stage_name(
+                        project.stage_index,
+                        project.phase_type,
+                        project.stage_names,
+                        phase=current_phase,
+                    )
                     reply_text = (
                         f"*Progress Report*\n\n"
                         f"*Project:* {project.name}\n"
@@ -4357,7 +4774,12 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                         if project.stage_index < len(phases)
                         else None
                     )
-                    current_stage = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=current_phase)
+                    current_stage = _get_current_stage_name(
+                        project.stage_index,
+                        project.phase_type,
+                        project.stage_names,
+                        phase=current_phase,
+                    )
                     deadline = current_phase.deadline if current_phase else "N/A"
                     reply_text = (
                         f"*Current Stage:* {current_stage}\n\n"
@@ -4372,9 +4794,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             {"channel": project.slack_channel_id, "text": reply_text},
                         )
                 elif action_id == "accept_project":
-                    reply_text = (
-                        f"*{project.name}* accepted by {slack_user_name}!"
-                    )
+                    reply_text = f"*{project.name}* accepted by {slack_user_name}!"
                     if project.slack_channel_id:
                         await slack_api_call(
                             db,
@@ -4434,7 +4854,12 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 db.rollback()
                 return {
                     "response_action": "errors",
-                    "errors": [{"field": "action", "text": "An error occurred. Please check the logs."}],
+                    "errors": [
+                        {
+                            "field": "action",
+                            "text": "An error occurred. Please check the logs.",
+                        }
+                    ],
                 }
             db.commit()
             return {"response_action": "updated"}
@@ -4529,8 +4954,17 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     if phases[project.stage_index]:
                         phases[project.stage_index].designer_update = notes
                         db.commit()
-                    current_phase = phases[project.stage_index] if project.stage_index < len(phases) else None
-                    current_stage = _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=current_phase)
+                    current_phase = (
+                        phases[project.stage_index]
+                        if project.stage_index < len(phases)
+                        else None
+                    )
+                    current_stage = _get_current_stage_name(
+                        project.stage_index,
+                        project.phase_type,
+                        project.stage_names,
+                        phase=current_phase,
+                    )
                     blocks = [
                         {
                             "type": "header",
@@ -4651,7 +5085,11 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 state = payload.get("view", {}).get("state", {}).get("values", {})
                 rating_map = [
                     ("report_costing", "rating_costing", "costing"),
-                    ("report_willingness", "rating_willingness_to_buy", "willingness_to_buy"),
+                    (
+                        "report_willingness",
+                        "rating_willingness_to_buy",
+                        "willingness_to_buy",
+                    ),
                     ("report_engagement", "rating_engagement_life", "engagement_life"),
                     ("report_durability", "rating_durability", "durability"),
                     ("report_age", "rating_age_appropriateness", "age_appropriateness"),
@@ -4661,11 +5099,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 ]
                 ratings = {}
                 for block_id, action_id, field_name in rating_map:
-                    val = (
-                        state.get(block_id, {})
-                        .get(action_id, {})
-                        .get("value")
-                    )
+                    val = state.get(block_id, {}).get(action_id, {}).get("value")
                     ratings[field_name] = int(val) if val is not None else None
                 notes_val = (
                     state.get("report_notes", {})
@@ -4675,10 +5109,17 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 slack_user_id = payload.get("user", {}).get("id", "")
                 slack_user_name = payload.get("user", {}).get("name", "")
                 channel_id = payload.get("channel", {}).get("id", "")
-                stage_name = _get_current_stage_name(stage_index, project.phase_type, project.stage_names, phase=phases[stage_index] if stage_index < len(phases) else None)
-                
+                stage_name = _get_current_stage_name(
+                    stage_index,
+                    project.phase_type,
+                    project.stage_names,
+                    phase=phases[stage_index] if stage_index < len(phases) else None,
+                )
+
                 # Calculate deadline and delay
-                current_phase = phases[stage_index] if stage_index < len(phases) else None
+                current_phase = (
+                    phases[stage_index] if stage_index < len(phases) else None
+                )
                 deadline = current_phase.deadline if current_phase else "N/A"
                 today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
                 actual_completion = today_str
@@ -4692,7 +5133,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                             delay_days = delta
                     except (ValueError, TypeError):
                         pass
-                
+
                 # Save report
                 report = StageReport(
                     project_id=project_id,
@@ -4716,13 +5157,17 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     stage_completed=True,
                 )
                 db.add(report)
-                
+
                 # Auto-complete stage and advance project
                 if current_phase:
                     current_phase.completed_at = actual_completion
-                    current_phase.designer_update = notes_val or "Report submitted via Slack"
-                    current_phase.delay_reason = f"{delay_days} day(s) delay" if delay_days > 0 else "On time"
-                
+                    current_phase.designer_update = (
+                        notes_val or "Report submitted via Slack"
+                    )
+                    current_phase.delay_reason = (
+                        f"{delay_days} day(s) delay" if delay_days > 0 else "On time"
+                    )
+
                 # Advance to next stage
                 total_phases = len(phases)
                 completed_stages = sum(1 for p in phases if p.completed_at)
@@ -4730,14 +5175,14 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                 project.stage_index = new_stage_index
                 project.progress = round(((completed_stages + 1) / total_phases) * 100)
                 project.updated_at = datetime.now(IST).replace(tzinfo=None)
-                
+
                 if project.progress == 100:
                     project.status = "COMPLETED"
                 elif today_str > project.deadline:
                     project.status = "DELAYED"
                 else:
                     project.status = "ON_TRACK"
-                
+
                 db.commit()
                 logger.info(
                     "[SLACK WEBHOOK] Report saved & stage advanced | report_id=%s | project=%s | stage=%s → %s | delay=%d days",
@@ -4747,43 +5192,69 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     new_stage_index,
                     delay_days,
                 )
-                
+
                 # Build timeline of completed stages
                 timeline_lines = []
                 for i, phase in enumerate(phases):
                     check = "✓" if phase.completed_at else "○"
                     marker = " →" if i == new_stage_index else ""
-                    phase_name = _get_current_stage_name(i, project.phase_type, project.stage_names, phase=phase)
+                    phase_name = _get_current_stage_name(
+                        i, project.phase_type, project.stage_names, phase=phase
+                    )
                     timeline_lines.append(f"{check} {i + 1}. {phase_name}{marker}")
                 timeline_text = "\n".join(timeline_lines)
-                
+
                 rating_lines = []
                 for block_id, action_id, field_name in rating_map:
                     val = ratings.get(field_name)
                     if val is not None:
                         emoji = "★" if val >= 4 else "·" if val >= 3 else "!"
-                        rating_lines.append(f"{emoji} {field_name.replace('_', ' ').title()}: {val}/5")
-                rating_text = "\n".join(rating_lines) if rating_lines else "*No ratings submitted*"
-                
+                        rating_lines.append(
+                            f"{emoji} {field_name.replace('_', ' ').title()}: {val}/5"
+                        )
+                rating_text = (
+                    "\n".join(rating_lines)
+                    if rating_lines
+                    else "*No ratings submitted*"
+                )
+
                 delay_text = ""
                 if delay_days > 0:
-                    delay_text = f"\n*Delay:* {delay_days} day(s) past deadline ({deadline})"
+                    delay_text = (
+                        f"\n*Delay:* {delay_days} day(s) past deadline ({deadline})"
+                    )
                 else:
                     delay_text = f"\n*On Time:* Completed before deadline ({deadline})"
-                
+
                 next_stage_text = ""
                 if new_stage_index < total_phases:
-                    next_stage = _get_current_stage_name(new_stage_index, project.phase_type, project.stage_names, phase=phases[new_stage_index] if new_stage_index < len(phases) else None)
-                    next_phase = phases[new_stage_index] if new_stage_index < len(phases) else None
+                    next_stage = _get_current_stage_name(
+                        new_stage_index,
+                        project.phase_type,
+                        project.stage_names,
+                        phase=phases[new_stage_index]
+                        if new_stage_index < len(phases)
+                        else None,
+                    )
+                    next_phase = (
+                        phases[new_stage_index]
+                        if new_stage_index < len(phases)
+                        else None
+                    )
                     next_deadline = next_phase.deadline if next_phase else "TBD"
-                    next_stage_text = f"\n*Next Stage:* {next_stage}\n*New Deadline:* {next_deadline}"
+                    next_stage_text = (
+                        f"\n*Next Stage:* {next_stage}\n*New Deadline:* {next_deadline}"
+                    )
                 else:
                     next_stage_text = f"\n*All stages completed!*"
-                
+
                 confirmation_blocks = [
                     {
                         "type": "header",
-                        "text": {"type": "plain_text", "text": "Stage Complete - Report Submitted"},
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Stage Complete - Report Submitted",
+                        },
                     },
                     {
                         "type": "section",
@@ -4795,7 +5266,10 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
                     {"type": "divider"},
                     {
                         "type": "section",
-                        "text": {"type": "mrkdwn", "text": f"*Evaluations:*\n{rating_text}"},
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Evaluations:*\n{rating_text}",
+                        },
                     },
                     {"type": "divider"},
                     {
@@ -5043,7 +5517,9 @@ class SlackChannelStatusBatchResponse(BaseModel):
     response_model=SlackChannelStatusBatchResponse,
 )
 async def get_slack_channel_status(
-    auto_correct: str = Query("false", description="Pass 'true' to auto-correct invalid channels"),
+    auto_correct: str = Query(
+        "false", description="Pass 'true' to auto-correct invalid channels"
+    ),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -5124,9 +5600,7 @@ async def add_bot_to_channel(
         {"channel": project.slack_channel_id},
     )
     if result is None:
-        return BotChannelActionResponse(
-            success=False, message="Slack API unreachable"
-        )
+        return BotChannelActionResponse(success=False, message="Slack API unreachable")
     if not result.get("ok"):
         error_code = result.get("error", "")
         if error_code == "already_in_channel":
@@ -5166,9 +5640,7 @@ async def run_reminder_tick(db):
 
     # 1) Daily ~10AM check-in for every active project, once per calendar day.
     if now.hour >= DAILY_REMINDER_HOUR:
-        active_projects = (
-            db.query(Project).filter(Project.status != "COMPLETED").all()
-        )
+        active_projects = db.query(Project).filter(Project.status != "COMPLETED").all()
         for project in active_projects:
             if not project.slack_channel_id:
                 continue
@@ -5207,7 +5679,11 @@ async def run_reminder_tick(db):
         sent_daily,
         sent_deadline,
     )
-    return {"daily_sent": sent_daily, "deadline_sent": sent_deadline, "checked_at": now.isoformat()}
+    return {
+        "daily_sent": sent_daily,
+        "deadline_sent": sent_deadline,
+        "checked_at": now.isoformat(),
+    }
 
 
 @app.post("/api/cron/tick")
@@ -5285,8 +5761,20 @@ async def send_manual_reminder(
         .order_by(Phase.stage_index)
         .all()
     )
-    reminder_phase = reminder_phases[project.stage_index] if project.stage_index < len(reminder_phases) else None
-    return {"message": "Reminder sent", "stage": _get_current_stage_name(project.stage_index, project.phase_type, project.stage_names, phase=reminder_phase)}
+    reminder_phase = (
+        reminder_phases[project.stage_index]
+        if project.stage_index < len(reminder_phases)
+        else None
+    )
+    return {
+        "message": "Reminder sent",
+        "stage": _get_current_stage_name(
+            project.stage_index,
+            project.phase_type,
+            project.stage_names,
+            phase=reminder_phase,
+        ),
+    }
 
 
 # ---------- Admin Data Export ----------
@@ -5296,6 +5784,7 @@ def _parse_export_range(from_param, to_param):
     """Parse optional from/to query params (date or datetime strings) into
     datetimes. Returns (None, None) when both are absent, meaning 'whole
     data, no filter'."""
+
     def _parse(value, end_of_day=False):
         if not value:
             return None
@@ -5333,13 +5822,23 @@ def _users_rows(db, roles, dt_from, dt_to):
     if dt_to:
         q = q.filter(User.created_at <= dt_to)
     fieldnames = [
-        "id", "name", "email", "role", "specialty", "slack_user_id",
-        "created_at", "updated_at",
+        "id",
+        "name",
+        "email",
+        "role",
+        "specialty",
+        "slack_user_id",
+        "created_at",
+        "updated_at",
     ]
     rows = [
         {
-            "id": u.id, "name": u.name, "email": u.email, "role": u.role,
-            "specialty": u.specialty, "slack_user_id": u.slack_user_id or "",
+            "id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "role": u.role,
+            "specialty": u.specialty,
+            "slack_user_id": u.slack_user_id or "",
             "created_at": u.created_at.isoformat() if u.created_at else "",
             "updated_at": u.updated_at.isoformat() if u.updated_at else "",
         }
@@ -5356,41 +5855,77 @@ def _projects_rows(db, dt_from, dt_to):
         q = q.filter(Project.created_at <= dt_to)
     projects = q.all()
     fieldnames = [
-        "id", "name", "description", "assigned_designer", "created_by",
-        "stage_index", "current_stage", "progress", "status",
-        "start_date", "deadline", "slack_channel_name", "created_at", "updated_at",
+        "id",
+        "name",
+        "description",
+        "assigned_designer",
+        "created_by",
+        "stage_index",
+        "current_stage",
+        "progress",
+        "status",
+        "start_date",
+        "deadline",
+        "slack_channel_name",
+        "created_at",
+        "updated_at",
     ]
     rows = []
     for p in projects:
         designer = db.query(User).filter(User.id == p.assigned_designer_id).first()
         creator = db.query(User).filter(User.id == p.created_by_user_id).first()
-        rows.append({
-            "id": p.id, "name": p.name, "description": p.description,
-            "assigned_designer": designer.name if designer else "",
-            "created_by": creator.name if creator else "",
-            "stage_index": p.stage_index,
-            "current_stage": _get_current_stage_name(p.stage_index, p.phase_type, p.stage_names, phase=p.phases[p.stage_index] if p.phases and p.stage_index < len(p.phases) else None),
-            "progress": p.progress, "status": p.status,
-            "start_date": p.start_date, "deadline": p.deadline,
-            "slack_channel_name": p.slack_channel_name,
-            "created_at": p.created_at.isoformat() if p.created_at else "",
-            "updated_at": p.updated_at.isoformat() if p.updated_at else "",
-        })
+        rows.append(
+            {
+                "id": p.id,
+                "name": p.name,
+                "description": p.description,
+                "assigned_designer": designer.name if designer else "",
+                "created_by": creator.name if creator else "",
+                "stage_index": p.stage_index,
+                "current_stage": _get_current_stage_name(
+                    p.stage_index,
+                    p.phase_type,
+                    p.stage_names,
+                    phase=p.phases[p.stage_index]
+                    if p.phases and p.stage_index < len(p.phases)
+                    else None,
+                ),
+                "progress": p.progress,
+                "status": p.status,
+                "start_date": p.start_date,
+                "deadline": p.deadline,
+                "slack_channel_name": p.slack_channel_name,
+                "created_at": p.created_at.isoformat() if p.created_at else "",
+                "updated_at": p.updated_at.isoformat() if p.updated_at else "",
+            }
+        )
     fieldnames_phase = [
-        "project_id", "project_name", "stage_index", "stage_name", "deadline",
-        "designer_update", "delay_reason", "completed_at",
+        "project_id",
+        "project_name",
+        "stage_index",
+        "stage_name",
+        "deadline",
+        "designer_update",
+        "delay_reason",
+        "completed_at",
     ]
     rows_phase = []
     for p in projects:
         for ph in sorted(p.phases, key=lambda x: x.stage_index):
-            rows_phase.append({
-                "project_id": p.id, "project_name": p.name,
-                "stage_index": ph.stage_index,
-                "stage_name": _get_current_stage_name(ph.stage_index, p.phase_type, p.stage_names, phase=ph),
-                "deadline": ph.deadline, "designer_update": ph.designer_update,
-                "delay_reason": ph.delay_reason,
-                "completed_at": ph.completed_at or "",
-            })
+            rows_phase.append(
+                {
+                    "project_id": p.id,
+                    "project_name": p.name,
+                    "stage_index": ph.stage_index,
+                    "stage_name": _get_current_stage_name(
+                        ph.stage_index, p.phase_type, p.stage_names, phase=ph
+                    ),
+                    "deadline": ph.deadline,
+                    "designer_update": ph.designer_update,
+                    "delay_reason": ph.delay_reason,
+                    "completed_at": ph.completed_at or "",
+                }
+            )
     return (fieldnames, rows), (fieldnames_phase, rows_phase)
 
 
@@ -5400,21 +5935,46 @@ def _sheets_to_pdf_bytes(sheets):
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Table,
+        TableStyle,
+        Paragraph,
+        Spacer,
+        PageBreak,
+    )
     from io import BytesIO
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
-        buffer, pagesize=letter,
-        leftMargin=0.6*inch, rightMargin=0.6*inch,
-        topMargin=0.6*inch, bottomMargin=0.6*inch,
+        buffer,
+        pagesize=letter,
+        leftMargin=0.6 * inch,
+        rightMargin=0.6 * inch,
+        topMargin=0.6 * inch,
+        bottomMargin=0.6 * inch,
         title="Little Sparks Export",
-        author="Little Sparks"
+        author="Little Sparks",
     )
     styles = getSampleStyleSheet()
-    table_heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=8, fontName="Helvetica-Bold", textColor=colors.white)
-    cell_style = ParagraphStyle("TableCell", parent=styles["Normal"], fontSize=7, leading=9)
-    heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=13, spaceBefore=10, spaceAfter=6, textColor=colors.HexColor("#2c5282"))
+    table_heading_style = ParagraphStyle(
+        "TableHeading",
+        parent=styles["Normal"],
+        fontSize=8,
+        fontName="Helvetica-Bold",
+        textColor=colors.white,
+    )
+    cell_style = ParagraphStyle(
+        "TableCell", parent=styles["Normal"], fontSize=7, leading=9
+    )
+    heading_style = ParagraphStyle(
+        "SectionHeading",
+        parent=styles["Heading2"],
+        fontSize=13,
+        spaceBefore=10,
+        spaceAfter=6,
+        textColor=colors.HexColor("#2c5282"),
+    )
 
     elements = []
     max_width = letter[0] - inch  # available width
@@ -5432,21 +5992,34 @@ def _sheets_to_pdf_bytes(sheets):
         else:
             col_widths = [max_width / col_count * 0.7] * col_count
 
-        header_data = [[Paragraph(f"<b>{f}</b>", table_heading_style) for f in fieldnames]]
+        header_data = [
+            [Paragraph(f"<b>{f}</b>", table_heading_style) for f in fieldnames]
+        ]
         row_data = []
         for row in rows:
-            row_data.append([Paragraph(str(row.get(f, ""))[:50], cell_style) for f in fieldnames])
+            row_data.append(
+                [Paragraph(str(row.get(f, ""))[:50], cell_style) for f in fieldnames]
+            )
 
         table = Table(header_data + row_data, colWidths=col_widths)
-        table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
-            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
-        ]))
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+                    ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#f7fafc")),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                    (
+                        "ROWBACKGROUNDS",
+                        (0, 1),
+                        (-1, -1),
+                        [colors.white, colors.HexColor("#f7fafc")],
+                    ),
+                ]
+            )
+        )
         elements.append(table)
 
     doc.build(elements)
@@ -5486,8 +6059,10 @@ def export_data(
         mf, mr = _users_rows(db, ["ADMIN", "MANAGER"], dt_from, dt_to)
         (pf, pr), (phf, phr) = _projects_rows(db, dt_from, dt_to)
         sheets = {
-            "Designers": (df, dr), "Managers": (mf, mr),
-            "Projects": (pf, pr), "Phases": (phf, phr),
+            "Designers": (df, dr),
+            "Managers": (mf, mr),
+            "Projects": (pf, pr),
+            "Phases": (phf, phr),
         }
         filename = f"smartivity-full-export-{stamp}"
     else:
@@ -5511,7 +6086,9 @@ def export_data(
             zbuf = io.BytesIO()
             with zipfile.ZipFile(zbuf, "w", zipfile.ZIP_DEFLATED) as zf:
                 for sheet_name, (fieldnames, rows) in sheets.items():
-                    zf.writestr(f"{sheet_name}.csv", _rows_to_csv_bytes(fieldnames, rows))
+                    zf.writestr(
+                        f"{sheet_name}.csv", _rows_to_csv_bytes(fieldnames, rows)
+                    )
             content = zbuf.getvalue()
             media_type = "application/zip"
             filename += ".zip"
@@ -5550,11 +6127,11 @@ async def create_stage_report(
         raise HTTPException(status_code=404, detail="Project not found")
     if user.role.upper() not in ("ADMIN", "MANAGER"):
         if str(user.id) != report.submitted_by_user_id:
-            raise HTTPException(status_code=403, detail="Not authorized to submit this report")
+            raise HTTPException(
+                status_code=403, detail="Not authorized to submit this report"
+            )
     designer = (
-        db.query(User)
-        .filter(User.id == project.assigned_designer_id)
-        .first()
+        db.query(User).filter(User.id == project.assigned_designer_id).first()
         if project.assigned_designer_id
         else None
     )
@@ -5573,9 +6150,11 @@ async def create_stage_report(
         .first()
     )
     now_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
-    
+
     # Calculate deadline and delay
-    current_phase = phases[report.stage_index] if report.stage_index < len(phases) else None
+    current_phase = (
+        phases[report.stage_index] if report.stage_index < len(phases) else None
+    )
     deadline = current_phase.deadline if current_phase else "N/A"
     delay_days = 0
     if deadline != "N/A":
@@ -5587,7 +6166,7 @@ async def create_stage_report(
                 delay_days = delta
         except (ValueError, TypeError):
             pass
-    
+
     if existing:
         existing.costing = report.costing
         existing.willingness_to_buy = report.willingness_to_buy
@@ -5607,7 +6186,9 @@ async def create_stage_report(
         if current_phase:
             current_phase.completed_at = report.actual_completion_date or now_str
             current_phase.designer_update = report.notes or "Report submitted via web"
-            current_phase.delay_reason = f"{delay_days} day(s) delay" if delay_days > 0 else "On time"
+            current_phase.delay_reason = (
+                f"{delay_days} day(s) delay" if delay_days > 0 else "On time"
+            )
         # Advance project
         total_phases = len(phases)
         completed_stages = sum(1 for p in phases if p.completed_at)
@@ -5658,7 +6239,9 @@ async def create_stage_report(
     if current_phase:
         current_phase.completed_at = report.actual_completion_date or now_str
         current_phase.designer_update = report.notes or "Report submitted via web"
-        current_phase.delay_reason = f"{delay_days} day(s) delay" if delay_days > 0 else "On time"
+        current_phase.delay_reason = (
+            f"{delay_days} day(s) delay" if delay_days > 0 else "On time"
+        )
     total_phases = len(phases)
     completed_stages = sum(1 for p in phases if p.completed_at)
     new_stage_index = min(report.stage_index + 1, total_phases - 1)
@@ -5699,11 +6282,17 @@ async def get_project_reports(
         .order_by(StageReport.submitted_at.desc())
         .all()
     )
-    logger.info("[REPORTS] Project reports fetched | project_id=%s | count=%s", project_id, len(reports))
+    logger.info(
+        "[REPORTS] Project reports fetched | project_id=%s | count=%s",
+        project_id,
+        len(reports),
+    )
     return reports
 
 
-@app.get("/api/designers/{designer_id}/reports", response_model=List[StageReportResponse])
+@app.get(
+    "/api/designers/{designer_id}/reports", response_model=List[StageReportResponse]
+)
 async def get_designer_reports(
     designer_id: int,
     user: User = Depends(get_current_user),
@@ -5718,7 +6307,11 @@ async def get_designer_reports(
         .order_by(StageReport.submitted_at.desc())
         .all()
     )
-    logger.info("[REPORTS] Designer reports fetched | designer_id=%s | count=%s", designer_id, len(reports))
+    logger.info(
+        "[REPORTS] Designer reports fetched | designer_id=%s | count=%s",
+        designer_id,
+        len(reports),
+    )
     return reports
 
 
@@ -5761,14 +6354,29 @@ async def get_report_summary(
             summary_dict = {
                 "project_id": project.id,
                 "project_name": project.name,
-                "assigned_designer": designer.name if (designer := db.query(User).filter(User.id == project.assigned_designer_id).first()) else "Unassigned",
+                "assigned_designer": designer.name
+                if (
+                    designer := db.query(User)
+                    .filter(User.id == project.assigned_designer_id)
+                    .first()
+                )
+                else "Unassigned",
                 "stage_index": phase.stage_index,
-                "stage_name": _get_current_stage_name(phase.stage_index, project.phase_type, project.stage_names, phase=phase),
+                "stage_name": _get_current_stage_name(
+                    phase.stage_index,
+                    project.phase_type,
+                    project.stage_names,
+                    phase=phase,
+                ),
                 "total_reports": total,
             }
             for field, avg_key in valid_fields:
-                vals = [getattr(r, field) for r in reports if getattr(r, field) is not None]
-                summary_dict[avg_key] = round(sum(vals) / len(vals), 1) if vals else None
+                vals = [
+                    getattr(r, field) for r in reports if getattr(r, field) is not None
+                ]
+                summary_dict[avg_key] = (
+                    round(sum(vals) / len(vals), 1) if vals else None
+                )
             latest = max(reports, key=lambda r: r.submitted_at)
             summary_dict["latest_report_id"] = latest.id
             summary_dict["latest_submitted_at"] = latest.submitted_at
@@ -5778,7 +6386,10 @@ async def get_report_summary(
     return summaries
 
 
-@app.get("/api/reports/project/{project_id}/designer/{designer_id}", response_model=List[StageReportResponse])
+@app.get(
+    "/api/reports/project/{project_id}/designer/{designer_id}",
+    response_model=List[StageReportResponse],
+)
 async def get_project_designer_reports(
     project_id: int,
     designer_id: int,
@@ -5813,18 +6424,24 @@ async def get_project_report(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     if user.role.upper() == "DESIGNER":
-        raise HTTPException(status_code=403, detail="Designers cannot access project reports")
+        raise HTTPException(
+            status_code=403, detail="Designers cannot access project reports"
+        )
     if user.role.upper() == "MANAGER":
         is_creator = project.created_by_user_id == user.id
         is_assigned = bool(
-            db.query(ProjectManager).filter(
+            db.query(ProjectManager)
+            .filter(
                 ProjectManager.project_id == project_id,
                 ProjectManager.manager_id == user.id,
-            ).first()
+            )
+            .first()
         )
         if not is_creator and not is_assigned:
-            raise HTTPException(status_code=403, detail="You can only access your own projects")
-    
+            raise HTTPException(
+                status_code=403, detail="You can only access your own projects"
+            )
+
     phases = (
         db.query(Phase)
         .filter(Phase.project_id == project_id)
@@ -5839,9 +6456,10 @@ async def get_project_report(
     )
     designer = (
         db.query(User).filter(User.id == project.assigned_designer_id).first()
-        if project.assigned_designer_id else None
+        if project.assigned_designer_id
+        else None
     )
-    
+
     phase_items = []
     today_str = datetime.now(IST).replace(tzinfo=None).strftime("%Y-%m-%d")
     today_date = datetime.now(IST).replace(tzinfo=None).date()
@@ -5869,18 +6487,22 @@ async def get_project_report(
                     delay_days = (today_date - deadline_dt.date()).days
             except Exception:
                 pass
-        phase_items.append(PhaseReportItem(
-            stage_index=ph.stage_index,
-            stage_name=_get_current_stage_name(ph.stage_index, project.phase_type, project.stage_names, phase=ph),
-            deadline=ph.deadline,
-            completed_at=ph.completed_at,
-            designer_update=ph.designer_update or "",
-            delay_reason=ph.delay_reason or "",
-            assigned_designer_ids=ph.assigned_designer_ids or [],
-            is_current=ph.stage_index == project.stage_index,
-            delay_days=delay_days,
-        ))
-    
+        phase_items.append(
+            PhaseReportItem(
+                stage_index=ph.stage_index,
+                stage_name=_get_current_stage_name(
+                    ph.stage_index, project.phase_type, project.stage_names, phase=ph
+                ),
+                deadline=ph.deadline,
+                completed_at=ph.completed_at,
+                designer_update=ph.designer_update or "",
+                delay_reason=ph.delay_reason or "",
+                assigned_designer_ids=ph.assigned_designer_ids or [],
+                is_current=ph.stage_index == project.stage_index,
+                delay_days=delay_days,
+            )
+        )
+
     return ProjectReportResponse(
         project_id=project.id,
         project_name=project.name,
@@ -5897,7 +6519,9 @@ async def get_project_report(
     )
 
 
-@app.get("/api/projects/{project_id}/weekly-report", response_model=WeeklyReportResponse)
+@app.get(
+    "/api/projects/{project_id}/weekly-report", response_model=WeeklyReportResponse
+)
 async def get_project_weekly_report(
     project_id: int,
     week_start: str = Query(..., description="Week start date (YYYY-MM-DD)"),
@@ -5913,14 +6537,18 @@ async def get_project_weekly_report(
     if user.role.upper() == "MANAGER":
         is_creator = project.created_by_user_id == user.id
         is_assigned = bool(
-            db.query(ProjectManager).filter(
+            db.query(ProjectManager)
+            .filter(
                 ProjectManager.project_id == project_id,
                 ProjectManager.manager_id == user.id,
-            ).first()
+            )
+            .first()
         )
         if not is_creator and not is_assigned:
-            raise HTTPException(status_code=403, detail="You can only access your own projects")
-    
+            raise HTTPException(
+                status_code=403, detail="You can only access your own projects"
+            )
+
     phases = (
         db.query(Phase)
         .filter(Phase.project_id == project_id)
@@ -5936,8 +6564,12 @@ async def get_project_weekly_report(
         )
         .all()
     )
-    prev_week_end = (datetime.strptime(week_start, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
-    prev_week_start = (datetime.strptime(prev_week_end, "%Y-%m-%d") - timedelta(days=6)).strftime("%Y-%m-%d")
+    prev_week_end = (
+        datetime.strptime(week_start, "%Y-%m-%d") - timedelta(days=7)
+    ).strftime("%Y-%m-%d")
+    prev_week_start = (
+        datetime.strptime(prev_week_end, "%Y-%m-%d") - timedelta(days=6)
+    ).strftime("%Y-%m-%d")
     prev_stage_reports = (
         db.query(StageReport)
         .filter(
@@ -5949,31 +6581,44 @@ async def get_project_weekly_report(
     )
     designer = (
         db.query(User).filter(User.id == project.assigned_designer_id).first()
-        if project.assigned_designer_id else None
+        if project.assigned_designer_id
+        else None
     )
-    
+
     reports_by_stage = {}
     for r in stage_reports:
-        reports_by_stage.setdefault(r.stage_index, []).append(StageReportResponse.model_validate(r))
-    
+        reports_by_stage.setdefault(r.stage_index, []).append(
+            StageReportResponse.model_validate(r)
+        )
+
     prev_reports_by_stage = {}
     for r in prev_stage_reports:
-        prev_reports_by_stage.setdefault(r.stage_index, []).append(StageReportResponse.model_validate(r))
-    
-    rating_fields = ["costing", "willingness_to_buy", "engagement_life", "durability",
-                     "age_appropriateness", "ease_of_use", "aesthetics", "easy_to_store"]
-    
+        prev_reports_by_stage.setdefault(r.stage_index, []).append(
+            StageReportResponse.model_validate(r)
+        )
+
+    rating_fields = [
+        "costing",
+        "willingness_to_buy",
+        "engagement_life",
+        "durability",
+        "age_appropriateness",
+        "ease_of_use",
+        "aesthetics",
+        "easy_to_store",
+    ]
+
     items = []
     total_submissions = 0
     total_delays = 0
     total_delay_days = 0
     stages_completed = 0
-    
+
     for ph in phases:
         idx = ph.stage_index
         sr_list = reports_by_stage.get(idx, [])
         prev_sr_list = prev_reports_by_stage.get(idx, [])
-        
+
         completed_this_week = False
         if ph.completed_at:
             completed_date = ph.completed_at
@@ -5983,7 +6628,7 @@ async def get_project_weekly_report(
                 completed_date = completed_date.strftime("%Y-%m-%d")
             if week_start <= completed_date <= week_end:
                 completed_this_week = True
-        
+
         activities = []
         for sr in sr_list:
             ratings_dict = {}
@@ -5994,12 +6639,14 @@ async def get_project_weekly_report(
             activity = WeeklyActivityItem(
                 type="stage_report",
                 submitted_by=sr.submitted_by_name or sr.submitted_by_role or "Unknown",
-                submitted_at=sr.submitted_at.strftime("%Y-%m-%d %H:%M") if sr.submitted_at else None,
+                submitted_at=sr.submitted_at.strftime("%Y-%m-%d %H:%M")
+                if sr.submitted_at
+                else None,
                 ratings=ratings_dict if ratings_dict else None,
                 notes=sr.notes or None,
             )
             activities.append(activity)
-        
+
         current_max_stage = -1
         if sr_list:
             current_max_stage = max(r.stage_index for r in sr_list)
@@ -6007,7 +6654,7 @@ async def get_project_weekly_report(
         if prev_sr_list:
             prev_max_stage = max(r.stage_index for r in prev_sr_list)
         progress_change = current_max_stage - prev_max_stage
-        
+
         delay_occurred = False
         delay_days = 0
         if sr_list:
@@ -6015,34 +6662,38 @@ async def get_project_weekly_report(
                 if sr.delay_days and sr.delay_days > 0:
                     delay_occurred = True
                     delay_days = max(delay_days, sr.delay_days)
-        
+
         if completed_this_week:
             stages_completed += 1
         total_submissions += len(sr_list)
         if delay_occurred:
             total_delays += 1
         total_delay_days += delay_days
-        
-        items.append(WeeklyReportItem(
-            project_id=project.id,
-            project_name=project.name,
-            assigned_designer=designer.name if designer else "Unassigned",
-            stage_index=idx,
-            stage_name=_get_current_stage_name(idx, project.phase_type, project.stage_names, phase=ph),
-            status=project.status,
-            progress=project.progress,
-            deadline=ph.deadline,
-            designer_update=ph.designer_update or "",
-            delay_reason=ph.delay_reason or "",
-            completed_at=ph.completed_at,
-            stage_reports=sr_list,
-            completed_this_week=completed_this_week,
-            activities=activities,
-            progress_change=progress_change,
-            delay_occurred=delay_occurred,
-            delay_days=delay_days,
-        ))
-    
+
+        items.append(
+            WeeklyReportItem(
+                project_id=project.id,
+                project_name=project.name,
+                assigned_designer=designer.name if designer else "Unassigned",
+                stage_index=idx,
+                stage_name=_get_current_stage_name(
+                    idx, project.phase_type, project.stage_names, phase=ph
+                ),
+                status=project.status,
+                progress=project.progress,
+                deadline=ph.deadline,
+                designer_update=ph.designer_update or "",
+                delay_reason=ph.delay_reason or "",
+                completed_at=ph.completed_at,
+                stage_reports=sr_list,
+                completed_this_week=completed_this_week,
+                activities=activities,
+                progress_change=progress_change,
+                delay_occurred=delay_occurred,
+                delay_days=delay_days,
+            )
+        )
+
     return WeeklyReportResponse(
         week_start=week_start,
         week_end=week_end,
@@ -6056,7 +6707,9 @@ async def get_project_weekly_report(
     )
 
 
-@app.get("/api/projects/{project_id}/monthly-report", response_model=MonthlyReportResponse)
+@app.get(
+    "/api/projects/{project_id}/monthly-report", response_model=MonthlyReportResponse
+)
 async def get_project_monthly_report(
     project_id: int,
     month: int = Query(..., ge=1, le=12),
@@ -6072,20 +6725,24 @@ async def get_project_monthly_report(
     if user.role.upper() == "MANAGER":
         is_creator = project.created_by_user_id == user.id
         is_assigned = bool(
-            db.query(ProjectManager).filter(
+            db.query(ProjectManager)
+            .filter(
                 ProjectManager.project_id == project_id,
                 ProjectManager.manager_id == user.id,
-            ).first()
+            )
+            .first()
         )
         if not is_creator and not is_assigned:
-            raise HTTPException(status_code=403, detail="You can only access your own projects")
-    
+            raise HTTPException(
+                status_code=403, detail="You can only access your own projects"
+            )
+
     month_start = f"{year}-{month:02d}-01"
     if month == 12:
         month_end = f"{year + 1}-01-01"
     else:
         month_end = f"{year}-{month + 1:02d}-01"
-    
+
     # Previous month
     if month == 1:
         prev_year = year - 1
@@ -6098,7 +6755,7 @@ async def get_project_monthly_report(
         prev_month_end = f"{prev_year + 1}-01-01"
     else:
         prev_month_end = f"{prev_year}-{prev_month + 1:02d}-01"
-    
+
     phases = (
         db.query(Phase)
         .filter(Phase.project_id == project_id)
@@ -6125,22 +6782,35 @@ async def get_project_monthly_report(
     )
     designer = (
         db.query(User).filter(User.id == project.assigned_designer_id).first()
-        if project.assigned_designer_id else None
+        if project.assigned_designer_id
+        else None
     )
-    
-    rating_fields = ["costing", "willingness_to_buy", "engagement_life", "durability",
-                     "age_appropriateness", "ease_of_use", "aesthetics", "easy_to_store"]
-    
+
+    rating_fields = [
+        "costing",
+        "willingness_to_buy",
+        "engagement_life",
+        "durability",
+        "age_appropriateness",
+        "ease_of_use",
+        "aesthetics",
+        "easy_to_store",
+    ]
+
     def calc_avg_ratings(reports):
         avg = {}
         for rf in rating_fields:
-            vals = [getattr(r, rf, None) for r in reports if getattr(r, rf, None) is not None]
+            vals = [
+                getattr(r, rf, None)
+                for r in reports
+                if getattr(r, rf, None) is not None
+            ]
             avg[rf] = round(sum(vals) / len(vals), 2) if vals else None
         return avg
-    
+
     current_avg_ratings = calc_avg_ratings(stage_reports)
     prev_avg_ratings = calc_avg_ratings(prev_stage_reports)
-    
+
     rating_trends = {}
     for rf in rating_fields:
         if current_avg_ratings[rf] is not None and prev_avg_ratings[rf] is not None:
@@ -6151,15 +6821,19 @@ async def get_project_monthly_report(
                 rating_trends[rf] = "declined"
             else:
                 rating_trends[rf] = "stable"
-    
+
     reports_by_phase = {}
     for r in stage_reports:
-        reports_by_phase.setdefault(r.stage_index, []).append(StageReportResponse.model_validate(r))
-    
+        reports_by_phase.setdefault(r.stage_index, []).append(
+            StageReportResponse.model_validate(r)
+        )
+
     prev_reports_by_phase = {}
     for r in prev_stage_reports:
-        prev_reports_by_phase.setdefault(r.stage_index, []).append(StageReportResponse.model_validate(r))
-    
+        prev_reports_by_phase.setdefault(r.stage_index, []).append(
+            StageReportResponse.model_validate(r)
+        )
+
     items = []
     total_submissions = 0
     total_notes = 0
@@ -6167,12 +6841,12 @@ async def get_project_monthly_report(
     total_delay_days = 0
     stages_completed = 0
     progress_delta = 0
-    
+
     for ph in phases:
         idx = ph.stage_index
         sr_list = reports_by_phase.get(idx, [])
         prev_sr_list = prev_reports_by_phase.get(idx, [])
-        
+
         completed_this_month = False
         if ph.completed_at:
             completed_date = ph.completed_at
@@ -6182,7 +6856,7 @@ async def get_project_monthly_report(
                 completed_date = completed_date.strftime("%Y-%m-%d")
             if month_start <= completed_date < month_end:
                 completed_this_month = True
-        
+
         activities = []
         for sr in sr_list:
             activity = MonthlyActivityItem(
@@ -6192,10 +6866,10 @@ async def get_project_monthly_report(
                 notes=sr.notes or None,
             )
             activities.append(activity)
-        
+
         submissions_count = len(sr_list)
         notes_count = sum(1 for sr in sr_list if sr.notes and sr.notes.strip())
-        
+
         phase_delay_occurred = False
         phase_delay_days = 0
         if sr_list:
@@ -6203,7 +6877,7 @@ async def get_project_monthly_report(
                 if sr.delay_days and sr.delay_days > 0:
                     phase_delay_occurred = True
                     phase_delay_days = max(phase_delay_days, sr.delay_days)
-        
+
         if completed_this_month:
             stages_completed += 1
         total_submissions += submissions_count
@@ -6211,7 +6885,7 @@ async def get_project_monthly_report(
         if phase_delay_occurred:
             total_delays += 1
         total_delay_days += phase_delay_days
-        
+
         prev_max = -1
         if prev_sr_list:
             prev_max = max(r.stage_index for r in prev_sr_list)
@@ -6221,32 +6895,36 @@ async def get_project_monthly_report(
         phase_progress_delta = curr_max - prev_max
         if idx == max(phases[-1].stage_index if phases else [0], curr_max, prev_max):
             progress_delta = phase_progress_delta
-        
+
         phase_avg_ratings = None
         if sr_list:
             phase_avg_ratings = calc_avg_ratings(sr_list)
-        
-        items.append(MonthlyReportItem(
-            project_id=project.id,
-            project_name=project.name,
-            assigned_designer=designer.name if designer else "Unassigned",
-            stage_index=idx,
-            stage_name=_get_current_stage_name(idx, project.phase_type, project.stage_names, phase=ph),
-            status=project.status,
-            progress=project.progress,
-            deadline=ph.deadline,
-            completed_at=ph.completed_at,
-            delay_days=phase_delay_days,
-            delay_reason=ph.delay_reason or "",
-            stage_reports=sr_list,
-            completed_this_month=completed_this_month,
-            submissions_count=submissions_count,
-            notes_count=notes_count,
-            avg_ratings=phase_avg_ratings,
-            rating_trends=rating_trends,
-            activities=activities,
-        ))
-    
+
+        items.append(
+            MonthlyReportItem(
+                project_id=project.id,
+                project_name=project.name,
+                assigned_designer=designer.name if designer else "Unassigned",
+                stage_index=idx,
+                stage_name=_get_current_stage_name(
+                    idx, project.phase_type, project.stage_names, phase=ph
+                ),
+                status=project.status,
+                progress=project.progress,
+                deadline=ph.deadline,
+                completed_at=ph.completed_at,
+                delay_days=phase_delay_days,
+                delay_reason=ph.delay_reason or "",
+                stage_reports=sr_list,
+                completed_this_month=completed_this_month,
+                submissions_count=submissions_count,
+                notes_count=notes_count,
+                avg_ratings=phase_avg_ratings,
+                rating_trends=rating_trends,
+                activities=activities,
+            )
+        )
+
     return MonthlyReportResponse(
         month=f"{month:02d}",
         year=year,
@@ -6264,7 +6942,10 @@ async def get_project_monthly_report(
     )
 
 
-@app.get("/api/designers/{designer_id}/performance/weekly", response_model=DesignerPerformanceResponse)
+@app.get(
+    "/api/designers/{designer_id}/performance/weekly",
+    response_model=DesignerPerformanceResponse,
+)
 async def get_designer_weekly_performance(
     designer_id: int,
     week_start: str = Query(..., description="Week start date (YYYY-MM-DD)"),
@@ -6275,14 +6956,12 @@ async def get_designer_weekly_performance(
     designer = db.query(User).filter(User.id == designer_id).first()
     if not designer:
         raise HTTPException(status_code=404, detail="Designer not found")
-    
+
     # Find all projects assigned to this designer
     projects = (
-        db.query(Project)
-        .filter(Project.assigned_designer_id == designer_id)
-        .all()
+        db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
     )
-    
+
     if not projects:
         return DesignerPerformanceResponse(
             designer_id=designer.id,
@@ -6296,10 +6975,12 @@ async def get_designer_weekly_performance(
             total_stages_assigned=0,
             total_on_time=0,
         )
-    
+
     project_ids = [p.id for p in projects]
-    total_stages_assigned = db.query(Phase).filter(Phase.project_id.in_(project_ids)).count()
-    
+    total_stages_assigned = (
+        db.query(Phase).filter(Phase.project_id.in_(project_ids)).count()
+    )
+
     # Get all phases for these projects that were completed in the week
     phases = (
         db.query(Phase)
@@ -6311,22 +6992,22 @@ async def get_designer_weekly_performance(
         )
         .all()
     )
-    
+
     total_stages_completed = 0
     total_delays = 0
     total_on_time = 0
     delay_responsibility_count = 0
     items = []
-    
+
     for ph in phases:
         proj = db.query(Project).filter(Project.id == ph.project_id).first()
         if not proj:
             continue
-        
+
         # Count how many times this designer was marked as responsible
         if ph.delay_responsible:
             delay_responsibility_count += ph.delay_responsible.count(designer_id)
-        
+
         # Calculate delay
         delay_days = 0
         if ph.completed_at and ph.deadline:
@@ -6344,40 +7025,44 @@ async def get_designer_weekly_performance(
                     delay_days = max(0, diff)
             except Exception:
                 pass
-        
+
         total_stages_completed += 1
         if delay_days > 0:
             total_delays += 1
         else:
             total_on_time += 1
-        
+
         # Count updates (SlackActivity entries) for this project
-        updates_count = db.query(SlackActivity).filter(
-            SlackActivity.project_id == ph.project_id
-        ).count()
-        
+        updates_count = (
+            db.query(SlackActivity)
+            .filter(SlackActivity.project_id == ph.project_id)
+            .count()
+        )
+
         # Count delays (phases with delay_reason) for this project
-        project_phases = db.query(Phase).filter(
-            Phase.project_id == ph.project_id
-        ).all()
+        project_phases = db.query(Phase).filter(Phase.project_id == ph.project_id).all()
         delays_count = sum(1 for p in project_phases if p.delay_reason)
-        
-        items.append(DesignerProjectItem(
-            project_id=proj.id,
-            project_name=proj.name,
-            stage_index=ph.stage_index,
-            stage_name=_get_current_stage_name(ph.stage_index, proj.phase_type, proj.stage_names, phase=ph),
-            status=proj.status,
-            progress=proj.progress,
-            deadline=ph.deadline,
-            completed_at=ph.completed_at,
-            delay_days=delay_days,
-            delay_reason=ph.delay_reason or "",
-            updates_count=updates_count,
-            delays_count=delays_count,
-            manager_remarks=ph.manager_remarks or [],
-        ))
-    
+
+        items.append(
+            DesignerProjectItem(
+                project_id=proj.id,
+                project_name=proj.name,
+                stage_index=ph.stage_index,
+                stage_name=_get_current_stage_name(
+                    ph.stage_index, proj.phase_type, proj.stage_names, phase=ph
+                ),
+                status=proj.status,
+                progress=proj.progress,
+                deadline=ph.deadline,
+                completed_at=ph.completed_at,
+                delay_days=delay_days,
+                delay_reason=ph.delay_reason or "",
+                updates_count=updates_count,
+                delays_count=delays_count,
+                manager_remarks=ph.manager_remarks or [],
+            )
+        )
+
     return DesignerPerformanceResponse(
         designer_id=designer.id,
         designer_name=designer.name,
@@ -6393,7 +7078,10 @@ async def get_designer_weekly_performance(
     )
 
 
-@app.get("/api/designers/{designer_id}/performance/monthly", response_model=DesignerPerformanceResponse)
+@app.get(
+    "/api/designers/{designer_id}/performance/monthly",
+    response_model=DesignerPerformanceResponse,
+)
 async def get_designer_monthly_performance(
     designer_id: int,
     month: int = Query(..., ge=1, le=12),
@@ -6404,20 +7092,18 @@ async def get_designer_monthly_performance(
     designer = db.query(User).filter(User.id == designer_id).first()
     if not designer:
         raise HTTPException(status_code=404, detail="Designer not found")
-    
+
     month_start = f"{year}-{month:02d}-01"
     if month == 12:
         month_end = f"{year + 1}-01-01"
     else:
         month_end = f"{year}-{month + 1:02d}-01"
-    
+
     # Find all projects assigned to this designer
     projects = (
-        db.query(Project)
-        .filter(Project.assigned_designer_id == designer_id)
-        .all()
+        db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
     )
-    
+
     if not projects:
         return DesignerPerformanceResponse(
             designer_id=designer.id,
@@ -6431,10 +7117,12 @@ async def get_designer_monthly_performance(
             total_stages_assigned=0,
             total_on_time=0,
         )
-    
+
     project_ids = [p.id for p in projects]
-    total_stages_assigned = db.query(Phase).filter(Phase.project_id.in_(project_ids)).count()
-    
+    total_stages_assigned = (
+        db.query(Phase).filter(Phase.project_id.in_(project_ids)).count()
+    )
+
     # Get all phases for these projects that were completed in the month
     phases = (
         db.query(Phase)
@@ -6446,22 +7134,22 @@ async def get_designer_monthly_performance(
         )
         .all()
     )
-    
+
     total_stages_completed = 0
     total_delays = 0
     total_on_time = 0
     delay_responsibility_count = 0
     items = []
-    
+
     for ph in phases:
         proj = db.query(Project).filter(Project.id == ph.project_id).first()
         if not proj:
             continue
-        
+
         # Count how many times this designer was marked as responsible
         if ph.delay_responsible:
             delay_responsibility_count += ph.delay_responsible.count(designer_id)
-        
+
         # Calculate delay
         delay_days = 0
         if ph.completed_at and ph.deadline:
@@ -6479,40 +7167,44 @@ async def get_designer_monthly_performance(
                     delay_days = max(0, diff)
             except Exception:
                 pass
-        
+
         total_stages_completed += 1
         if delay_days > 0:
             total_delays += 1
         else:
             total_on_time += 1
-        
+
         # Count updates (SlackActivity entries) for this project
-        updates_count = db.query(SlackActivity).filter(
-            SlackActivity.project_id == ph.project_id
-        ).count()
-        
+        updates_count = (
+            db.query(SlackActivity)
+            .filter(SlackActivity.project_id == ph.project_id)
+            .count()
+        )
+
         # Count delays (phases with delay_reason) for this project
-        project_phases = db.query(Phase).filter(
-            Phase.project_id == ph.project_id
-        ).all()
+        project_phases = db.query(Phase).filter(Phase.project_id == ph.project_id).all()
         delays_count = sum(1 for p in project_phases if p.delay_reason)
-        
-        items.append(DesignerProjectItem(
-            project_id=proj.id,
-            project_name=proj.name,
-            stage_index=ph.stage_index,
-            stage_name=_get_current_stage_name(ph.stage_index, proj.phase_type, proj.stage_names, phase=ph),
-            status=proj.status,
-            progress=proj.progress,
-            deadline=ph.deadline,
-            completed_at=ph.completed_at,
-            delay_days=delay_days,
-            delay_reason=ph.delay_reason or "",
-            updates_count=updates_count,
-            delays_count=delays_count,
-            manager_remarks=ph.manager_remarks or [],
-        ))
-    
+
+        items.append(
+            DesignerProjectItem(
+                project_id=proj.id,
+                project_name=proj.name,
+                stage_index=ph.stage_index,
+                stage_name=_get_current_stage_name(
+                    ph.stage_index, proj.phase_type, proj.stage_names, phase=ph
+                ),
+                status=proj.status,
+                progress=proj.progress,
+                deadline=ph.deadline,
+                completed_at=ph.completed_at,
+                delay_days=delay_days,
+                delay_reason=ph.delay_reason or "",
+                updates_count=updates_count,
+                delays_count=delays_count,
+                manager_remarks=ph.manager_remarks or [],
+            )
+        )
+
     return DesignerPerformanceResponse(
         designer_id=designer.id,
         designer_name=designer.name,
@@ -6530,7 +7222,10 @@ async def get_designer_monthly_performance(
 
 # ---------- Monthly Trend for a Project ----------
 
-@app.get("/api/projects/{project_id}/monthly-trend", response_model=List[MonthlyTrendPoint])
+
+@app.get(
+    "/api/projects/{project_id}/monthly-trend", response_model=List[MonthlyTrendPoint]
+)
 async def get_project_monthly_trend(
     project_id: int,
     user: User = Depends(get_current_user),
@@ -6540,20 +7235,34 @@ async def get_project_monthly_trend(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     if user.role.upper() == "DESIGNER":
-        raise HTTPException(status_code=403, detail="Designers cannot access project reports")
+        raise HTTPException(
+            status_code=403, detail="Designers cannot access project reports"
+        )
     if user.role.upper() == "MANAGER":
         is_creator = project.created_by_user_id == user.id
         is_assigned = bool(
-            db.query(ProjectManager).filter(
+            db.query(ProjectManager)
+            .filter(
                 ProjectManager.project_id == project_id,
                 ProjectManager.manager_id == user.id,
-            ).first()
+            )
+            .first()
         )
         if not is_creator and not is_assigned:
-            raise HTTPException(status_code=403, detail="You can only access your own projects")
+            raise HTTPException(
+                status_code=403, detail="You can only access your own projects"
+            )
 
-    rating_fields = ["costing", "willingness_to_buy", "engagement_life", "durability",
-                     "age_appropriateness", "ease_of_use", "aesthetics", "easy_to_store"]
+    rating_fields = [
+        "costing",
+        "willingness_to_buy",
+        "engagement_life",
+        "durability",
+        "age_appropriateness",
+        "ease_of_use",
+        "aesthetics",
+        "easy_to_store",
+    ]
 
     # Get all completed phases and their stage reports
     phases = (
@@ -6566,7 +7275,9 @@ async def get_project_monthly_trend(
     phase_ids = [ph.id for ph in phases]
     stage_reports = (
         db.query(StageReport)
-        .filter(StageReport.project_id == project_id, StageReport.submitted_at.isnot(None))
+        .filter(
+            StageReport.project_id == project_id, StageReport.submitted_at.isnot(None)
+        )
         .order_by(StageReport.submitted_at)
         .all()
     )
@@ -6582,7 +7293,11 @@ async def get_project_monthly_trend(
                 submitted_dt = datetime.strptime(submitted_dt[:10], "%Y-%m-%d")
             month_key = submitted_dt.strftime("%Y-%m")
             if month_key not in monthly_data:
-                monthly_data[month_key] = {"ratings": [], "delay_days": 0, "delayed_count": 0}
+                monthly_data[month_key] = {
+                    "ratings": [],
+                    "delay_days": 0,
+                    "delayed_count": 0,
+                }
 
             # Collect ratings
             for rf in rating_fields:
@@ -6616,7 +7331,7 @@ async def get_project_monthly_trend(
     end_dt = datetime.strptime(project.deadline, "%Y-%m-%d")
     if end_dt < datetime.now():
         end_dt = datetime.now()
-    
+
     all_months = []
     current = start_dt
     while current <= end_dt:
@@ -6626,12 +7341,16 @@ async def get_project_monthly_trend(
             current = current.replace(year=current.year + 1, month=1, day=1)
         else:
             current = current.replace(month=current.month + 1, day=1)
-    
+
     # Insert zero-fill entries for missing months
     existing_months = set(monthly_data.keys())
     for month_key in all_months:
         if month_key not in existing_months:
-            monthly_data[month_key] = {"ratings": [], "delay_days": 0, "delayed_count": 0}
+            monthly_data[month_key] = {
+                "ratings": [],
+                "delay_days": 0,
+                "delayed_count": 0,
+            }
 
     result = []
     for month in sorted(monthly_data.keys()):
@@ -6639,19 +7358,24 @@ async def get_project_monthly_trend(
         avg_r = None
         if data["ratings"]:
             avg_r = round(sum(data["ratings"]) / len(data["ratings"]), 2)
-        result.append(MonthlyTrendPoint(
-            month=month,
-            avg_rating=avg_r,
-            total_delay_days=data["delay_days"],
-            delayed_stage_count=data["delayed_count"],
-        ))
+        result.append(
+            MonthlyTrendPoint(
+                month=month,
+                avg_rating=avg_r,
+                total_delay_days=data["delay_days"],
+                delayed_stage_count=data["delayed_count"],
+            )
+        )
 
     return result
 
 
 # ---------- Designer Comparison ----------
 
-@app.get("/api/reports/designer-comparison", response_model=List[DesignerComparisonItem])
+
+@app.get(
+    "/api/reports/designer-comparison", response_model=List[DesignerComparisonItem]
+)
 async def get_designer_comparison(
     period: str = Query("monthly", description="Period type: weekly or monthly"),
     week_start: Optional[str] = Query(None, description="Week start (YYYY-MM-DD)"),
@@ -6661,11 +7385,7 @@ async def get_designer_comparison(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    all_designers = (
-        db.query(User)
-        .filter(User.role.in_(["DESIGNER", "MANAGER"]))
-        .all()
-    )
+    all_designers = db.query(User).filter(User.role.in_(["DESIGNER", "MANAGER"])).all()
 
     # Build period date range
     if period == "weekly" and week_start and week_end:
@@ -6690,9 +7410,7 @@ async def get_designer_comparison(
     result = []
     for designer in all_designers:
         projects = (
-            db.query(Project)
-            .filter(Project.assigned_designer_id == designer.id)
-            .all()
+            db.query(Project).filter(Project.assigned_designer_id == designer.id).all()
         )
         if not projects:
             continue
@@ -6741,25 +7459,34 @@ async def get_designer_comparison(
             # Count how many times this designer was marked as responsible
             for ph in phases:
                 if ph.delay_responsible:
-                    delay_responsibility_count += ph.delay_responsible.count(designer.id)
+                    delay_responsibility_count += ph.delay_responsible.count(
+                        designer.id
+                    )
 
-        result.append(DesignerComparisonItem(
-            designer_id=designer.id,
-            designer_name=designer.name,
-            stages_completed=stages_completed,
-            on_time=on_time,
-            delayed=delayed,
-            on_time_rate=on_time_rate,
-            avg_delay_days=avg_delay,
-            delay_responsibility_count=delay_responsibility_count,
-        ))
+        result.append(
+            DesignerComparisonItem(
+                designer_id=designer.id,
+                designer_name=designer.name,
+                stages_completed=stages_completed,
+                on_time=on_time,
+                delayed=delayed,
+                on_time_rate=on_time_rate,
+                avg_delay_days=avg_delay,
+                delay_responsibility_count=delay_responsibility_count,
+            )
+        )
 
     # Sort by on_time_rate descending (None values last)
-    result.sort(key=lambda x: x.on_time_rate if x.on_time_rate is not None else -1, reverse=True)
+    result.sort(
+        key=lambda x: x.on_time_rate if x.on_time_rate is not None else -1, reverse=True
+    )
     return result
 
 
-@app.get("/api/designers/{designer_id}/responsibility-details", response_model=List[DelayResponsibilityDetail])
+@app.get(
+    "/api/designers/{designer_id}/responsibility-details",
+    response_model=List[DelayResponsibilityDetail],
+)
 async def get_designer_responsibility_details(
     designer_id: int,
     period: str = Query("monthly", regex="^(weekly|monthly)$"),
@@ -6773,7 +7500,7 @@ async def get_designer_responsibility_details(
     designer = db.query(User).filter(User.id == designer_id).first()
     if not designer:
         raise HTTPException(status_code=404, detail="Designer not found")
-    
+
     # Determine period date range
     if period == "weekly" and week_start and week_end:
         period_start = week_start
@@ -6791,14 +7518,16 @@ async def get_designer_responsibility_details(
             period_end = f"{now.year + 1}-01-01"
         else:
             period_end = f"{now.year}-{now.month + 1:02d}-01"
-    
+
     # Find all projects assigned to this designer
-    projects = db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
+    projects = (
+        db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
+    )
     project_ids = [p.id for p in projects]
-    
+
     # Get all phases for these projects
     phases = db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
-    
+
     result = []
     for ph in phases:
         # Check if designer was marked as responsible
@@ -6806,7 +7535,7 @@ async def get_designer_responsibility_details(
             proj = db.query(Project).filter(Project.id == ph.project_id).first()
             if not proj:
                 continue
-            
+
             # Calculate delay days
             delay_days = 0
             if ph.completed_at and ph.deadline:
@@ -6819,19 +7548,23 @@ async def get_designer_responsibility_details(
                     delay_days = max(0, (completed_dt.date() - deadline_dt.date()).days)
                 except Exception:
                     pass
-            
-            stage_name = _get_current_stage_name(ph.stage_index, proj.phase_type, proj.stage_names, phase=ph)
-            
-            result.append(DelayResponsibilityDetail(
-                project_id=proj.id,
-                project_name=proj.name,
-                stage_index=ph.stage_index,
-                stage_name=stage_name,
-                delay_reason=ph.delay_reason or "",
-                delay_days=delay_days,
-                completed_at=ph.completed_at,
-            ))
-    
+
+            stage_name = _get_current_stage_name(
+                ph.stage_index, proj.phase_type, proj.stage_names, phase=ph
+            )
+
+            result.append(
+                DelayResponsibilityDetail(
+                    project_id=proj.id,
+                    project_name=proj.name,
+                    stage_index=ph.stage_index,
+                    stage_name=stage_name,
+                    delay_reason=ph.delay_reason or "",
+                    delay_days=delay_days,
+                    completed_at=ph.completed_at,
+                )
+            )
+
     # Sort by completed_at descending (most recent first)
     result.sort(key=lambda x: x.completed_at or "", reverse=True)
     return result
@@ -6839,7 +7572,11 @@ async def get_designer_responsibility_details(
 
 # ---------- Designer Performance Trend (6 months) ----------
 
-@app.get("/api/designers/{designer_id}/performance/trend", response_model=List[DesignerTrendPoint])
+
+@app.get(
+    "/api/designers/{designer_id}/performance/trend",
+    response_model=List[DesignerTrendPoint],
+)
 async def get_designer_performance_trend(
     designer_id: int,
     period: str = Query("monthly", regex="^(weekly|monthly)$"),
@@ -6851,9 +7588,7 @@ async def get_designer_performance_trend(
         raise HTTPException(status_code=404, detail="Designer not found")
 
     projects = (
-        db.query(Project)
-        .filter(Project.assigned_designer_id == designer_id)
-        .all()
+        db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
     )
     if not projects:
         return []
@@ -6877,7 +7612,12 @@ async def get_designer_performance_trend(
             week_dt = now - timedelta(weeks=i)
             _, iso_week, _ = week_dt.isocalendar()
             week_key = f"W{iso_week:02d}"
-            weekly_data[week_key] = {"stages": 0, "delay_days": 0, "on_time": 0, "delay_responsibility_count": 0}
+            weekly_data[week_key] = {
+                "stages": 0,
+                "delay_days": 0,
+                "on_time": 0,
+                "delay_responsibility_count": 0,
+            }
 
         for ph in phases:
             try:
@@ -6903,7 +7643,9 @@ async def get_designer_performance_trend(
                 if delay_days == 0:
                     weekly_data[week_key]["on_time"] += 1
                 if ph.delay_responsible:
-                    weekly_data[week_key]["delay_responsibility_count"] += ph.delay_responsible.count(designer_id)
+                    weekly_data[week_key]["delay_responsibility_count"] += (
+                        ph.delay_responsible.count(designer_id)
+                    )
             except Exception:
                 continue
 
@@ -6914,13 +7656,15 @@ async def get_designer_performance_trend(
                 continue
             on_time_rate = round((data["on_time"] / data["stages"]) * 100, 1)
             avg_delay = round(data["delay_days"] / data["stages"], 1)
-            result.append(DesignerTrendPoint(
-                month=week_key,
-                on_time_rate=on_time_rate,
-                stages_completed=data["stages"],
-                avg_delay_days=avg_delay,
-                delay_responsibility_count=data["delay_responsibility_count"],
-            ))
+            result.append(
+                DesignerTrendPoint(
+                    month=week_key,
+                    on_time_rate=on_time_rate,
+                    stages_completed=data["stages"],
+                    avg_delay_days=avg_delay,
+                    delay_responsibility_count=data["delay_responsibility_count"],
+                )
+            )
     else:
         # Group by month for last 6 months
         monthly_data = {}
@@ -6932,7 +7676,12 @@ async def get_designer_performance_trend(
                 m += 12
                 y -= 1
             month_key = f"{y}-{m:02d}"
-            monthly_data[month_key] = {"stages": 0, "delay_days": 0, "on_time": 0, "delay_responsibility_count": 0}
+            monthly_data[month_key] = {
+                "stages": 0,
+                "delay_days": 0,
+                "on_time": 0,
+                "delay_responsibility_count": 0,
+            }
 
         for ph in phases:
             try:
@@ -6957,7 +7706,9 @@ async def get_designer_performance_trend(
                 if delay_days == 0:
                     monthly_data[month_key]["on_time"] += 1
                 if ph.delay_responsible:
-                    monthly_data[month_key]["delay_responsibility_count"] += ph.delay_responsible.count(designer_id)
+                    monthly_data[month_key]["delay_responsibility_count"] += (
+                        ph.delay_responsible.count(designer_id)
+                    )
             except Exception:
                 continue
 
@@ -6969,13 +7720,15 @@ async def get_designer_performance_trend(
             if data["stages"] > 0:
                 on_time_rate = round((data["on_time"] / data["stages"]) * 100, 1)
                 avg_delay = round(data["delay_days"] / data["stages"], 1)
-            result.append(DesignerTrendPoint(
-                month=month_key,
-                on_time_rate=on_time_rate,
-                stages_completed=data["stages"],
-                avg_delay_days=avg_delay,
-                delay_responsibility_count=data["delay_responsibility_count"],
-            ))
+            result.append(
+                DesignerTrendPoint(
+                    month=month_key,
+                    on_time_rate=on_time_rate,
+                    stages_completed=data["stages"],
+                    avg_delay_days=avg_delay,
+                    delay_responsibility_count=data["delay_responsibility_count"],
+                )
+            )
 
     return result
 
@@ -6987,34 +7740,94 @@ def _project_report_to_csv(report: ProjectReportResponse) -> str:
     """Convert a ProjectReportResponse to CSV string."""
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow([
-        "Project", "Designer", "Start Date", "Deadline", "Status",
-        "Progress", "Stage Index", "Manager Notes", "Generated At"
-    ])
-    writer.writerow([
-        report.project_name, report.assigned_designer, report.start_date,
-        report.deadline, report.status, report.progress, report.stage_index,
-        report.manager_notes, report.generated_at
-    ])
+    writer.writerow(
+        [
+            "Project",
+            "Designer",
+            "Start Date",
+            "Deadline",
+            "Status",
+            "Progress",
+            "Stage Index",
+            "Manager Notes",
+            "Generated At",
+        ]
+    )
+    writer.writerow(
+        [
+            report.project_name,
+            report.assigned_designer,
+            report.start_date,
+            report.deadline,
+            report.status,
+            report.progress,
+            report.stage_index,
+            report.manager_notes,
+            report.generated_at,
+        ]
+    )
     writer.writerow([])
-    writer.writerow(["Phase", "Stage Index", "Deadline", "Completed At", "Designer Update", "Delay Reason"])
+    writer.writerow(
+        [
+            "Phase",
+            "Stage Index",
+            "Deadline",
+            "Completed At",
+            "Designer Update",
+            "Delay Reason",
+        ]
+    )
     for p in report.phases:
-        writer.writerow([
-            p.stage_name, p.stage_index, p.deadline, p.completed_at or "",
-            p.designer_update or "", p.delay_reason or ""
-        ])
+        writer.writerow(
+            [
+                p.stage_name,
+                p.stage_index,
+                p.deadline,
+                p.completed_at or "",
+                p.designer_update or "",
+                p.delay_reason or "",
+            ]
+        )
     writer.writerow([])
-    writer.writerow(["Report ID", "Project", "Stage", "Stage Name", "Submitted By", "Submitted At",
-                      "Costing", "Willingness to Buy", "Engagement Life", "Durability",
-                      "Age Appropriateness", "Ease of Use", "Aesthetics", "Easy to Store", "Notes"])
+    writer.writerow(
+        [
+            "Report ID",
+            "Project",
+            "Stage",
+            "Stage Name",
+            "Submitted By",
+            "Submitted At",
+            "Costing",
+            "Willingness to Buy",
+            "Engagement Life",
+            "Durability",
+            "Age Appropriateness",
+            "Ease of Use",
+            "Aesthetics",
+            "Easy to Store",
+            "Notes",
+        ]
+    )
     for sr in report.stage_reports:
-        writer.writerow([
-            sr.id, sr.project_id, sr.stage_index, sr.stage_name,
-            sr.submitted_by_name, sr.submitted_at.strftime("%Y-%m-%d %H:%M") if sr.submitted_at else "",
-            sr.costing, sr.willingness_to_buy, sr.engagement_life, sr.durability,
-            sr.age_appropriateness, sr.ease_of_use, sr.aesthetics, sr.easy_to_store,
-            sr.notes or ""
-        ])
+        writer.writerow(
+            [
+                sr.id,
+                sr.project_id,
+                sr.stage_index,
+                sr.stage_name,
+                sr.submitted_by_name,
+                sr.submitted_at.strftime("%Y-%m-%d %H:%M") if sr.submitted_at else "",
+                sr.costing,
+                sr.willingness_to_buy,
+                sr.engagement_life,
+                sr.durability,
+                sr.age_appropriateness,
+                sr.ease_of_use,
+                sr.aesthetics,
+                sr.easy_to_store,
+                sr.notes or "",
+            ]
+        )
     return output.getvalue()
 
 
@@ -7024,20 +7837,71 @@ def _draw_project_report_pdf(report: ProjectReportResponse):
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Table,
+        TableStyle,
+        Paragraph,
+        Spacer,
+        PageBreak,
+    )
     from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
     from io import BytesIO
 
     buffer = BytesIO()
     styles = getSampleStyleSheet()
 
-    title_style = ParagraphStyle("ReportTitle", parent=styles["Heading1"], fontSize=18, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"))
-    subtitle_style = ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, spaceAfter=12, textColor=colors.HexColor("#666666"))
-    heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=13, spaceBefore=10, spaceAfter=6, textColor=colors.HexColor("#2c5282"))
-    table_heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=7, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
-    cell_style = ParagraphStyle("TableCell", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_LEFT)
-    cell_center = ParagraphStyle("TableCellCenter", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_CENTER)
-    cell_right = ParagraphStyle("TableCellRight", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_RIGHT)
+    title_style = ParagraphStyle(
+        "ReportTitle",
+        parent=styles["Heading1"],
+        fontSize=18,
+        spaceAfter=6,
+        textColor=colors.HexColor("#1e3a5f"),
+    )
+    subtitle_style = ParagraphStyle(
+        "ReportSubtitle",
+        parent=styles["Normal"],
+        fontSize=10,
+        spaceAfter=12,
+        textColor=colors.HexColor("#666666"),
+    )
+    heading_style = ParagraphStyle(
+        "SectionHeading",
+        parent=styles["Heading2"],
+        fontSize=13,
+        spaceBefore=10,
+        spaceAfter=6,
+        textColor=colors.HexColor("#2c5282"),
+    )
+    table_heading_style = ParagraphStyle(
+        "TableHeading",
+        parent=styles["Normal"],
+        fontSize=7,
+        fontName="Helvetica-Bold",
+        textColor=colors.white,
+        alignment=TA_CENTER,
+    )
+    cell_style = ParagraphStyle(
+        "TableCell",
+        parent=styles["Normal"],
+        fontSize=6.5,
+        leading=8.5,
+        alignment=TA_LEFT,
+    )
+    cell_center = ParagraphStyle(
+        "TableCellCenter",
+        parent=styles["Normal"],
+        fontSize=6.5,
+        leading=8.5,
+        alignment=TA_CENTER,
+    )
+    cell_right = ParagraphStyle(
+        "TableCellRight",
+        parent=styles["Normal"],
+        fontSize=6.5,
+        leading=8.5,
+        alignment=TA_RIGHT,
+    )
 
     elements = []
     elements.append(Paragraph("Project Report", title_style))
@@ -7046,150 +7910,249 @@ def _draw_project_report_pdf(report: ProjectReportResponse):
 
     # --- Overview Table ---
     overview_data = [
-        [Paragraph("<b>Designer</b>", table_heading_style),
-         Paragraph("<b>Start Date</b>", table_heading_style),
-         Paragraph("<b>Deadline</b>", table_heading_style),
-         Paragraph("<b>Status</b>", table_heading_style),
-         Paragraph("<b>Progress</b>", table_heading_style),
-         Paragraph("<b>Stage Index</b>", table_heading_style)],
-        [Paragraph(report.assigned_designer, cell_style),
-         Paragraph(report.start_date, cell_style),
-         Paragraph(report.deadline, cell_style),
-         Paragraph(report.status, cell_style),
-         Paragraph(str(report.progress) + "%", cell_center),
-         Paragraph(str(report.stage_index), cell_center)]
+        [
+            Paragraph("<b>Designer</b>", table_heading_style),
+            Paragraph("<b>Start Date</b>", table_heading_style),
+            Paragraph("<b>Deadline</b>", table_heading_style),
+            Paragraph("<b>Status</b>", table_heading_style),
+            Paragraph("<b>Progress</b>", table_heading_style),
+            Paragraph("<b>Stage Index</b>", table_heading_style),
+        ],
+        [
+            Paragraph(report.assigned_designer, cell_style),
+            Paragraph(report.start_date, cell_style),
+            Paragraph(report.deadline, cell_style),
+            Paragraph(report.status, cell_style),
+            Paragraph(str(report.progress) + "%", cell_center),
+            Paragraph(str(report.stage_index), cell_center),
+        ],
     ]
     avail = letter[0] - 2 * 0.6 * inch
-    col_widths_overview = [avail * 0.22, avail * 0.15, avail * 0.15, avail * 0.15, avail * 0.13, avail * 0.10]
+    col_widths_overview = [
+        avail * 0.22,
+        avail * 0.15,
+        avail * 0.15,
+        avail * 0.15,
+        avail * 0.13,
+        avail * 0.10,
+    ]
     header_table = Table(overview_data, colWidths=col_widths_overview, repeatRows=1)
-    header_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
-        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-    ]))
+    header_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]
+        )
+    )
     elements.append(header_table)
     elements.append(Spacer(1, 10))
 
     # --- Phases Table ---
     elements.append(Paragraph("Phases", heading_style))
     phase_data = [
-        [Paragraph("<b>Phase</b>", table_heading_style),
-         Paragraph("<b>Stage</b>", table_heading_style),
-         Paragraph("<b>Deadline</b>", table_heading_style),
-         Paragraph("<b>Completed</b>", table_heading_style),
-         Paragraph("<b>Designer Update</b>", table_heading_style),
-         Paragraph("<b>Delay Reason</b>", table_heading_style)]
+        [
+            Paragraph("<b>Phase</b>", table_heading_style),
+            Paragraph("<b>Stage</b>", table_heading_style),
+            Paragraph("<b>Deadline</b>", table_heading_style),
+            Paragraph("<b>Completed</b>", table_heading_style),
+            Paragraph("<b>Designer Update</b>", table_heading_style),
+            Paragraph("<b>Delay Reason</b>", table_heading_style),
+        ]
     ]
     for p in report.phases:
-        phase_data.append([
-            Paragraph(p.stage_name, cell_style),
-            Paragraph(str(p.stage_index), cell_center),
-            Paragraph(p.deadline, cell_style),
-            Paragraph(p.completed_at or "", cell_style),
-            Paragraph(p.designer_update or "", cell_style),
-            Paragraph(p.delay_reason or "", cell_style)
-        ])
+        phase_data.append(
+            [
+                Paragraph(p.stage_name, cell_style),
+                Paragraph(str(p.stage_index), cell_center),
+                Paragraph(p.deadline, cell_style),
+                Paragraph(p.completed_at or "", cell_style),
+                Paragraph(p.designer_update or "", cell_style),
+                Paragraph(p.delay_reason or "", cell_style),
+            ]
+        )
     if phase_data:
-        col_widths_phase = [avail * 0.22, avail * 0.08, avail * 0.15, avail * 0.15, avail * 0.22, avail * 0.18]
+        col_widths_phase = [
+            avail * 0.22,
+            avail * 0.08,
+            avail * 0.15,
+            avail * 0.15,
+            avail * 0.22,
+            avail * 0.18,
+        ]
         phase_table = Table(phase_data, colWidths=col_widths_phase, repeatRows=1)
-        phase_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
-            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
-        ]))
+        phase_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+                    ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#f7fafc")),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 2),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                    (
+                        "ROWBACKGROUNDS",
+                        (0, 1),
+                        (-1, -1),
+                        [colors.white, colors.HexColor("#f7fafc")],
+                    ),
+                ]
+            )
+        )
         elements.append(phase_table)
     elements.append(Spacer(1, 10))
 
     # --- Stage Reports Table (split into two pages if needed) ---
     elements.append(Paragraph("Stage Reports", heading_style))
     sr_data = [
-        [Paragraph("<b>Stage</b>", table_heading_style),
-         Paragraph("<b>Submitted By</b>", table_heading_style),
-         Paragraph("<b>Date</b>", table_heading_style),
-         Paragraph("<b>Costing</b>", table_heading_style),
-         Paragraph("<b>Willingness</b>", table_heading_style),
-         Paragraph("<b>Engagement</b>", table_heading_style),
-         Paragraph("<b>Durability</b>", table_heading_style),
-         Paragraph("<b>Age Appr.</b>", table_heading_style),
-         Paragraph("<b>Notes</b>", table_heading_style)]
+        [
+            Paragraph("<b>Stage</b>", table_heading_style),
+            Paragraph("<b>Submitted By</b>", table_heading_style),
+            Paragraph("<b>Date</b>", table_heading_style),
+            Paragraph("<b>Costing</b>", table_heading_style),
+            Paragraph("<b>Willingness</b>", table_heading_style),
+            Paragraph("<b>Engagement</b>", table_heading_style),
+            Paragraph("<b>Durability</b>", table_heading_style),
+            Paragraph("<b>Age Appr.</b>", table_heading_style),
+            Paragraph("<b>Notes</b>", table_heading_style),
+        ]
     ]
     for sr in report.stage_reports:
-        sr_data.append([
-            Paragraph(sr.stage_name, cell_style),
-            Paragraph(sr.submitted_by_name or "", cell_style),
-            Paragraph(sr.submitted_at.strftime("%Y-%m-%d %H:%M") if sr.submitted_at else "", cell_style),
-            Paragraph(str(sr.costing) if sr.costing else "", cell_center),
-            Paragraph(str(sr.willingness_to_buy) if sr.willingness_to_buy else "", cell_center),
-            Paragraph(str(sr.engagement_life) if sr.engagement_life else "", cell_center),
-            Paragraph(str(sr.durability) if sr.durability else "", cell_center),
-            Paragraph(str(sr.age_appropriateness) if sr.age_appropriateness else "", cell_center),
-            Paragraph((sr.notes or "")[:80], cell_style)
-        ])
+        sr_data.append(
+            [
+                Paragraph(sr.stage_name, cell_style),
+                Paragraph(sr.submitted_by_name or "", cell_style),
+                Paragraph(
+                    sr.submitted_at.strftime("%Y-%m-%d %H:%M")
+                    if sr.submitted_at
+                    else "",
+                    cell_style,
+                ),
+                Paragraph(str(sr.costing) if sr.costing else "", cell_center),
+                Paragraph(
+                    str(sr.willingness_to_buy) if sr.willingness_to_buy else "",
+                    cell_center,
+                ),
+                Paragraph(
+                    str(sr.engagement_life) if sr.engagement_life else "", cell_center
+                ),
+                Paragraph(str(sr.durability) if sr.durability else "", cell_center),
+                Paragraph(
+                    str(sr.age_appropriateness) if sr.age_appropriateness else "",
+                    cell_center,
+                ),
+                Paragraph((sr.notes or "")[:80], cell_style),
+            ]
+        )
     if sr_data:
         # Split into two tables: ratings (left) and info (right)
-        left_cols = [avail * 0.20, avail * 0.20, avail * 0.18, avail * 0.10, avail * 0.10]
+        left_cols = [
+            avail * 0.20,
+            avail * 0.20,
+            avail * 0.18,
+            avail * 0.10,
+            avail * 0.10,
+        ]
         left_header = [
             Paragraph("<b>Stage</b>", table_heading_style),
             Paragraph("<b>Submitted By</b>", table_heading_style),
             Paragraph("<b>Date</b>", table_heading_style),
             Paragraph("<b>Costing</b>", table_heading_style),
-            Paragraph("<b>Willingness</b>", table_heading_style)
+            Paragraph("<b>Willingness</b>", table_heading_style),
         ]
         left_rows = []
         for sr in report.stage_reports:
-            left_rows.append([
-                Paragraph(sr.stage_name, cell_style),
-                Paragraph(sr.submitted_by_name or "", cell_style),
-                Paragraph(sr.submitted_at.strftime("%Y-%m-%d %H:%M") if sr.submitted_at else "", cell_style),
-                Paragraph(str(sr.costing) if sr.costing else "", cell_center),
-                Paragraph(str(sr.willingness_to_buy) if sr.willingness_to_buy else "", cell_center)
-            ])
+            left_rows.append(
+                [
+                    Paragraph(sr.stage_name, cell_style),
+                    Paragraph(sr.submitted_by_name or "", cell_style),
+                    Paragraph(
+                        sr.submitted_at.strftime("%Y-%m-%d %H:%M")
+                        if sr.submitted_at
+                        else "",
+                        cell_style,
+                    ),
+                    Paragraph(str(sr.costing) if sr.costing else "", cell_center),
+                    Paragraph(
+                        str(sr.willingness_to_buy) if sr.willingness_to_buy else "",
+                        cell_center,
+                    ),
+                ]
+            )
 
-        right_cols = [avail * 0.12, avail * 0.12, avail * 0.12, avail * 0.12, avail * 0.12]
+        right_cols = [
+            avail * 0.12,
+            avail * 0.12,
+            avail * 0.12,
+            avail * 0.12,
+            avail * 0.12,
+        ]
         right_header = [
             Paragraph("<b>Engage.</b>", table_heading_style),
             Paragraph("<b>Durab.</b>", table_heading_style),
             Paragraph("<b>Age Appr.</b>", table_heading_style),
             Paragraph("<b>Easy Store</b>", table_heading_style),
-            Paragraph("<b>Notes</b>", table_heading_style)
+            Paragraph("<b>Notes</b>", table_heading_style),
         ]
         right_rows = []
         for sr in report.stage_reports:
-            right_rows.append([
-                Paragraph(str(sr.engagement_life) if sr.engagement_life else "", cell_center),
-                Paragraph(str(sr.durability) if sr.durability else "", cell_center),
-                Paragraph(str(sr.age_appropriateness) if sr.age_appropriateness else "", cell_center),
-                Paragraph(str(sr.easy_to_store) if sr.easy_to_store else "", cell_center),
-                Paragraph((sr.notes or "")[:60], cell_style)
-            ])
+            right_rows.append(
+                [
+                    Paragraph(
+                        str(sr.engagement_life) if sr.engagement_life else "",
+                        cell_center,
+                    ),
+                    Paragraph(str(sr.durability) if sr.durability else "", cell_center),
+                    Paragraph(
+                        str(sr.age_appropriateness) if sr.age_appropriateness else "",
+                        cell_center,
+                    ),
+                    Paragraph(
+                        str(sr.easy_to_store) if sr.easy_to_store else "", cell_center
+                    ),
+                    Paragraph((sr.notes or "")[:60], cell_style),
+                ]
+            )
 
-        for header, rows, cols in [(left_header, left_rows, left_cols), (right_header, right_rows, right_cols)]:
+        for header, rows, cols in [
+            (left_header, left_rows, left_cols),
+            (right_header, right_rows, right_cols),
+        ]:
             tdata = [header] + rows
             tbl = Table(tdata, colWidths=cols, repeatRows=1)
-            tbl.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('TOPPADDING', (0, 0), (-1, -1), 2),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
-            ]))
+            tbl.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+                        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("TOPPADDING", (0, 0), (-1, -1), 2),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                        (
+                            "ROWBACKGROUNDS",
+                            (0, 1),
+                            (-1, -1),
+                            [colors.white, colors.HexColor("#f7fafc")],
+                        ),
+                    ]
+                )
+            )
             elements.append(tbl)
             elements.append(Spacer(1, 4))
 
     doc = SimpleDocTemplate(
-        buffer, pagesize=letter,
-        leftMargin=0.6*inch, rightMargin=0.6*inch,
-        topMargin=0.6*inch, bottomMargin=0.6*inch,
+        buffer,
+        pagesize=letter,
+        leftMargin=0.6 * inch,
+        rightMargin=0.6 * inch,
+        topMargin=0.6 * inch,
+        bottomMargin=0.6 * inch,
         title=f"Project Report: {report.project_name}",
-        author="Little Sparks"
+        author="Little Sparks",
     )
     doc.build(elements)
     return buffer.getvalue()
@@ -7201,23 +8164,72 @@ def _weekly_report_to_pdf_bytes(report: WeeklyReportResponse) -> bytes:
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Table,
+        TableStyle,
+        Paragraph,
+        Spacer,
+        PageBreak,
+    )
     from reportlab.lib.enums import TA_LEFT, TA_CENTER
     from io import BytesIO
 
     buffer = BytesIO()
     styles = getSampleStyleSheet()
 
-    title_style = ParagraphStyle("ReportTitle", parent=styles["Heading1"], fontSize=18, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"))
-    subtitle_style = ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, spaceAfter=12, textColor=colors.HexColor("#666666"))
-    heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=13, spaceBefore=10, spaceAfter=6, textColor=colors.HexColor("#2c5282"))
-    table_heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=7, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
-    cell_style = ParagraphStyle("TableCell", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_LEFT)
-    cell_center = ParagraphStyle("TableCellCenter", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_CENTER)
+    title_style = ParagraphStyle(
+        "ReportTitle",
+        parent=styles["Heading1"],
+        fontSize=18,
+        spaceAfter=6,
+        textColor=colors.HexColor("#1e3a5f"),
+    )
+    subtitle_style = ParagraphStyle(
+        "ReportSubtitle",
+        parent=styles["Normal"],
+        fontSize=10,
+        spaceAfter=12,
+        textColor=colors.HexColor("#666666"),
+    )
+    heading_style = ParagraphStyle(
+        "SectionHeading",
+        parent=styles["Heading2"],
+        fontSize=13,
+        spaceBefore=10,
+        spaceAfter=6,
+        textColor=colors.HexColor("#2c5282"),
+    )
+    table_heading_style = ParagraphStyle(
+        "TableHeading",
+        parent=styles["Normal"],
+        fontSize=7,
+        fontName="Helvetica-Bold",
+        textColor=colors.white,
+        alignment=TA_CENTER,
+    )
+    cell_style = ParagraphStyle(
+        "TableCell",
+        parent=styles["Normal"],
+        fontSize=6.5,
+        leading=8.5,
+        alignment=TA_LEFT,
+    )
+    cell_center = ParagraphStyle(
+        "TableCellCenter",
+        parent=styles["Normal"],
+        fontSize=6.5,
+        leading=8.5,
+        alignment=TA_CENTER,
+    )
 
     elements = []
     elements.append(Paragraph("Weekly Report", title_style))
-    elements.append(Paragraph(f"<b>Week:</b> {report.week_start} to {report.week_end}", subtitle_style))
+    elements.append(
+        Paragraph(
+            f"<b>Week:</b> {report.week_start} to {report.week_end}", subtitle_style
+        )
+    )
     elements.append(Spacer(1, 6))
 
     avail = letter[0] - 2 * 0.6 * inch
@@ -7225,75 +8237,113 @@ def _weekly_report_to_pdf_bytes(report: WeeklyReportResponse) -> bytes:
     if report.summary:
         elements.append(Paragraph("Summary", heading_style))
         summary_data = [
-            [Paragraph("<b>Stages Completed</b>", table_heading_style),
-             Paragraph("<b>Total Submissions</b>", table_heading_style),
-             Paragraph("<b>Total Delays</b>", table_heading_style),
-             Paragraph("<b>Delay Days</b>", table_heading_style)],
-            [Paragraph(str(report.summary.get("stages_completed", 0)), cell_center),
-             Paragraph(str(report.summary.get("total_submissions", 0)), cell_center),
-             Paragraph(str(report.summary.get("total_delays", 0)), cell_center),
-             Paragraph(str(report.summary.get("total_delay_days", 0)), cell_center)]
+            [
+                Paragraph("<b>Stages Completed</b>", table_heading_style),
+                Paragraph("<b>Total Submissions</b>", table_heading_style),
+                Paragraph("<b>Total Delays</b>", table_heading_style),
+                Paragraph("<b>Delay Days</b>", table_heading_style),
+            ],
+            [
+                Paragraph(str(report.summary.get("stages_completed", 0)), cell_center),
+                Paragraph(str(report.summary.get("total_submissions", 0)), cell_center),
+                Paragraph(str(report.summary.get("total_delays", 0)), cell_center),
+                Paragraph(str(report.summary.get("total_delay_days", 0)), cell_center),
+            ],
         ]
         col_widths = [avail * 0.25, avail * 0.25, avail * 0.25, avail * 0.25]
         summary_table = Table(summary_data, colWidths=col_widths, repeatRows=1)
-        summary_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
-            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ]))
+        summary_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+                    ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ]
+            )
+        )
         elements.append(summary_table)
         elements.append(Spacer(1, 10))
 
     elements.append(Paragraph("Projects & Stages", heading_style))
     proj_header = [
-        [Paragraph("<b>Project</b>", table_heading_style),
-         Paragraph("<b>Designer</b>", table_heading_style),
-         Paragraph("<b>Stage</b>", table_heading_style),
-         Paragraph("<b>Status</b>", table_heading_style),
-         Paragraph("<b>Progress</b>", table_heading_style),
-         Paragraph("<b>Activities</b>", table_heading_style),
-         Paragraph("<b>Delay Days</b>", table_heading_style),
-         Paragraph("<b>Delay Reason</b>", table_heading_style)]
+        [
+            Paragraph("<b>Project</b>", table_heading_style),
+            Paragraph("<b>Designer</b>", table_heading_style),
+            Paragraph("<b>Stage</b>", table_heading_style),
+            Paragraph("<b>Status</b>", table_heading_style),
+            Paragraph("<b>Progress</b>", table_heading_style),
+            Paragraph("<b>Activities</b>", table_heading_style),
+            Paragraph("<b>Delay Days</b>", table_heading_style),
+            Paragraph("<b>Delay Reason</b>", table_heading_style),
+        ]
     ]
     proj_rows = []
     for item in report.reports:
-        activities_str = "; ".join(
-            f"{a.submitted_by} ({a.submitted_at}): {a.notes or 'ratings only'}"
-            for a in item.activities if a.submitted_by
-        ) if item.activities else ""
-        proj_rows.append([
-            Paragraph(item.project_name, cell_style),
-            Paragraph(item.assigned_designer, cell_style),
-            Paragraph(f"{item.stage_name} (S{item.stage_index})", cell_style),
-            Paragraph(item.status, cell_style),
-            Paragraph(str(item.progress) + "%", cell_center),
-            Paragraph(activities_str[:80], cell_style),
-            Paragraph(str(item.delay_days), cell_center),
-            Paragraph(item.delay_reason or "", cell_style)
-        ])
+        activities_str = (
+            "; ".join(
+                f"{a.submitted_by} ({a.submitted_at}): {a.notes or 'ratings only'}"
+                for a in item.activities
+                if a.submitted_by
+            )
+            if item.activities
+            else ""
+        )
+        proj_rows.append(
+            [
+                Paragraph(item.project_name, cell_style),
+                Paragraph(item.assigned_designer, cell_style),
+                Paragraph(f"{item.stage_name} (S{item.stage_index})", cell_style),
+                Paragraph(item.status, cell_style),
+                Paragraph(str(item.progress) + "%", cell_center),
+                Paragraph(activities_str[:80], cell_style),
+                Paragraph(str(item.delay_days), cell_center),
+                Paragraph(item.delay_reason or "", cell_style),
+            ]
+        )
     if proj_rows:
-        col_widths = [avail * 0.20, avail * 0.18, avail * 0.18, avail * 0.12, avail * 0.08, avail * 0.16, avail * 0.06, avail * 0.02]
+        col_widths = [
+            avail * 0.20,
+            avail * 0.18,
+            avail * 0.18,
+            avail * 0.12,
+            avail * 0.08,
+            avail * 0.16,
+            avail * 0.06,
+            avail * 0.02,
+        ]
         proj_table = Table(proj_header + proj_rows, colWidths=col_widths, repeatRows=1)
-        proj_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
-            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
-        ]))
+        proj_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+                    ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#f7fafc")),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 2),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                    (
+                        "ROWBACKGROUNDS",
+                        (0, 1),
+                        (-1, -1),
+                        [colors.white, colors.HexColor("#f7fafc")],
+                    ),
+                ]
+            )
+        )
         elements.append(proj_table)
 
     doc = SimpleDocTemplate(
-        buffer, pagesize=letter,
-        leftMargin=0.6*inch, rightMargin=0.6*inch,
-        topMargin=0.6*inch, bottomMargin=0.6*inch,
+        buffer,
+        pagesize=letter,
+        leftMargin=0.6 * inch,
+        rightMargin=0.6 * inch,
+        topMargin=0.6 * inch,
+        bottomMargin=0.6 * inch,
         title=f"Weekly Report: {report.week_start} to {report.week_end}",
-        author="Little Sparks"
+        author="Little Sparks",
     )
     doc.build(elements)
     return buffer.getvalue()
@@ -7305,23 +8355,70 @@ def _monthly_report_to_pdf_bytes(report: MonthlyReportResponse) -> bytes:
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Table,
+        TableStyle,
+        Paragraph,
+        Spacer,
+        PageBreak,
+    )
     from reportlab.lib.enums import TA_LEFT, TA_CENTER
     from io import BytesIO
 
     buffer = BytesIO()
     styles = getSampleStyleSheet()
 
-    title_style = ParagraphStyle("ReportTitle", parent=styles["Heading1"], fontSize=18, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"))
-    subtitle_style = ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, spaceAfter=12, textColor=colors.HexColor("#666666"))
-    heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=13, spaceBefore=10, spaceAfter=6, textColor=colors.HexColor("#2c5282"))
-    table_heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=7, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
-    cell_style = ParagraphStyle("TableCell", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_LEFT)
-    cell_center = ParagraphStyle("TableCellCenter", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_CENTER)
+    title_style = ParagraphStyle(
+        "ReportTitle",
+        parent=styles["Heading1"],
+        fontSize=18,
+        spaceAfter=6,
+        textColor=colors.HexColor("#1e3a5f"),
+    )
+    subtitle_style = ParagraphStyle(
+        "ReportSubtitle",
+        parent=styles["Normal"],
+        fontSize=10,
+        spaceAfter=12,
+        textColor=colors.HexColor("#666666"),
+    )
+    heading_style = ParagraphStyle(
+        "SectionHeading",
+        parent=styles["Heading2"],
+        fontSize=13,
+        spaceBefore=10,
+        spaceAfter=6,
+        textColor=colors.HexColor("#2c5282"),
+    )
+    table_heading_style = ParagraphStyle(
+        "TableHeading",
+        parent=styles["Normal"],
+        fontSize=7,
+        fontName="Helvetica-Bold",
+        textColor=colors.white,
+        alignment=TA_CENTER,
+    )
+    cell_style = ParagraphStyle(
+        "TableCell",
+        parent=styles["Normal"],
+        fontSize=6.5,
+        leading=8.5,
+        alignment=TA_LEFT,
+    )
+    cell_center = ParagraphStyle(
+        "TableCellCenter",
+        parent=styles["Normal"],
+        fontSize=6.5,
+        leading=8.5,
+        alignment=TA_CENTER,
+    )
 
     elements = []
     elements.append(Paragraph("Monthly Report", title_style))
-    elements.append(Paragraph(f"<b>Month:</b> {report.month}/{report.year}", subtitle_style))
+    elements.append(
+        Paragraph(f"<b>Month:</b> {report.month}/{report.year}", subtitle_style)
+    )
     elements.append(Spacer(1, 6))
 
     avail = letter[0] - 2 * 0.6 * inch
@@ -7330,85 +8427,129 @@ def _monthly_report_to_pdf_bytes(report: MonthlyReportResponse) -> bytes:
         elements.append(Paragraph("Summary", heading_style))
         avg_ratings = report.summary.get("avg_ratings_overall", {})
         rating_trends = report.summary.get("rating_trends", {})
-        avg_ratings_str = "; ".join(f"{k}={v}" for k, v in avg_ratings.items()) if avg_ratings else ""
-        rating_trends_str = "; ".join(f"{k}={v}" for k, v in rating_trends.items()) if rating_trends else ""
+        avg_ratings_str = (
+            "; ".join(f"{k}={v}" for k, v in avg_ratings.items()) if avg_ratings else ""
+        )
+        rating_trends_str = (
+            "; ".join(f"{k}={v}" for k, v in rating_trends.items())
+            if rating_trends
+            else ""
+        )
 
         summary_data = [
-            [Paragraph("<b>Progress Delta</b>", table_heading_style),
-             Paragraph("<b>Stages Completed</b>", table_heading_style),
-             Paragraph("<b>Total Submissions</b>", table_heading_style),
-             Paragraph("<b>Total Notes</b>", table_heading_style),
-             Paragraph("<b>Total Delays</b>", table_heading_style),
-             Paragraph("<b>Delay Days</b>", table_heading_style)],
-            [Paragraph(str(report.summary.get("progress_delta", 0)), cell_center),
-             Paragraph(str(report.summary.get("stages_completed", 0)), cell_center),
-             Paragraph(str(report.summary.get("total_submissions", 0)), cell_center),
-             Paragraph(str(report.summary.get("total_notes", 0)), cell_center),
-             Paragraph(str(report.summary.get("total_delays", 0)), cell_center),
-             Paragraph(str(report.summary.get("total_delay_days", 0)), cell_center)]
+            [
+                Paragraph("<b>Progress Delta</b>", table_heading_style),
+                Paragraph("<b>Stages Completed</b>", table_heading_style),
+                Paragraph("<b>Total Submissions</b>", table_heading_style),
+                Paragraph("<b>Total Notes</b>", table_heading_style),
+                Paragraph("<b>Total Delays</b>", table_heading_style),
+                Paragraph("<b>Delay Days</b>", table_heading_style),
+            ],
+            [
+                Paragraph(str(report.summary.get("progress_delta", 0)), cell_center),
+                Paragraph(str(report.summary.get("stages_completed", 0)), cell_center),
+                Paragraph(str(report.summary.get("total_submissions", 0)), cell_center),
+                Paragraph(str(report.summary.get("total_notes", 0)), cell_center),
+                Paragraph(str(report.summary.get("total_delays", 0)), cell_center),
+                Paragraph(str(report.summary.get("total_delay_days", 0)), cell_center),
+            ],
         ]
         col_widths = [avail * 0.167] * 6
         summary_table = Table(summary_data, colWidths=col_widths, repeatRows=1)
-        summary_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
-            ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('TOPPADDING', (0, 0), (-1, -1), 3),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ]))
+        summary_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+                    ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ]
+            )
+        )
         elements.append(summary_table)
         elements.append(Spacer(1, 6))
-        elements.append(Paragraph(f"<b>Avg Ratings:</b> {avg_ratings_str or 'N/A'}", cell_style))
+        elements.append(
+            Paragraph(f"<b>Avg Ratings:</b> {avg_ratings_str or 'N/A'}", cell_style)
+        )
         elements.append(Spacer(1, 2))
-        elements.append(Paragraph(f"<b>Rating Trends:</b> {rating_trends_str or 'N/A'}", cell_style))
+        elements.append(
+            Paragraph(f"<b>Rating Trends:</b> {rating_trends_str or 'N/A'}", cell_style)
+        )
         elements.append(Spacer(1, 10))
 
     elements.append(Paragraph("Projects & Stages", heading_style))
     proj_header = [
-        [Paragraph("<b>Project</b>", table_heading_style),
-         Paragraph("<b>Designer</b>", table_heading_style),
-         Paragraph("<b>Stage</b>", table_heading_style),
-         Paragraph("<b>Status</b>", table_heading_style),
-         Paragraph("<b>Progress</b>", table_heading_style),
-         Paragraph("<b>Submissions</b>", table_heading_style),
-         Paragraph("<b>Notes</b>", table_heading_style),
-         Paragraph("<b>Delay Days</b>", table_heading_style),
-         Paragraph("<b>Delay Reason</b>", table_heading_style)]
+        [
+            Paragraph("<b>Project</b>", table_heading_style),
+            Paragraph("<b>Designer</b>", table_heading_style),
+            Paragraph("<b>Stage</b>", table_heading_style),
+            Paragraph("<b>Status</b>", table_heading_style),
+            Paragraph("<b>Progress</b>", table_heading_style),
+            Paragraph("<b>Submissions</b>", table_heading_style),
+            Paragraph("<b>Notes</b>", table_heading_style),
+            Paragraph("<b>Delay Days</b>", table_heading_style),
+            Paragraph("<b>Delay Reason</b>", table_heading_style),
+        ]
     ]
     proj_rows = []
     for item in report.reports:
-        proj_rows.append([
-            Paragraph(item.project_name, cell_style),
-            Paragraph(item.assigned_designer, cell_style),
-            Paragraph(f"{item.stage_name} (S{item.stage_index})", cell_style),
-            Paragraph(item.status, cell_style),
-            Paragraph(str(item.progress) + "%", cell_center),
-            Paragraph(str(item.submissions_count), cell_center),
-            Paragraph(str(item.notes_count), cell_center),
-            Paragraph(str(item.delay_days or 0), cell_center),
-            Paragraph(item.delay_reason or "", cell_style)
-        ])
+        proj_rows.append(
+            [
+                Paragraph(item.project_name, cell_style),
+                Paragraph(item.assigned_designer, cell_style),
+                Paragraph(f"{item.stage_name} (S{item.stage_index})", cell_style),
+                Paragraph(item.status, cell_style),
+                Paragraph(str(item.progress) + "%", cell_center),
+                Paragraph(str(item.submissions_count), cell_center),
+                Paragraph(str(item.notes_count), cell_center),
+                Paragraph(str(item.delay_days or 0), cell_center),
+                Paragraph(item.delay_reason or "", cell_style),
+            ]
+        )
     if proj_rows:
-        col_widths = [avail * 0.18, avail * 0.15, avail * 0.15, avail * 0.12, avail * 0.08, avail * 0.08, avail * 0.08, avail * 0.07, avail * 0.09]
+        col_widths = [
+            avail * 0.18,
+            avail * 0.15,
+            avail * 0.15,
+            avail * 0.12,
+            avail * 0.08,
+            avail * 0.08,
+            avail * 0.08,
+            avail * 0.07,
+            avail * 0.09,
+        ]
         proj_table = Table(proj_header + proj_rows, colWidths=col_widths, repeatRows=1)
-        proj_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
-            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
-        ]))
+        proj_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+                    ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#f7fafc")),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 2),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                    (
+                        "ROWBACKGROUNDS",
+                        (0, 1),
+                        (-1, -1),
+                        [colors.white, colors.HexColor("#f7fafc")],
+                    ),
+                ]
+            )
+        )
         elements.append(proj_table)
 
     doc = SimpleDocTemplate(
-        buffer, pagesize=letter,
-        leftMargin=0.6*inch, rightMargin=0.6*inch,
-        topMargin=0.6*inch, bottomMargin=0.6*inch,
+        buffer,
+        pagesize=letter,
+        leftMargin=0.6 * inch,
+        rightMargin=0.6 * inch,
+        topMargin=0.6 * inch,
+        bottomMargin=0.6 * inch,
         title=f"Monthly Report: {report.month}/{report.year}",
-        author="Little Sparks"
+        author="Little Sparks",
     )
     doc.build(elements)
     return buffer.getvalue()
@@ -7420,91 +8561,175 @@ def _designer_performance_to_pdf_bytes(report) -> bytes:
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
     from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.platypus import (
+        SimpleDocTemplate,
+        Table,
+        TableStyle,
+        Paragraph,
+        Spacer,
+        PageBreak,
+    )
     from reportlab.lib.enums import TA_LEFT, TA_CENTER
     from io import BytesIO
 
     buffer = BytesIO()
     styles = getSampleStyleSheet()
 
-    title_style = ParagraphStyle("ReportTitle", parent=styles["Heading1"], fontSize=18, spaceAfter=6, textColor=colors.HexColor("#1e3a5f"))
-    subtitle_style = ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, spaceAfter=12, textColor=colors.HexColor("#666666"))
-    heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=13, spaceBefore=10, spaceAfter=6, textColor=colors.HexColor("#2c5282"))
-    table_heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=7, fontName="Helvetica-Bold", textColor=colors.white, alignment=TA_CENTER)
-    cell_style = ParagraphStyle("TableCell", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_LEFT)
-    cell_center = ParagraphStyle("TableCellCenter", parent=styles["Normal"], fontSize=6.5, leading=8.5, alignment=TA_CENTER)
+    title_style = ParagraphStyle(
+        "ReportTitle",
+        parent=styles["Heading1"],
+        fontSize=18,
+        spaceAfter=6,
+        textColor=colors.HexColor("#1e3a5f"),
+    )
+    subtitle_style = ParagraphStyle(
+        "ReportSubtitle",
+        parent=styles["Normal"],
+        fontSize=10,
+        spaceAfter=12,
+        textColor=colors.HexColor("#666666"),
+    )
+    heading_style = ParagraphStyle(
+        "SectionHeading",
+        parent=styles["Heading2"],
+        fontSize=13,
+        spaceBefore=10,
+        spaceAfter=6,
+        textColor=colors.HexColor("#2c5282"),
+    )
+    table_heading_style = ParagraphStyle(
+        "TableHeading",
+        parent=styles["Normal"],
+        fontSize=7,
+        fontName="Helvetica-Bold",
+        textColor=colors.white,
+        alignment=TA_CENTER,
+    )
+    cell_style = ParagraphStyle(
+        "TableCell",
+        parent=styles["Normal"],
+        fontSize=6.5,
+        leading=8.5,
+        alignment=TA_LEFT,
+    )
+    cell_center = ParagraphStyle(
+        "TableCellCenter",
+        parent=styles["Normal"],
+        fontSize=6.5,
+        leading=8.5,
+        alignment=TA_CENTER,
+    )
 
     elements = []
     elements.append(Paragraph("Designer Performance Report", title_style))
-    elements.append(Paragraph(f"<b>Designer:</b> {report.designer_name}", subtitle_style))
-    elements.append(Paragraph(f"<b>Period:</b> {report.period_start} to {report.period_end}", subtitle_style))
+    elements.append(
+        Paragraph(f"<b>Designer:</b> {report.designer_name}", subtitle_style)
+    )
+    elements.append(
+        Paragraph(
+            f"<b>Period:</b> {report.period_start} to {report.period_end}",
+            subtitle_style,
+        )
+    )
     elements.append(Spacer(1, 6))
 
     avail = letter[0] - 2 * 0.6 * inch
 
     elements.append(Paragraph("Overview", heading_style))
     overview_data = [
-        [Paragraph("<b>Total Updates</b>", table_heading_style),
-         Paragraph("<b>Total Delays</b>", table_heading_style),
-         Paragraph("<b>Total Projects</b>", table_heading_style)],
-        [Paragraph(str(report.total_updates), cell_center),
-         Paragraph(str(report.total_delays), cell_center),
-         Paragraph(str(len(report.projects)), cell_center)]
+        [
+            Paragraph("<b>Total Updates</b>", table_heading_style),
+            Paragraph("<b>Total Delays</b>", table_heading_style),
+            Paragraph("<b>Total Projects</b>", table_heading_style),
+        ],
+        [
+            Paragraph(str(report.total_updates), cell_center),
+            Paragraph(str(report.total_delays), cell_center),
+            Paragraph(str(len(report.projects)), cell_center),
+        ],
     ]
     col_widths = [avail * 0.334] * 3
     overview_table = Table(overview_data, colWidths=col_widths, repeatRows=1)
-    overview_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
-        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-    ]))
+    overview_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#ebf8ff")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ]
+        )
+    )
     elements.append(overview_table)
     elements.append(Spacer(1, 10))
 
     elements.append(Paragraph("Project Breakdown", heading_style))
     proj_header = [
-        [Paragraph("<b>Project</b>", table_heading_style),
-         Paragraph("<b>Stage</b>", table_heading_style),
-         Paragraph("<b>Status</b>", table_heading_style),
-         Paragraph("<b>Updates</b>", table_heading_style),
-         Paragraph("<b>Delays</b>", table_heading_style),
-         Paragraph("<b>Delay Days</b>", table_heading_style),
-         Paragraph("<b>Deadline</b>", table_heading_style)]
+        [
+            Paragraph("<b>Project</b>", table_heading_style),
+            Paragraph("<b>Stage</b>", table_heading_style),
+            Paragraph("<b>Status</b>", table_heading_style),
+            Paragraph("<b>Updates</b>", table_heading_style),
+            Paragraph("<b>Delays</b>", table_heading_style),
+            Paragraph("<b>Delay Days</b>", table_heading_style),
+            Paragraph("<b>Deadline</b>", table_heading_style),
+        ]
     ]
     proj_rows = []
     for p in report.projects:
-        proj_rows.append([
-            Paragraph(p.project_name, cell_style),
-            Paragraph(f"{p.stage_name} (S{p.stage_index})", cell_style),
-            Paragraph(p.status, cell_style),
-            Paragraph(str(p.updates_count), cell_center),
-            Paragraph(str(p.delays_count), cell_center),
-            Paragraph(str(p.delay_days), cell_center),
-            Paragraph(p.deadline or "", cell_style)
-        ])
+        proj_rows.append(
+            [
+                Paragraph(p.project_name, cell_style),
+                Paragraph(f"{p.stage_name} (S{p.stage_index})", cell_style),
+                Paragraph(p.status, cell_style),
+                Paragraph(str(p.updates_count), cell_center),
+                Paragraph(str(p.delays_count), cell_center),
+                Paragraph(str(p.delay_days), cell_center),
+                Paragraph(p.deadline or "", cell_style),
+            ]
+        )
     if proj_rows:
-        col_widths = [avail * 0.22, avail * 0.20, avail * 0.15, avail * 0.10, avail * 0.10, avail * 0.10, avail * 0.13]
+        col_widths = [
+            avail * 0.22,
+            avail * 0.20,
+            avail * 0.15,
+            avail * 0.10,
+            avail * 0.10,
+            avail * 0.10,
+            avail * 0.13,
+        ]
         proj_table = Table(proj_header + proj_rows, colWidths=col_widths, repeatRows=1)
-        proj_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#2c5282")),
-            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#f7fafc")),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
-        ]))
+        proj_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2c5282")),
+                    ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#f7fafc")),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e0")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 2),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                    (
+                        "ROWBACKGROUNDS",
+                        (0, 1),
+                        (-1, -1),
+                        [colors.white, colors.HexColor("#f7fafc")],
+                    ),
+                ]
+            )
+        )
         elements.append(proj_table)
 
     doc = SimpleDocTemplate(
-        buffer, pagesize=letter,
-        leftMargin=0.6*inch, rightMargin=0.6*inch,
-        topMargin=0.6*inch, bottomMargin=0.6*inch,
+        buffer,
+        pagesize=letter,
+        leftMargin=0.6 * inch,
+        rightMargin=0.6 * inch,
+        topMargin=0.6 * inch,
+        bottomMargin=0.6 * inch,
         title=f"Designer Performance: {report.designer_name}",
-        author="Little Sparks"
+        author="Little Sparks",
     )
     doc.build(elements)
     return buffer.getvalue()
@@ -7517,30 +8742,67 @@ def _weekly_report_to_csv(report: WeeklyReportResponse) -> str:
     writer.writerow([report.week_start, report.week_end])
     if report.summary:
         writer.writerow(["Summary"])
-        writer.writerow(["Stages Completed", "Total Submissions", "Total Delays", "Total Delay Days"])
-        writer.writerow([
-            report.summary.get("stages_completed", 0),
-            report.summary.get("total_submissions", 0),
-            report.summary.get("total_delays", 0),
-            report.summary.get("total_delay_days", 0),
-        ])
+        writer.writerow(
+            [
+                "Stages Completed",
+                "Total Submissions",
+                "Total Delays",
+                "Total Delay Days",
+            ]
+        )
+        writer.writerow(
+            [
+                report.summary.get("stages_completed", 0),
+                report.summary.get("total_submissions", 0),
+                report.summary.get("total_delays", 0),
+                report.summary.get("total_delay_days", 0),
+            ]
+        )
         writer.writerow([])
-    writer.writerow(["Project", "Designer", "Stage", "Stage Index", "Status", "Progress",
-                      "Completed This Week", "Activities", "Progress Change",
-                      "Delay Occurred", "Delay Days", "Delay Reason", "Completed At"])
+    writer.writerow(
+        [
+            "Project",
+            "Designer",
+            "Stage",
+            "Stage Index",
+            "Status",
+            "Progress",
+            "Completed This Week",
+            "Activities",
+            "Progress Change",
+            "Delay Occurred",
+            "Delay Days",
+            "Delay Reason",
+            "Completed At",
+        ]
+    )
     for item in report.reports:
-        activities_str = "; ".join(
-            f"{a.submitted_by} ({a.submitted_at}): {a.notes or 'ratings only'}"
-            for a in item.activities if a.submitted_by
-        ) if item.activities else ""
-        writer.writerow([
-            item.project_name, item.assigned_designer, item.stage_name,
-            item.stage_index, item.status, item.progress,
-            item.completed_this_week, activities_str, item.progress_change,
-            item.delay_occurred, item.delay_days,
-            item.delay_reason or "",
-            item.completed_at or ""
-        ])
+        activities_str = (
+            "; ".join(
+                f"{a.submitted_by} ({a.submitted_at}): {a.notes or 'ratings only'}"
+                for a in item.activities
+                if a.submitted_by
+            )
+            if item.activities
+            else ""
+        )
+        writer.writerow(
+            [
+                item.project_name,
+                item.assigned_designer,
+                item.stage_name,
+                item.stage_index,
+                item.status,
+                item.progress,
+                item.completed_this_week,
+                activities_str,
+                item.progress_change,
+                item.delay_occurred,
+                item.delay_days,
+                item.delay_reason or "",
+                item.completed_at or "",
+            ]
+        )
     return output.getvalue()
 
 
@@ -7551,58 +8813,145 @@ def _monthly_report_to_csv(report: MonthlyReportResponse) -> str:
     writer.writerow([report.month, report.year])
     if report.summary:
         writer.writerow(["Summary"])
-        writer.writerow(["Progress Delta", "Stages Completed", "Total Submissions", "Total Notes",
-                         "Total Delays", "Total Delay Days", "Avg Ratings Overall", "Rating Trends"])
+        writer.writerow(
+            [
+                "Progress Delta",
+                "Stages Completed",
+                "Total Submissions",
+                "Total Notes",
+                "Total Delays",
+                "Total Delay Days",
+                "Avg Ratings Overall",
+                "Rating Trends",
+            ]
+        )
         avg_ratings = report.summary.get("avg_ratings_overall", {})
         rating_trends = report.summary.get("rating_trends", {})
-        avg_ratings_str = "; ".join(f"{k}={v}" for k, v in avg_ratings.items()) if avg_ratings else ""
-        rating_trends_str = "; ".join(f"{k}={v}" for k, v in rating_trends.items()) if rating_trends else ""
-        writer.writerow([
-            report.summary.get("progress_delta", 0),
-            report.summary.get("stages_completed", 0),
-            report.summary.get("total_submissions", 0),
-            report.summary.get("total_notes", 0),
-            report.summary.get("total_delays", 0),
-            report.summary.get("total_delay_days", 0),
-            avg_ratings_str, rating_trends_str,
-        ])
+        avg_ratings_str = (
+            "; ".join(f"{k}={v}" for k, v in avg_ratings.items()) if avg_ratings else ""
+        )
+        rating_trends_str = (
+            "; ".join(f"{k}={v}" for k, v in rating_trends.items())
+            if rating_trends
+            else ""
+        )
+        writer.writerow(
+            [
+                report.summary.get("progress_delta", 0),
+                report.summary.get("stages_completed", 0),
+                report.summary.get("total_submissions", 0),
+                report.summary.get("total_notes", 0),
+                report.summary.get("total_delays", 0),
+                report.summary.get("total_delay_days", 0),
+                avg_ratings_str,
+                rating_trends_str,
+            ]
+        )
         writer.writerow([])
-    writer.writerow(["Project", "Designer", "Stage", "Stage Index", "Status", "Progress",
-                      "Completed This Month", "Submissions", "Notes", "Avg Ratings",
-                      "Rating Trends", "Activities", "Delay Days"])
+    writer.writerow(
+        [
+            "Project",
+            "Designer",
+            "Stage",
+            "Stage Index",
+            "Status",
+            "Progress",
+            "Completed This Month",
+            "Submissions",
+            "Notes",
+            "Avg Ratings",
+            "Rating Trends",
+            "Activities",
+            "Delay Days",
+        ]
+    )
     for item in report.reports:
-        activities_str = "; ".join(
-            f"{a.submitted_by} ({a.date}): {a.notes or ''}"
-            for a in item.activities if a.submitted_by
-        ) if item.activities else ""
-        avg_ratings_str = "; ".join(f"{k}={v}" for k, v in (item.avg_ratings or {}).items()) if item.avg_ratings else ""
-        rating_trends_str = "; ".join(f"{k}={v}" for k, v in (item.rating_trends or {}).items()) if item.rating_trends else ""
-        writer.writerow([
-            item.project_name, item.assigned_designer, item.stage_name,
-            item.stage_index, item.status, item.progress,
-            item.completed_this_month, item.submissions_count, item.notes_count,
-            avg_ratings_str, rating_trends_str, activities_str,
-            item.delay_days or 0,
-        ])
+        activities_str = (
+            "; ".join(
+                f"{a.submitted_by} ({a.date}): {a.notes or ''}"
+                for a in item.activities
+                if a.submitted_by
+            )
+            if item.activities
+            else ""
+        )
+        avg_ratings_str = (
+            "; ".join(f"{k}={v}" for k, v in (item.avg_ratings or {}).items())
+            if item.avg_ratings
+            else ""
+        )
+        rating_trends_str = (
+            "; ".join(f"{k}={v}" for k, v in (item.rating_trends or {}).items())
+            if item.rating_trends
+            else ""
+        )
+        writer.writerow(
+            [
+                item.project_name,
+                item.assigned_designer,
+                item.stage_name,
+                item.stage_index,
+                item.status,
+                item.progress,
+                item.completed_this_month,
+                item.submissions_count,
+                item.notes_count,
+                avg_ratings_str,
+                rating_trends_str,
+                activities_str,
+                item.delay_days or 0,
+            ]
+        )
     return output.getvalue()
 
 
 def _designer_performance_to_csv(report: DesignerPerformanceResponse) -> str:
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Designer", "Period Start", "Period End", "Stages Completed", "On Time", "Delayed"])
-    writer.writerow([
-        report.designer_name, report.period_start, report.period_end,
-        report.total_stages_completed, report.total_on_time, report.total_delays
-    ])
+    writer.writerow(
+        [
+            "Designer",
+            "Period Start",
+            "Period End",
+            "Stages Completed",
+            "On Time",
+            "Delayed",
+        ]
+    )
+    writer.writerow(
+        [
+            report.designer_name,
+            report.period_start,
+            report.period_end,
+            report.total_stages_completed,
+            report.total_on_time,
+            report.total_delays,
+        ]
+    )
     writer.writerow([])
-    writer.writerow(["Project", "Stage", "Deadline", "Completed At", "Status", "Delay Days", "Delay Reason"])
+    writer.writerow(
+        [
+            "Project",
+            "Stage",
+            "Deadline",
+            "Completed At",
+            "Status",
+            "Delay Days",
+            "Delay Reason",
+        ]
+    )
     for item in report.projects:
-        writer.writerow([
-            item.project_name, item.stage_name, item.deadline,
-            item.completed_at or "", item.status, item.delay_days,
-            item.delay_reason or ""
-        ])
+        writer.writerow(
+            [
+                item.project_name,
+                item.stage_name,
+                item.deadline,
+                item.completed_at or "",
+                item.status,
+                item.delay_days,
+                item.delay_reason or "",
+            ]
+        )
     return output.getvalue()
 
 
@@ -7614,19 +8963,25 @@ async def download_project_report_csv(
     db: Session = Depends(get_db),
 ):
     report = await get_project_report(project_id, user, db)
-    project_name_slug = report.project_name.replace(" ", "-").replace("&", "and").lower()
+    project_name_slug = (
+        report.project_name.replace(" ", "-").replace("&", "and").lower()
+    )
     if format == "pdf":
         pdf_bytes = _draw_project_report_pdf(report)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{project_name_slug}-project-report.pdf"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="{project_name_slug}-project-report.pdf"'
+            },
         )
     csv_content = _project_report_to_csv(report)
     return StreamingResponse(
         io.StringIO(csv_content),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{project_name_slug}-project-report.csv"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{project_name_slug}-project-report.csv"'
+        },
     )
 
 
@@ -7640,20 +8995,26 @@ async def download_weekly_report_csv(
     db: Session = Depends(get_db),
 ):
     report = await get_project_weekly_report(project_id, week_start, week_end, user, db)
-    first_project = report.reports[0].project_name if report.reports else f"project-{project_id}"
+    first_project = (
+        report.reports[0].project_name if report.reports else f"project-{project_id}"
+    )
     project_slug = first_project.replace(" ", "-").replace("&", "and").lower()
     if format == "pdf":
         pdf_bytes = _weekly_report_to_pdf_bytes(report)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="weekly-report-{project_slug}-{week_start}-to-{week_end}.pdf"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="weekly-report-{project_slug}-{week_start}-to-{week_end}.pdf"'
+            },
         )
     csv_content = _weekly_report_to_csv(report)
     return StreamingResponse(
         io.StringIO(csv_content),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="weekly-report-{project_slug}-{week_start}-to-{week_end}.csv"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="weekly-report-{project_slug}-{week_start}-to-{week_end}.csv"'
+        },
     )
 
 
@@ -7667,20 +9028,26 @@ async def download_monthly_report_csv(
     db: Session = Depends(get_db),
 ):
     report = await get_project_monthly_report(project_id, month, year, user, db)
-    first_project = report.reports[0].project_name if report.reports else f"project-{project_id}"
+    first_project = (
+        report.reports[0].project_name if report.reports else f"project-{project_id}"
+    )
     project_slug = first_project.replace(" ", "-").replace("&", "and").lower()
     if format == "pdf":
         pdf_bytes = _monthly_report_to_pdf_bytes(report)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="monthly-report-{project_slug}-{month:02d}-{year}.pdf"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="monthly-report-{project_slug}-{month:02d}-{year}.pdf"'
+            },
         )
     csv_content = _monthly_report_to_csv(report)
     return StreamingResponse(
         io.StringIO(csv_content),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="monthly-report-{project_slug}-{month:02d}-{year}.csv"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="monthly-report-{project_slug}-{month:02d}-{year}.csv"'
+        },
     )
 
 
@@ -7697,9 +9064,13 @@ async def download_designer_performance_csv(
     db: Session = Depends(get_db),
 ):
     if period == "weekly":
-        report = await get_designer_weekly_performance(designer_id, week_start, week_end, user, db)
+        report = await get_designer_weekly_performance(
+            designer_id, week_start, week_end, user, db
+        )
     else:
-        report = await get_designer_monthly_performance(designer_id, month, year, user, db)
+        report = await get_designer_monthly_performance(
+            designer_id, month, year, user, db
+        )
     designer_slug = report.designer_name.replace(" ", "-").replace("&", "and").lower()
     if period == "weekly":
         date_part = f"{week_start}-to-{week_end}" if week_start else "weekly"
@@ -7710,13 +9081,17 @@ async def download_designer_performance_csv(
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{designer_slug}-performance-{period}-{date_part}.pdf"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="{designer_slug}-performance-{period}-{date_part}.pdf"'
+            },
         )
     csv_content = _designer_performance_to_csv(report)
     return StreamingResponse(
         io.StringIO(csv_content),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{designer_slug}-performance-{period}-{date_part}.csv"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{designer_slug}-performance-{period}-{date_part}.csv"'
+        },
     )
 
 
@@ -7744,7 +9119,14 @@ async def serve_frontend(full_path: str):
     """Serve static files or index.html for SPA fallback."""
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="API endpoint not found")
-    static_files = ["styles.css", "api.js", "utils.js", "app.js", "index.html", "utils.js"]
+    static_files = [
+        "styles.css",
+        "api.js",
+        "utils.js",
+        "app.js",
+        "index.html",
+        "utils.js",
+    ]
     if full_path in static_files:
         return FileResponse(full_path)
     return FileResponse("index.html")

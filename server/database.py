@@ -114,7 +114,10 @@ def _add_column_if_missing(table_name, column_name, column_ddl):
         from sqlalchemy import inspect
 
         inspector = inspect(engine)
-        existing_columns = {getattr(c, 'name', c.get('name') if isinstance(c, dict) else c) for c in inspector.get_columns(table_name)}
+        existing_columns = {
+            getattr(c, "name", c.get("name") if isinstance(c, dict) else c)
+            for c in inspector.get_columns(table_name)
+        }
         if column_name in existing_columns:
             return
         logger.info("Adding column %s.%s", table_name, column_name)
@@ -142,9 +145,7 @@ def _migrate_reminder_columns():
         "projects", "last_daily_reminder_date", f"{text_type} DEFAULT ''"
     )
     _add_column_if_missing("projects", "last_reminder_sent_at", ts_type)
-    _add_column_if_missing(
-        "phases", "deadline_reminder_sent", "BOOLEAN DEFAULT FALSE"
-    )
+    _add_column_if_missing("phases", "deadline_reminder_sent", "BOOLEAN DEFAULT FALSE")
 
 
 def _migrate_stage_reports_table():
@@ -176,17 +177,29 @@ def _migrate_stage_report_completion_columns():
         if "actual_completion_date" not in existing_columns:
             logger.info("Adding actual_completion_date column to stage_reports")
             with engine.connect() as conn:
-                conn.execute(text("ALTER TABLE stage_reports ADD COLUMN actual_completion_date TEXT"))
+                conn.execute(
+                    text(
+                        "ALTER TABLE stage_reports ADD COLUMN actual_completion_date TEXT"
+                    )
+                )
                 conn.commit()
         if "delay_days" not in existing_columns:
             logger.info("Adding delay_days column to stage_reports")
             with engine.connect() as conn:
-                conn.execute(text("ALTER TABLE stage_reports ADD COLUMN delay_days INTEGER DEFAULT 0"))
+                conn.execute(
+                    text(
+                        "ALTER TABLE stage_reports ADD COLUMN delay_days INTEGER DEFAULT 0"
+                    )
+                )
                 conn.commit()
         if "stage_completed" not in existing_columns:
             logger.info("Adding stage_completed column to stage_reports")
             with engine.connect() as conn:
-                conn.execute(text("ALTER TABLE stage_reports ADD COLUMN stage_completed BOOLEAN DEFAULT FALSE"))
+                conn.execute(
+                    text(
+                        "ALTER TABLE stage_reports ADD COLUMN stage_completed BOOLEAN DEFAULT FALSE"
+                    )
+                )
                 conn.commit()
     except Exception as e:
         logger.warning(
@@ -205,32 +218,47 @@ def _migrate_phase_responsible_column():
         # PostgreSQL: use JSONB so SQLAlchemy/Pydantic get proper Python lists
         try:
             with engine.connect() as conn:
-                result = conn.execute(text(
-                    "SELECT column_name, data_type FROM information_schema.columns "
-                    "WHERE table_name='phases' AND column_name='delay_responsible'"
-                ))
+                result = conn.execute(
+                    text(
+                        "SELECT column_name, data_type FROM information_schema.columns "
+                        "WHERE table_name='phases' AND column_name='delay_responsible'"
+                    )
+                )
                 row = result.fetchone()
                 if row:
-                    if row[1] != 'jsonb':
-                        logger.info("Casting delay_responsible from %s to JSONB", row[1])
-                        conn.execute(text(
-                            "ALTER TABLE phases ALTER COLUMN delay_responsible DROP DEFAULT"
-                        ))
-                        conn.execute(text(
-                            "ALTER TABLE phases ALTER COLUMN delay_responsible TYPE JSONB USING delay_responsible::jsonb"
-                        ))
-                        conn.execute(text(
-                            "ALTER TABLE phases ALTER COLUMN delay_responsible SET DEFAULT '[]'::jsonb"
-                        ))
+                    if row[1] != "jsonb":
+                        logger.info(
+                            "Casting delay_responsible from %s to JSONB", row[1]
+                        )
+                        conn.execute(
+                            text(
+                                "ALTER TABLE phases ALTER COLUMN delay_responsible DROP DEFAULT"
+                            )
+                        )
+                        conn.execute(
+                            text(
+                                "ALTER TABLE phases ALTER COLUMN delay_responsible TYPE JSONB USING delay_responsible::jsonb"
+                            )
+                        )
+                        conn.execute(
+                            text(
+                                "ALTER TABLE phases ALTER COLUMN delay_responsible SET DEFAULT '[]'::jsonb"
+                            )
+                        )
                         conn.commit()
                 else:
                     logger.info("Adding delay_responsible column to phases")
-                    conn.execute(text(
-                        "ALTER TABLE phases ADD COLUMN delay_responsible JSONB DEFAULT '[]'::jsonb"
-                    ))
+                    conn.execute(
+                        text(
+                            "ALTER TABLE phases ADD COLUMN delay_responsible JSONB DEFAULT '[]'::jsonb"
+                        )
+                    )
                     conn.commit()
         except Exception as e:
-            logger.warning("Migration check for delay_responsible encountered an issue (likely already applied): %s", e)
+            logger.warning(
+                "Migration check for delay_responsible encountered an issue (likely already applied): %s",
+                e,
+            )
 
 
 def _migrate_slack_completion_tracker_table():
@@ -261,35 +289,41 @@ def _migrate_phase_stage_name_column():
     else:
         try:
             with engine.connect() as conn:
-                result = conn.execute(text(
-                    "SELECT column_name, data_type FROM information_schema.columns "
-                    "WHERE table_name='phases' AND column_name='stage_name'"
-                ))
+                result = conn.execute(
+                    text(
+                        "SELECT column_name, data_type FROM information_schema.columns "
+                        "WHERE table_name='phases' AND column_name='stage_name'"
+                    )
+                )
                 row = result.fetchone()
                 if not row:
                     logger.info("Adding stage_name column to phases")
-                    conn.execute(text(
-                        "ALTER TABLE phases ADD COLUMN stage_name VARCHAR"
-                    ))
+                    conn.execute(
+                        text("ALTER TABLE phases ADD COLUMN stage_name VARCHAR")
+                    )
                     conn.commit()
                 else:
                     logger.info("stage_name column already exists on phases table")
         except Exception as e:
-            logger.warning("Migration check for stage_name encountered an issue (likely already applied): %s", e)
+            logger.warning(
+                "Migration check for stage_name encountered an issue (likely already applied): %s",
+                e,
+            )
 
 
 def _backfill_phase_stage_names(db_instance):
     """Backfill phase.stage_name from Project.stage_names for all existing phases.
-    
+
     For each Project, iterate its Phase rows ordered by stage_index and set
     phase.stage_name = project.stage_names[i] for each (falling back to the
     default stage name for that phase_type/index if stage_names is missing or
     shorter than the phase count).
-    
+
     This runs once at startup and only fills NULL stage_names.
     """
     try:
         from .models import Project, Phase
+
         db = db_instance
         projects = db.query(Project).all()
         backfilled = 0
@@ -316,9 +350,13 @@ def _backfill_phase_stage_names(db_instance):
                 backfilled += 1
         if backfilled:
             db.commit()
-            logger.info("Phase stage_name backfill completed: %d phases updated", backfilled)
+            logger.info(
+                "Phase stage_name backfill completed: %d phases updated", backfilled
+            )
         else:
-            logger.info("Phase stage_name backfill: nothing to do (all phases already have stage_name)")
+            logger.info(
+                "Phase stage_name backfill: nothing to do (all phases already have stage_name)"
+            )
     except Exception as e:
         logger.warning("Phase stage_name backfill encountered an issue: %s", e)
 

@@ -95,7 +95,9 @@ class PhaseResponse(BaseModel):
     completed_at: Optional[str] = None
     assigned_designer_ids: List[int] = []
 
-    @field_validator('delay_responsible', 'assigned_designer_ids', 'manager_remarks', mode='before')
+    @field_validator(
+        "delay_responsible", "assigned_designer_ids", "manager_remarks", mode="before"
+    )
     @classmethod
     def coerce_json_field(cls, v):
         if v is None:
@@ -228,6 +230,7 @@ class DelayTrendPoint(BaseModel):
 
 class MonthlyTrendPoint(BaseModel):
     """Monthly trend for a project: avg_rating + delay across last 6-12 months."""
+
     month: str
     avg_rating: Optional[float] = None
     total_delay_days: int = 0
@@ -236,6 +239,7 @@ class MonthlyTrendPoint(BaseModel):
 
 class DesignerComparisonItem(BaseModel):
     """Single designer's performance for comparison ranking."""
+
     designer_id: int
     designer_name: str
     stages_completed: int = 0
@@ -248,6 +252,7 @@ class DesignerComparisonItem(BaseModel):
 
 class DesignerTrendPoint(BaseModel):
     """Single designer's monthly on-time rate trend."""
+
     month: str
     on_time_rate: Optional[float] = None
     stages_completed: int = 0
@@ -406,6 +411,7 @@ class StageReportSummary(BaseModel):
 
 class ProjectReportResponse(BaseModel):
     """Overall phasewise report for a project."""
+
     project_id: int
     project_name: str
     assigned_designer: str
@@ -435,6 +441,7 @@ class PhaseReportItem(BaseModel):
 
 class WeeklyReportResponse(BaseModel):
     """Weekly report: designer/project activity for a given week."""
+
     week_start: str
     week_end: str
     summary: Optional[dict] = None
@@ -472,6 +479,7 @@ class WeeklyReportItem(BaseModel):
 
 class MonthlyReportResponse(BaseModel):
     """Monthly report: designer/project activity for a given month."""
+
     month: str
     year: int
     summary: Optional[dict] = None
@@ -511,6 +519,7 @@ class MonthlyReportItem(BaseModel):
 
 class DesignerPerformanceResponse(BaseModel):
     """Designer performance report (weekly/monthly)."""
+
     designer_id: int
     designer_name: str
     period_start: str

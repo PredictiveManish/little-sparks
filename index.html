@@ -47,9 +47,9 @@
 </head>
 <body class="min-h-screen bg-gray-50 text-gray-800 antialiased">
 
-    <!-- ============================================ -->
+    
     <!-- LOGIN PAGE -->
-    <!-- ============================================ -->
+    
     <div id="loginPage" class="hidden min-h-screen flex items-center justify-center p-4">
         <div class="w-full max-w-md">
             <div class="text-center mb-8">
@@ -94,9 +94,9 @@
         </div>
     </div>
 
-    <!-- ============================================ -->
+    
     <!-- PENDING APPROVAL SCREEN -->
-    <!-- ============================================ -->
+    
     <div id="pendingPage" class="hidden min-h-screen flex items-center justify-center p-4">
         <div class="w-full max-w-md text-center">
             <div class="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -118,9 +118,9 @@
         </div>
     </div>
 
-    <!-- ============================================ -->
+    
     <!-- DESIGNER LANDING PAGE -->
-    <!-- ============================================ -->
+    
     <div id="designerLandingPage" class="hidden min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-brand-50 via-white to-amber-50">
         <div class="w-full max-w-lg text-center">
             <div class="w-20 h-20 bg-brand-500 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-xl">
@@ -153,9 +153,9 @@
         </div>
     </div>
 
-    <!-- ============================================ -->
+    
     <!-- DESIGNER RESTRICTED PAGE -->
-    <!-- ============================================ -->
+    
     <div id="designerRestrictedPage" class="hidden min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-white to-indigo-50">
         <div class="w-full max-w-lg text-center">
             <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-8">
@@ -192,18 +192,18 @@
         </div>
     </div>
 
-    <!-- ============================================ -->
-    <!-- ============================================ -->
+    
+    
     <!-- MAIN APP (hidden until logged in) -->
-    <!-- ============================================ -->
+    
     <div id="mainApp" class="hidden">
     <!-- MOBILE SIDEBAR OVERLAY -->
     <div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
 
     <div class="flex min-h-screen">
-    <!-- ============================================ -->
+    
     <!-- SIDEBAR -->
-    <!-- ============================================ -->
+    
     <aside id="sidebar"
     class="sidebar w-[240px] bg-white border-r border-gray-200 flex flex-col shadow-sm flex-shrink-0">
     <!-- Logo -->
@@ -284,9 +284,9 @@
     </div>
 </aside>
 
-    <!-- ============================================ -->
+    
     <!-- MAIN CONTENT WRAPPER -->
-    <!-- ============================================ -->
+    
     <div class="flex-1 flex flex-col">
     <!-- Top Bar (Mobile) -->
     <header class="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 sticky top-0 z-30">
@@ -302,9 +302,9 @@
     <!-- Main Content Area -->
     <main class="flex-1 p-4 md:p-8 max-w-7xl w-full">
 
-        <!-- ============================================ -->
+        
         <!-- DASHBOARD PAGE -->
-        <!-- ============================================ -->
+        
         <section id="page-dashboard" class="page-section">
             <!-- Page Header -->
             <div class="mb-8">
@@ -445,9 +445,9 @@
 
         </section>
 
-        <!-- ============================================ -->
+        
         <!-- PROJECTS LIST PAGE -->
-        <!-- ============================================ -->
+        
         <section id="page-projects" class="page-section hidden">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
                 <div>
@@ -494,9 +494,9 @@
         </div>
     </section>
 
-    <!-- ============================================ -->
+    
     <!-- CREATE PROJECT PAGE -->
-    <!-- ============================================ -->
+    
     <section id="page-create-project" class="page-section hidden">
         <div class="mb-8">
             <button onclick="navigateTo('projects')"
@@ -619,9 +619,9 @@
 </div>
 </section>
 
-<!-- ============================================ -->
+
 <!-- PROJECT DETAILS PAGE -->
-<!-- ============================================ -->
+
 <section id="page-project-details" class="page-section hidden">
     <div class="mb-6">
         <button onclick="navigateTo('projects')"
@@ -702,9 +702,9 @@
 </div>
 </section>
 
-<!-- ============================================ -->
+
 <!-- EDIT PROJECT PAGE -->
-<!-- ============================================ -->
+
 <section id="page-edit-project" class="page-section hidden">
     <div class="mb-8">
         <button onclick="navigateTo('project-details')"
@@ -817,9 +817,9 @@
 </div>
 </section>
 
-<!-- ============================================ -->
+
 <!-- DESIGNERS PAGE -->
-<!-- ============================================ -->
+
 <section id="page-users" class="page-section hidden">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
@@ -895,13 +895,13 @@
 </div>
 </section>
 
-<!-- ============================================ -->
+
 <!-- ADMIN DATA EXPORT PAGE -->
-<!-- ============================================ -->
+
 <section id="page-data-export" class="page-section hidden"></section>
-<!-- ============================================ -->
+
 <!-- REPORTS PAGE -->
-<!-- ============================================ -->
+
 <section id="page-reports" class="page-section hidden">
     <div class="mb-6">
         <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Performance Reports & Data</h1>
@@ -1189,9 +1189,9 @@
     </div>
 </section>
 
-<!-- ============================================ -->
+
 <!-- SLACK MESSAGES PAGE -->
-<!-- ============================================ -->
+
 <section id="page-slack-messages" class="page-section hidden">
     <div class="mb-6">
         <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Slack Messages</h1>
@@ -1223,9 +1223,9 @@
     </div>
 </section>
 
-<!-- ============================================ -->
+
 <!-- SLACK SETTINGS PAGE -->
-<!-- ============================================ -->
+
 <section id="page-slack-settings" class="page-section hidden">
     <div class="mb-8">
         <h1 class="text-2xl md:text-3xl font-bold text-gray-900">Slack Integration</h1>
@@ -1361,9 +1361,9 @@
     </div>
     <!-- END MAIN APP -->
 
-<!-- ============================================ -->
+
 <!-- SUBMIT REPORT MODAL -->
-<!-- ============================================ -->
+
 <div id="submitReportModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
     <div class="absolute inset-0 bg-black/40" onclick="closeSubmitReportModal()"></div>
     <div class="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg z-10 max-h-[90vh] overflow-y-auto">
@@ -1435,9 +1435,9 @@
     </div>
 </div>
 
-<!-- ============================================ -->
+
 <!-- DESIGNER ASSIGNMENT MODAL -->
-<!-- ============================================ -->
+
 <div id="designerModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
     <div class="absolute inset-0 bg-black/40" onclick="closeDesignerModal()"></div>
     <div class="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md z-10">
@@ -1475,9 +1475,9 @@
 </div>
 </div>
 
-<!-- ============================================ -->
+
 <!-- DELAY REASON MODAL -->
-<!-- ============================================ -->
+
 <div id="delayReasonModal" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4">
     <div class="absolute inset-0 bg-black/40" onclick="closeDelayReasonModal()"></div>
     <div class="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md z-10">
@@ -1538,9 +1538,9 @@
 </div>
 </div>
 
-<!-- ============================================ -->
+
 <!-- RESPONSIBILITY DETAILS MODAL -->
-<!-- ============================================ -->
+
 <div id="responsibilityDetailsModal" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4">
     <div class="absolute inset-0 bg-black/40" onclick="closeResponsibilityDetailsModal()"></div>
     <div class="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg z-10 max-h-[80vh] flex flex-col">
@@ -1558,16 +1558,16 @@
     </div>
 </div>
 
-<!-- ============================================ -->
+
 <!-- TOAST NOTIFICATION -->
-<!-- ============================================ -->
+
 <div id="toast" class="hidden fixed bottom-6 right-6 z-[120] bg-gray-900 text-white px-5 py-3 rounded-xl shadow-lg text-sm font-medium transition-all duration-300">
     <span id="toastMessage">Action completed.</span>
 </div>
 
-<!-- ============================================ -->
+
 <!-- JAVASCRIPT -->
-<!-- ============================================ -->
+
     <script src="api.js"></script>
     <script src="utils.js"></script>
     <script src="app.js"></script>

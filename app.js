@@ -1,6 +1,6 @@
-// ============================================
+
 // STATE
-// ============================================
+
 let currentView = 'dashboard';
 let selectedProjectId = 1;
 let slackMessagesPollInterval = null;
@@ -19,9 +19,9 @@ let _editProjectPhaseType = 'PRODUCTION';
 let _editProjectDeadline = '';
 let MANAGERS = [];
 
-// ============================================
+
 // CHARTS
-// ============================================
+
 const chartInstances = {};
 
 function renderChart(canvasId, config) {
@@ -80,9 +80,9 @@ const defaultScaleConfig = {
     ticks: { font: { family: 'Inter', size: 11 } }
 };
 
-// ============================================
+
 // DELAY INSIGHT HELPERS
-// ============================================
+
 
 let _delayHistoryCache = null;
 
@@ -142,9 +142,9 @@ function formatDelayInsight(item, context) {
     return `${delayDays} days behind schedule`;
 }
 
-// ============================================
+
 // AUTH
-// ============================================
+
 
 async function checkAuth() {
     const initialHash = window.location.hash.replace('#', '');
@@ -209,9 +209,9 @@ function showPage(pageId, { updateUrl = true } = {}) {
     }
 }
 
-// ============================================
+
 // ROUTER
-// ============================================
+
 
 const PAGE_TO_PATH = {
     loginPage: '/login',
@@ -373,9 +373,9 @@ async function logout() {
     console.log('[APP] logout: Logged out, showing login page');
 }
 
-// ============================================
+
 // ADMIN: Pending Users
-// ============================================
+
 
 async function approveUser(userId, role) {
     if (!confirm(`Approve this user as ${role}?`)) return;
@@ -419,9 +419,9 @@ async function denyUser(userId) {
     }
 }
 
-// ============================================
+
 // NAVIGATION
-// ============================================
+
 function navigateTo(view, projectId = null) {
     currentView = view;
     if (projectId) selectedProjectId = projectId;
@@ -499,9 +499,9 @@ function navigateTo(view, projectId = null) {
     closeSidebar();
 }
 
-// ============================================
+
 // SIDEBAR TOGGLE (Mobile)
-// ============================================
+
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
@@ -516,9 +516,9 @@ function closeSidebar() {
     overlay.classList.remove('active');
 }
 
-// ============================================
+
 // DASHBOARD
-// ============================================
+
 async function loadDashboard() {
     console.log('[APP] loadDashboard: Loading dashboard data');
     try {
@@ -627,9 +627,9 @@ async function loadDashboard() {
     }
 }
 
-// ============================================
+
 // POPULATE PROJECTS TABLE
-// ============================================
+
 let currentProjectsFilter = 'all';
 
 function setProjectsFilter(filter) {
@@ -711,9 +711,9 @@ async function populateProjectsTable() {
     }
 }
 
-// ============================================
+
 // POPULATE PROJECT DETAILS
-// ============================================
+
 async function populateProjectDetails() {
     console.log('[APP] populateProjectDetails: Loading project details for project', selectedProjectId);
     try {
@@ -931,9 +931,9 @@ async function populateProjectDetails() {
     }
 }
 
-// ============================================
+
 // SEND REMINDER (manager/admin manual trigger)
-// ============================================
+
 async function sendProjectReminder() {
     if (!selectedProjectId) return;
     const btn = document.getElementById('sendReminderBtn');
@@ -956,9 +956,9 @@ async function sendProjectReminder() {
     }
 }
 
-// ============================================
+
 // OPEN PROJECT SLACK CHANNEL
-// ============================================
+
 async function openProjectSlackChannel() {
     if (!selectedProjectId) return;
     try {
@@ -980,9 +980,9 @@ async function openProjectSlackChannel() {
     }
 }
 
-// ============================================
+
 // ADMIN DATA EXPORT
-// ============================================
+
 function resetExportForm() {
     const checkbox = document.getElementById('exportUseRange');
     const inputs = document.getElementById('exportRangeInputs');
@@ -1023,9 +1023,9 @@ async function runExport(entity, format) {
     }
 }
 
-// ============================================
+
 // POPULATE EDIT PROJECT
-// ============================================
+
 async function populateEditProject() {
     console.log('[APP] populateEditProject: Loading edit form for project', selectedProjectId);
     try {
@@ -1138,9 +1138,9 @@ async function saveProjectEdit() {
     }
 }
 
-// ============================================
+
 // STAGE COMPLETION
-// ============================================
+
 async function markStageComplete(stageIndex) {
     console.log('[APP] markStageComplete: Opening delay reason modal for stage', stageIndex, 'on project', selectedProjectId);
     pendingCompleteStageIndex = stageIndex;
@@ -1337,9 +1337,9 @@ async function unmarkStageComplete(stageIndex) {
     }
 }
 
-// ============================================
+
 // DESIGNERS
-// ============================================
+
 function toggleAddDesignerForm() {
     const formSection = document.getElementById('addDesignerFormSection');
     if (!formSection) return;
@@ -1538,9 +1538,9 @@ async function promoteToAdmin(userId) {
     }
 }
 
-// ============================================
+
 // CREATE PROJECT FORM
-// ============================================
+
 function onPhaseTypeChange() {
     const ideationRadio = document.querySelector('input[name="phaseType"][value="IDEATION"]');
     const ideationCard = document.getElementById('ideationCard');
@@ -1873,9 +1873,8 @@ function _checkPhaseDeadlineConflicts(container) {
     });
 }
 
-// ============================================
 // EDIT PROJECT PHASE MANAGEMENT
-// ============================================
+
 function addEditPhase() {
     const container = document.getElementById('editPhaseDeadlinesContainer');
     if (!container) return;
@@ -2248,9 +2247,8 @@ function deselectAllManagers() {
     });
 }
 
-// ============================================
 // EDIT PROJECT FORM HELPERS
-// ============================================
+
 function renderEditPhaseDeadlines(project) {
     const container = document.getElementById('editPhaseDeadlinesContainer');
     if (!container || !project) return;
@@ -2407,9 +2405,8 @@ function populateEditReadOnlyInfo(project) {
     }
 }
 
-// ============================================
 // DESIGNER ASSIGNMENT MODAL
-// ============================================
+
 async function openDesignerModal(stageIndex) {
     designerModalStageIndex = stageIndex;
     document.getElementById('designerSearchInput').value = '';
@@ -2488,9 +2485,8 @@ async function saveDesignerAssignment() {
     }
 }
 
-// ============================================
 // SLACK MESSAGES
-// ============================================
+
 async function loadSlackMessages() {
     await populateSlackMessagesProjectSelect();
     if (!selectedSlackProjectId) {
@@ -2591,9 +2587,8 @@ function createSlackMessageBubble(msg) {
     return bubble;
 }
 
-// ============================================
 // SLACK SETTINGS
-// ============================================
+
 let slackConfigured = false;
 
 async function loadSlackSettings() {
@@ -2811,9 +2806,8 @@ function copyWebhookUrl() {
     });
 }
 
-// ============================================
 // DESIGNER LANDING PAGE
-// ============================================
+
 const DESIGNER_QUOTES = [
     {
         text: "Every great product starts with a designer who dared to imagine a better world.",
@@ -2906,9 +2900,8 @@ async function continueWithSlack() {
     }
 }
 
-// ============================================
 // INITIALIZATION
-// ============================================
+
 document.addEventListener('DOMContentLoaded', async () => {
     // Handle Slack OAuth callback first
     const handled = await handleSlackCallback();
@@ -2990,9 +2983,8 @@ function setExportSubTab(tab) {
     }
 }
 
-// ============================================
 // REPORTS
-// ============================================
+
 let reportViewMode = 'table';
 let allReports = [];
 let allSummaries = [];
@@ -3299,9 +3291,8 @@ async function submitReportFromWeb() {
     }
 }
 
-// ============================================
 // REPORTS PAGE
-// ============================================
+
 let currentReportTab = 'project';
 let currentReportData = null;
 let currentReportEndpoint = '';

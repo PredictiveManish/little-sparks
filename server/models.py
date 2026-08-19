@@ -42,6 +42,7 @@ class User(Base):
 
 class ProjectManager(Base):
     """Junction table: many-to-many between Projects and Managers."""
+
     __tablename__ = "project_managers"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -214,11 +215,12 @@ class Session(Base):
 
 class SlackCompletionTracker(Base):
     """Tracks pending stage completions initiated via Slack messages.
-    
+
     Flow:
     1. Designer says 'complete' in project channel → status=PENDING
     2. Manager says 'completed/approved' → status=CONFIRMED, auto-complete stage
     """
+
     __tablename__ = "slack_completion_tracker"
 
     id = Column(Integer, primary_key=True, index=True)
