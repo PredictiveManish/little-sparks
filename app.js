@@ -4465,7 +4465,8 @@ async function showResponsibilityDetails(designerId, period, periodStart, period
         const list = document.getElementById('responsibilityDetailsList');
         const title = document.getElementById('responsibilityDetailsTitle');
         
-        title.textContent = `Responsible for Delay — ${designers.find(d => d.id === designerId)?.name || 'Designer'}`;
+        const allDesigners = await api.getDesigners();
+        title.textContent = `Responsible for Delay — ${allDesigners.find(d => d.id === designerId)?.name || 'Designer'}`;
         
         if (!details || details.length === 0) {
             list.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No delays this designer was marked responsible for.</p>';
