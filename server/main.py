@@ -7719,7 +7719,7 @@ async def serve_frontend(full_path: str):
     """Serve static files or index.html for SPA fallback."""
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="API endpoint not found")
-    static_files = ["styles.css", "api.js", "utils.js", "app.js"]
+    static_files = ["styles.css", "api.js", "utils.js", "app.js", "index.html", "utils.js"]
     if full_path in static_files:
         return FileResponse(full_path)
     return FileResponse("index.html")
