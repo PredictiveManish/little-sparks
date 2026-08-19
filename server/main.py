@@ -79,6 +79,7 @@ from .schemas import (
     SlackLoginRequest,
     PendingUserResponse,
     ApproveUserRequest,
+    PromoteUserRequest,
     SlackMessageResponse,
     StageReportCreate,
     StageReportResponse,
