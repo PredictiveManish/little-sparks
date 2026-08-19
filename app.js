@@ -601,35 +601,35 @@ async function loadDashboard() {
                     
                     document.getElementById('stageCompleted').textContent = totalCompleted;
                     document.getElementById('stageCompletedPct').textContent = pct(totalCompleted);
-                    document.getElementById('stageInProgress').textContent = totalInProgress;
-                    document.getElementById('stageInProgressPct').textContent = pct(totalInProgress);
                     document.getElementById('stageOnTime').textContent = `${onTimeCompleted}/${onTimeProgress}`;
                     document.getElementById('stageOnTimePct').textContent = pct(onTimeCompleted + onTimeProgress);
                     document.getElementById('stageDelayed').textContent = `${delayedCompleted}/${delayedProgress}`;
                     document.getElementById('stageDelayedPct').textContent = pct(delayedCompleted + delayedProgress);
+                    document.getElementById('stageInProgress').textContent = totalInProgress;
+                    document.getElementById('stageInProgressPct').textContent = pct(totalInProgress);
                     
                     if (total > 0) {
                         const completedPct = (totalCompleted / total) * 100;
-                        const onTimeProgressPct = (onTimeProgress / total) * 100;
-                        const delayedProgressPct = (delayedProgress / total) * 100;
-                        const inTimelinePct = (totalInProgress / total) * 100;
+                        const onTimeCompletedPct = (onTimeCompleted / total) * 100;
+                        const delayedCompletedPct = (delayedCompleted / total) * 100;
+                        const inProgressPct = (totalInProgress / total) * 100;
                         
                         const barCompleted = document.getElementById('barCompleted');
-                        const barOnTimeProgress = document.getElementById('barOnTimeProgress');
-                        const barDelayedProgress = document.getElementById('barDelayedProgress');
-                        const barInTimeline = document.getElementById('barInTimeline');
+                        const barOnTimeCompleted = document.getElementById('barOnTimeCompleted');
+                        const barDelayedCompleted = document.getElementById('barDelayedCompleted');
+                        const barInProgress = document.getElementById('barInProgress');
                         
                         barCompleted.style.width = `${completedPct}%`;
                         barCompleted.querySelector(':scope > div').textContent = `${totalCompleted} (${completedPct.toFixed(1)}%)`;
                         
-                        barOnTimeProgress.style.width = `${onTimeProgressPct}%`;
-                        barOnTimeProgress.querySelector(':scope > div').textContent = `${onTimeProgress} OT`;
+                        barOnTimeCompleted.style.width = `${onTimeCompletedPct}%`;
+                        barOnTimeCompleted.querySelector(':scope > div').textContent = `${onTimeCompleted} OT`;
                         
-                        barDelayedProgress.style.width = `${delayedProgressPct}%`;
-                        barDelayedProgress.querySelector(':scope > div').textContent = `${delayedProgress} DL`;
+                        barDelayedCompleted.style.width = `${delayedCompletedPct}%`;
+                        barDelayedCompleted.querySelector(':scope > div').textContent = `${delayedCompleted} DL`;
                         
-                        barInTimeline.style.width = `${inTimelinePct}%`;
-                        barInTimeline.querySelector(':scope > div').textContent = `${totalInProgress} In Prog`;
+                        barInProgress.style.width = `${inProgressPct}%`;
+                        barInProgress.querySelector(':scope > div').textContent = `${totalInProgress} In Prog`;
                     }
                 } catch (summaryErr) {
                     console.warn('[APP] loadDashboard: Failed to load stage summary:', summaryErr.message);
