@@ -462,6 +462,16 @@ def clear_session_cookie(response: Response):
     )
 
 
+def set_session_cookie(response: Response, session_token: str):
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_token,
+        path="/",
+        httponly=True,
+        samesite="lax",
+    )
+
+
 # ---------- Slack token encryption ----------
 
 _slack_api_lock = threading.Lock()
