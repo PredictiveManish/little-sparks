@@ -603,8 +603,8 @@ async function loadDashboard() {
                     document.getElementById('stageCompletedPct').textContent = pct(totalCompleted);
                     document.getElementById('stageOnTime').textContent = `${onTimeCompleted}/${onTimeProgress}`;
                     document.getElementById('stageOnTimePct').textContent = pct(onTimeCompleted + onTimeProgress);
-                    document.getElementById('stageDelayed').textContent = `${delayedProgress}`;
-                    document.getElementById('stageDelayedPct').textContent = pct(delayedProgress);
+                    document.getElementById('stageDelayed').textContent = `${delayedCompleted}/${delayedProgress}`;
+                    document.getElementById('stageDelayedPct').textContent = pct(delayedCompleted + delayedProgress);
                     document.getElementById('stageInProgress').textContent = totalInProgress;
                     document.getElementById('stageInProgressPct').textContent = pct(totalInProgress);
                     
@@ -4411,59 +4411,61 @@ async function loadDesignerPerformance() {
 
         // Render Designer Performance Charts
         try {
-            // 1. On-time rate trend line (period-aware)
-            try {
-                const trendData = await api.getDesignerPerformanceTrend(parseInt(designerId), period);
-                if (trendData && trendData.length > 0) {
-                    const sortedTrend = [...trendData].sort((a, b) => a.month.localeCompare(b.month));
-                    const trendLabels = sortedTrend.map(t => {
-                        if (period === 'weekly') {
-                            return t.month;
-                        }
-                        const [y, m] = t.month.split('-');
-                        return new Date(y, m - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' });
-                    });
-                    renderChart('designerDelayTrendChart', {
-                        type: 'line',
-                        data: {
-                            labels: trendLabels,
-                            datasets: [{
-                                label: 'On-Time Rate (%)',
-                                data: sortedTrend.map(t => t.on_time_rate),
-                                borderColor: chartColors.green,
-                                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                                fill: true,
-                                tension: 0.3,
-                                pointRadius: 4,
-                                pointHoverRadius: 6,
-                                borderWidth: 2,
-                            }]
-                        },
-                        options: {
-                            ...defaultChartOptions,
-                            scales: {
-                                x: { ...defaultScaleConfig, grid: { display: false } },
-                                y: { ...defaultScaleConfig, beginAtZero: true, max: 100, ticks: { ...defaultScaleConfig.ticks, callback: v => v + '%' }, grid: { color: 'rgba(0,0,0,0.05)' } }
+            // 1. On-time rate trend line (period-aware) - skip for overall (no time dimension)
+            if (period !== 'overall') {
+                try {
+                    const trendData = await api.getDesignerPerformanceTrend(parseInt(designerId), period);
+                    if (trendData && trendData.length > 0) {
+                        const sortedTrend = [...trendData].sort((a, b) => a.month.localeCompare(b.month));
+                        const trendLabels = sortedTrend.map(t => {
+                            if (period === 'weekly') {
+                                return t.month;
+                            }
+                            const [y, m] = t.month.split('-');
+                            return new Date(y, m - 1).toLocaleDateString('en', { month: 'short', year: '2-digit' });
+                        });
+                        renderChart('designerDelayTrendChart', {
+                            type: 'line',
+                            data: {
+                                labels: trendLabels,
+                                datasets: [{
+                                    label: 'On-Time Rate (%)',
+                                    data: sortedTrend.map(t => t.on_time_rate),
+                                    borderColor: chartColors.green,
+                                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                                    fill: true,
+                                    tension: 0.3,
+                                    pointRadius: 4,
+                                    pointHoverRadius: 6,
+                                    borderWidth: 2,
+                                }]
                             },
-                            plugins: {
-                                ...defaultChartOptions.plugins,
-                                legend: { display: false },
-                                tooltip: {
-                                    callbacks: {
-                                        label: (ctx) => `On-time: ${ctx.parsed.y}% (${ctx.label})`
+                            options: {
+                                ...defaultChartOptions,
+                                scales: {
+                                    x: { ...defaultScaleConfig, grid: { display: false } },
+                                    y: { ...defaultScaleConfig, beginAtZero: true, max: 100, ticks: { ...defaultScaleConfig.ticks, callback: v => v + '%' }, grid: { color: 'rgba(0,0,0,0.05)' } }
+                                },
+                                plugins: {
+                                    ...defaultChartOptions.plugins,
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (ctx) => `On-time: ${ctx.parsed.y}% (${ctx.label})`
+                                        }
                                     }
                                 }
                             }
-                        }
-                    });
-                } else {
+                        });
+                    } else {
+                        const trendContainer = document.getElementById('designerDelayTrendChart')?.closest('div');
+                        if (trendContainer) trendContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No trend data available.</p>';
+                    }
+                } catch (trendErr) {
+                    console.warn('[APP] loadDesignerPerformance: Failed to load trend:', trendErr.message);
                     const trendContainer = document.getElementById('designerDelayTrendChart')?.closest('div');
                     if (trendContainer) trendContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No trend data available.</p>';
                 }
-            } catch (trendErr) {
-                console.warn('[APP] loadDesignerPerformance: Failed to load trend:', trendErr.message);
-                const trendContainer = document.getElementById('designerDelayTrendChart')?.closest('div');
-                if (trendContainer) trendContainer.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No trend data available.</p>';
             }
 
             // 2. Cross-designer ranking — team-average comparison (skip for overall)
