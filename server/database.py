@@ -407,6 +407,9 @@ def init_db():
     _migrate_slack_completion_tracker_table()
     _migrate_phase_responsible_column()
     _migrate_phase_stage_name_column()
+    _add_column_if_missing("phases", "manager_remarks", "JSON DEFAULT '[]'")
+    _add_column_if_missing("phases", "assigned_designer_ids", "JSON DEFAULT '[]'")
+    _add_column_if_missing("projects", "created_by_user_id", "INTEGER")
     init_wal_mode()
     # Run backfill in a session after WAL mode is set
     try:

@@ -603,8 +603,8 @@ async function loadDashboard() {
                     document.getElementById('stageCompletedPct').textContent = pct(totalCompleted);
                     document.getElementById('stageOnTime').textContent = `${onTimeCompleted}/${onTimeProgress}`;
                     document.getElementById('stageOnTimePct').textContent = pct(onTimeCompleted + onTimeProgress);
-                    document.getElementById('stageDelayed').textContent = `${delayedCompleted}/${delayedProgress}`;
-                    document.getElementById('stageDelayedPct').textContent = pct(delayedCompleted + delayedProgress);
+                    document.getElementById('stageDelayed').textContent = `${delayedProgress}`;
+                    document.getElementById('stageDelayedPct').textContent = pct(delayedProgress);
                     document.getElementById('stageInProgress').textContent = totalInProgress;
                     document.getElementById('stageInProgressPct').textContent = pct(totalInProgress);
                     

@@ -1229,6 +1229,33 @@ def _compute_phase_delay_days(phase, today_str):
     return 0
 
 
+def _designer_project_ids(db, designer_id):
+    """Project IDs relevant to a designer, whether assigned via the legacy
+    single-designer `Project.assigned_designer_id` field or the newer
+    per-phase `Phase.assigned_designer_ids` (multi-designer) assignment."""
+    legacy_ids = {
+        pid
+        for (pid,) in db.query(Project.id)
+        .filter(Project.assigned_designer_id == designer_id)
+        .all()
+    }
+    phase_ids = {
+        pid
+        for pid, ids in db.query(Phase.project_id, Phase.assigned_designer_ids).all()
+        if ids and designer_id in ids
+    }
+    return legacy_ids | phase_ids
+
+
+def _phase_belongs_to_designer(ph, project, designer_id):
+    """Whether a specific phase's work is attributable to this designer.
+    Prefers the per-phase assignment; falls back to the legacy project-level
+    field for phases that predate per-phase assignment."""
+    if ph.assigned_designer_ids:
+        return designer_id in ph.assigned_designer_ids
+    return project is not None and project.assigned_designer_id == designer_id
+
+
 @app.get("/api/dashboard/stats", response_model=DashboardStats)
 def dashboard_stats(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
@@ -6957,12 +6984,11 @@ async def get_designer_weekly_performance(
     if not designer:
         raise HTTPException(status_code=404, detail="Designer not found")
 
-    # Find all projects assigned to this designer
-    projects = (
-        db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
-    )
+    # Find all projects assigned to this designer (legacy + per-phase)
+    project_ids = list(_designer_project_ids(db, designer_id))
+    projects_by_id = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
 
-    if not projects:
+    if not project_ids:
         return DesignerPerformanceResponse(
             designer_id=designer.id,
             designer_name=designer.name,
@@ -6976,13 +7002,8 @@ async def get_designer_weekly_performance(
             total_on_time=0,
         )
 
-    project_ids = [p.id for p in projects]
-    total_stages_assigned = (
-        db.query(Phase).filter(Phase.project_id.in_(project_ids)).count()
-    )
-
-    # Get all phases for these projects that were completed in the week
-    phases = (
+    # Get all phases for these projects that were completed in the week, attributable to this designer
+    all_phases = (
         db.query(Phase)
         .filter(
             Phase.project_id.in_(project_ids),
@@ -6992,6 +7013,16 @@ async def get_designer_weekly_performance(
         )
         .all()
     )
+    phases = [ph for ph in all_phases if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)]
+
+    # Count total stages assigned to this designer (all phases in their projects)
+    all_project_phases = (
+        db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
+    )
+    total_stages_assigned = sum(
+        1 for ph in all_project_phases
+        if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)
+    )
 
     total_stages_completed = 0
     total_delays = 0
@@ -7000,7 +7031,7 @@ async def get_designer_weekly_performance(
     items = []
 
     for ph in phases:
-        proj = db.query(Project).filter(Project.id == ph.project_id).first()
+        proj = projects_by_id.get(ph.project_id)
         if not proj:
             continue
 
@@ -7099,12 +7130,11 @@ async def get_designer_monthly_performance(
     else:
         month_end = f"{year}-{month + 1:02d}-01"
 
-    # Find all projects assigned to this designer
-    projects = (
-        db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
-    )
+    # Find all projects assigned to this designer (legacy + per-phase)
+    project_ids = list(_designer_project_ids(db, designer_id))
+    projects_by_id = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
 
-    if not projects:
+    if not project_ids:
         return DesignerPerformanceResponse(
             designer_id=designer.id,
             designer_name=designer.name,
@@ -7118,13 +7148,8 @@ async def get_designer_monthly_performance(
             total_on_time=0,
         )
 
-    project_ids = [p.id for p in projects]
-    total_stages_assigned = (
-        db.query(Phase).filter(Phase.project_id.in_(project_ids)).count()
-    )
-
-    # Get all phases for these projects that were completed in the month
-    phases = (
+    # Get all phases for these projects that were completed in the month, attributable to this designer
+    all_phases = (
         db.query(Phase)
         .filter(
             Phase.project_id.in_(project_ids),
@@ -7134,6 +7159,16 @@ async def get_designer_monthly_performance(
         )
         .all()
     )
+    phases = [ph for ph in all_phases if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)]
+
+    # Count total stages assigned to this designer (all phases in their projects)
+    all_project_phases = (
+        db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
+    )
+    total_stages_assigned = sum(
+        1 for ph in all_project_phases
+        if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)
+    )
 
     total_stages_completed = 0
     total_delays = 0
@@ -7142,7 +7177,7 @@ async def get_designer_monthly_performance(
     items = []
 
     for ph in phases:
-        proj = db.query(Project).filter(Project.id == ph.project_id).first()
+        proj = projects_by_id.get(ph.project_id)
         if not proj:
             continue
 
@@ -7233,11 +7268,11 @@ async def get_designer_overall_performance(
     if not designer:
         raise HTTPException(status_code=404, detail="Designer not found")
 
-    projects = (
-        db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
-    )
+    # Find all projects assigned to this designer (legacy + per-phase)
+    project_ids = list(_designer_project_ids(db, designer_id))
+    projects_by_id = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
 
-    if not projects:
+    if not project_ids:
         return DesignerPerformanceResponse(
             designer_id=designer.id,
             designer_name=designer.name,
@@ -7251,12 +7286,17 @@ async def get_designer_overall_performance(
             total_on_time=0,
         )
 
-    project_ids = [p.id for p in projects]
-    total_stages_assigned = (
-        db.query(Phase).filter(Phase.project_id.in_(project_ids)).count()
+    # Count total stages assigned to this designer (all phases in their projects)
+    all_project_phases = (
+        db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
+    )
+    total_stages_assigned = sum(
+        1 for ph in all_project_phases
+        if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)
     )
 
-    phases = (
+    # Get all phases for these projects that were completed, attributable to this designer
+    all_phases = (
         db.query(Phase)
         .filter(
             Phase.project_id.in_(project_ids),
@@ -7264,6 +7304,7 @@ async def get_designer_overall_performance(
         )
         .all()
     )
+    phases = [ph for ph in all_phases if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)]
 
     total_stages_completed = 0
     total_delays = 0
@@ -7535,23 +7576,19 @@ async def get_designer_comparison(
 
     result = []
     for designer in all_designers:
-        projects = (
-            db.query(Project).filter(Project.assigned_designer_id == designer.id).all()
-        )
-        if not projects:
+        project_ids = list(_designer_project_ids(db, designer.id))
+        projects_by_id = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
+        if not project_ids:
             continue
 
-        project_ids = [p.id for p in projects]
-        phases = (
-            db.query(Phase)
-            .filter(
-                Phase.project_id.in_(project_ids),
-                Phase.completed_at.isnot(None),
-                Phase.completed_at >= period_start,
-                Phase.completed_at < period_end,
-            )
-            .all()
-        )
+        all_project_phases = db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
+        phases = [
+            ph for ph in all_project_phases
+            if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer.id)
+            and ph.completed_at is not None
+            and ph.completed_at >= period_start
+            and ph.completed_at < period_end
+        ]
 
         stages_completed = len(phases)
         on_time = 0
@@ -7645,20 +7682,22 @@ async def get_designer_responsibility_details(
         else:
             period_end = f"{now.year}-{now.month + 1:02d}-01"
 
-    # Find all projects assigned to this designer
-    projects = (
-        db.query(Project).filter(Project.assigned_designer_id == designer_id).all()
-    )
-    project_ids = [p.id for p in projects]
+    # Find all projects assigned to this designer (legacy + per-phase)
+    project_ids = list(_designer_project_ids(db, designer_id))
+    projects_by_id = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
+
+    if not project_ids:
+        return []
 
     # Get all phases for these projects
-    phases = db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
+    all_phases = db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
+    phases = [ph for ph in all_phases if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)]
 
     result = []
     for ph in phases:
         # Check if designer was marked as responsible
         if ph.delay_responsible and designer_id in ph.delay_responsible:
-            proj = db.query(Project).filter(Project.id == ph.project_id).first()
+            proj = projects_by_id.get(ph.project_id)
             if not proj:
                 continue
 
@@ -7807,17 +7846,17 @@ async def get_designer_performance_trend(
 
     all_projects = get_user_owned_project_query(db, user).all()
     project_ids = [p.id for p in all_projects]
-    phases = (
+    projects_by_id = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
+    all_phases = (
         db.query(Phase)
         .filter(
             Phase.project_id.in_(project_ids),
             Phase.completed_at.isnot(None),
-            Phase.assigned_designer_ids != None,
         )
         .order_by(Phase.completed_at)
         .all()
     )
-    phases = [ph for ph in phases if designer_id in ph.assigned_designer_ids]
+    phases = [ph for ph in all_phases if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)]
     if not phases:
         return []
 
