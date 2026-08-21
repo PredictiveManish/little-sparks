@@ -45,7 +45,7 @@ from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
 
-#  Structured logging setup 
+#  Structured logging setup
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
@@ -121,10 +121,10 @@ from .schemas import (
     DelayResponsibilityDetail,
 )
 
-#  Init 
+#  Init
 init_db()
 
-#  App 
+#  App
 app = FastAPI(title="Smartivity Designer Manager API")
 
 app.add_middleware(
@@ -141,7 +141,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#  Secrets from env 
+#  Secrets from env
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 if not SECRET_KEY:
     raise RuntimeError(
@@ -175,7 +175,7 @@ SLACK_REDIRECT_URI = os.getenv(
     "SLACK_REDIRECT_URI", "http://localhost:8000/api/slack/oauth/callback"
 )
 
-#  Slack Bot Install (oauth.v2.access) — separate from Login-with-Slack (OIDC) above 
+#  Slack Bot Install (oauth.v2.access) — separate from Login-with-Slack (OIDC) above
 SLACK_BOT_REDIRECT_URI = os.getenv(
     "SLACK_BOT_REDIRECT_URI", "http://localhost:8000/api/slack/install/callback"
 )
@@ -187,7 +187,7 @@ SLACK_SIGNING_SECRET = os.getenv("SLACK_SIGNING_SECRET", "")
 INSTALL_STATE_COOKIE = "slack_install_state"
 STATE_COOKIE_NAME = "slack_oauth_state"
 
-#  Reminder scheduling 
+#  Reminder scheduling
 # Shared secret an external cron service (or the in-process scheduler below)
 # must present to trigger /api/cron/tick. Required for the endpoint to do
 # anything — without it the endpoint just reports itself as unconfigured.
@@ -200,10 +200,10 @@ DAILY_REMINDER_HOUR = int(os.getenv("DAILY_REMINDER_HOUR", "10"))
 # sleeps and this thread sleeps with it.
 SCHEDULER_INTERVAL_SECONDS = int(os.getenv("SCHEDULER_INTERVAL_SECONDS", "300"))
 
-#  Password hashing 
+#  Password hashing
 argon2_hasher = argon2.PasswordHasher()
 
-#  Seed admin user on startup (only if not exists) 
+#  Seed admin user on startup (only if not exists)
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 ADMIN_NAME = os.getenv("ADMIN_NAME", "Admin")
@@ -249,7 +249,7 @@ def verify_password(password: str, hashed: str) -> bool:
         return False
 
 
-#  JWT helpers (for legacy / token responses) 
+#  JWT helpers (for legacy / token responses)
 
 
 def create_jwt_token(data: dict) -> str:
@@ -259,7 +259,7 @@ def create_jwt_token(data: dict) -> str:
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-#  Session helpers 
+#  Session helpers
 
 
 def create_session_token() -> str:
@@ -329,7 +329,7 @@ def revoke_session(session_id: int, db: Session):
         )
 
 
-#  Auth dependency 
+#  Auth dependency
 
 VALID_ROLES = {"DESIGNER", "MANAGER", "ADMIN"}
 
@@ -439,7 +439,7 @@ def filter_user_projects(db, user, project_ids):
         return [p[0] for p in owned]
 
 
-#  Cookie helpers 
+#  Cookie helpers
 
 
 def set_session_(response: Response, session_token: str):
@@ -472,7 +472,7 @@ def set_session_cookie(response: Response, session_token: str):
     )
 
 
-#  Slack token encryption 
+#  Slack token encryption
 
 _slack_api_lock = threading.Lock()
 
@@ -492,7 +492,7 @@ def decrypt_token(encrypted: str) -> Optional[str]:
         return None
 
 
-#  Slack token refresh (token rotation support) 
+#  Slack token refresh (token rotation support)
 
 
 async def refresh_slack_token(db):
@@ -581,7 +581,7 @@ def _should_proactively_refresh(config):
     return _is_token_expiring_soon(config.token_expires_at)
 
 
-#  Slack OIDC 
+#  Slack OIDC
 
 SLACK_API_BASE = "https://slack.com/api"
 PKCE_COOKIE_NAME = "slack_pkce_verifier"
@@ -817,7 +817,7 @@ async def slack_get_userinfo(access_token: str):
         return resp.json()
 
 
-#  Auth endpoints 
+#  Auth endpoints
 
 
 @app.post("/api/auth/login")
@@ -1153,7 +1153,7 @@ def get_me(user: Optional[User] = Depends(get_current_user)):
     return UserResponse.model_validate(user)
 
 
-#  Admin: Approve users 
+#  Admin: Approve users
 
 
 @app.post("/api/admin/users/approve")
@@ -1200,7 +1200,7 @@ def get_pending_users(
     return [PendingUserResponse.model_validate(p) for p in pending]
 
 
-#  Dashboard 
+#  Dashboard
 
 
 def _compute_project_status(project, today_str):
@@ -1447,7 +1447,7 @@ def delay_trend(user: User = Depends(get_current_user), db: Session = Depends(ge
     return result
 
 
-#  Projects 
+#  Projects
 
 
 @app.get("/api/projects", response_model=List[ProjectResponse])
@@ -2207,7 +2207,7 @@ async def assign_designers_to_phase(
     return {"message": "Designers assigned", "designer_ids": designer_ids}
 
 
-#  Designers 
+#  Designers
 
 
 @app.get("/api/admin/users", response_model=List[UserResponse])
@@ -2301,7 +2301,7 @@ def delete_designer(
     return {"message": "Designer removed"}
 
 
-#  Slack Integration 
+#  Slack Integration
 
 
 def _get_project_details(db, project_id):
@@ -3088,7 +3088,7 @@ def _build_project_card(project, designer, phases):
     return blocks
 
 
-#  Slack Config Endpoints 
+#  Slack Config Endpoints
 
 
 @app.get("/api/slack/config", response_model=SlackConfigResponse)
@@ -3393,7 +3393,7 @@ def get_slack_status(
     )
 
 
-#  Slack raw message logging 
+#  Slack raw message logging
 
 
 @app.post("/api/slack/messages/log")
@@ -3540,7 +3540,7 @@ async def get_slack_channel_history(
     }
 
 
-#  Slack Completion Tracker Cancel 
+#  Slack Completion Tracker Cancel
 
 
 @app.post("/api/slack/completion/{tracker_id}/cancel")
@@ -3614,7 +3614,7 @@ async def cancel_slack_completion(
     )
 
 
-#  Slack Webhook Endpoint 
+#  Slack Webhook Endpoint
 
 
 @app.get("/api/slack/webhook")
@@ -5384,7 +5384,7 @@ async def slack_webhook(request: Request, db: Session = Depends(get_db)):
     return {"message": "OK"}
 
 
-#  Slack Channel Creation 
+#  Slack Channel Creation
 
 
 @app.post(
@@ -5498,7 +5498,7 @@ async def create_slack_channel(
         )
 
 
-#  Slack Activity Feed 
+#  Slack Activity Feed
 
 
 @app.get(
@@ -5532,7 +5532,7 @@ def get_slack_activity(
     return [SlackActivityResponse.model_validate(a) for a in activities]
 
 
-#  Slack Channel Status 
+#  Slack Channel Status
 
 
 class ProjectSlackStatus(BaseModel):
@@ -5595,7 +5595,7 @@ async def get_slack_channel_status(
     return SlackChannelStatusBatchResponse(statuses=statuses, corrected=corrected)
 
 
-#  Add Bot to Channel 
+#  Add Bot to Channel
 
 
 class BotChannelActionResponse(BaseModel):
@@ -5663,7 +5663,7 @@ async def add_bot_to_channel(
     )
 
 
-#  Reminder Scheduler 
+#  Reminder Scheduler
 
 
 async def run_reminder_tick(db):
@@ -5814,7 +5814,7 @@ async def send_manual_reminder(
     }
 
 
-#  Admin Data Export 
+#  Admin Data Export
 
 
 def _parse_export_range(from_param, to_param):
@@ -6144,7 +6144,7 @@ def export_data(
     )
 
 
-#  Stage Reports 
+#  Stage Reports
 
 
 @app.post("/api/reports", response_model=StageReportResponse)
@@ -6448,7 +6448,7 @@ async def get_project_designer_reports(
     return reports
 
 
-#  Project Reports (phasewise, weekly, monthly) 
+#  Project Reports (phasewise, weekly, monthly)
 
 
 @app.get("/api/projects/{project_id}/report", response_model=ProjectReportResponse)
@@ -6996,7 +6996,9 @@ async def get_designer_weekly_performance(
 
     # Find all projects assigned to this designer (legacy + per-phase)
     project_ids = list(_designer_project_ids(db, designer_id))
-    projects_by_id = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
+    projects_by_id = {
+        p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()
+    }
 
     if not project_ids:
         return DesignerPerformanceResponse(
@@ -7023,15 +7025,22 @@ async def get_designer_weekly_performance(
         )
         .all()
     )
-    phases = [ph for ph in all_phases if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)]
+    phases = [
+        ph
+        for ph in all_phases
+        if _phase_belongs_to_designer(
+            ph, projects_by_id.get(ph.project_id), designer_id
+        )
+    ]
 
     # Count total stages assigned to this designer (all phases in their projects)
-    all_project_phases = (
-        db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
-    )
+    all_project_phases = db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
     total_stages_assigned = sum(
-        1 for ph in all_project_phases
-        if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)
+        1
+        for ph in all_project_phases
+        if _phase_belongs_to_designer(
+            ph, projects_by_id.get(ph.project_id), designer_id
+        )
     )
 
     total_stages_completed = 0
@@ -7142,7 +7151,9 @@ async def get_designer_monthly_performance(
 
     # Find all projects assigned to this designer (legacy + per-phase)
     project_ids = list(_designer_project_ids(db, designer_id))
-    projects_by_id = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
+    projects_by_id = {
+        p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()
+    }
 
     if not project_ids:
         return DesignerPerformanceResponse(
@@ -7169,15 +7180,22 @@ async def get_designer_monthly_performance(
         )
         .all()
     )
-    phases = [ph for ph in all_phases if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)]
+    phases = [
+        ph
+        for ph in all_phases
+        if _phase_belongs_to_designer(
+            ph, projects_by_id.get(ph.project_id), designer_id
+        )
+    ]
 
     # Count total stages assigned to this designer (all phases in their projects)
-    all_project_phases = (
-        db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
-    )
+    all_project_phases = db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
     total_stages_assigned = sum(
-        1 for ph in all_project_phases
-        if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)
+        1
+        for ph in all_project_phases
+        if _phase_belongs_to_designer(
+            ph, projects_by_id.get(ph.project_id), designer_id
+        )
     )
 
     total_stages_completed = 0
@@ -7280,13 +7298,17 @@ async def get_designer_overall_performance(
 
     # Find all projects assigned to this designer (legacy + per-phase)
     project_ids = list(_designer_project_ids(db, designer_id))
-    projects_by_id = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
+    projects_by_id = {
+        p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()
+    }
 
     if not project_ids:
         return DesignerPerformanceResponse(
             designer_id=designer.id,
             designer_name=designer.name,
-            period_start=designer.created_at.strftime("%Y-%m-%d") if designer.created_at else "N/A",
+            period_start=designer.created_at.strftime("%Y-%m-%d")
+            if designer.created_at
+            else "N/A",
             period_end=datetime.now(IST).strftime("%Y-%m-%d"),
             projects=[],
             total_updates=0,
@@ -7297,12 +7319,13 @@ async def get_designer_overall_performance(
         )
 
     # Count total stages assigned to this designer (all phases in their projects)
-    all_project_phases = (
-        db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
-    )
+    all_project_phases = db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
     total_stages_assigned = sum(
-        1 for ph in all_project_phases
-        if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)
+        1
+        for ph in all_project_phases
+        if _phase_belongs_to_designer(
+            ph, projects_by_id.get(ph.project_id), designer_id
+        )
     )
 
     # Get all phases for these projects that were completed, attributable to this designer
@@ -7314,7 +7337,13 @@ async def get_designer_overall_performance(
         )
         .all()
     )
-    phases = [ph for ph in all_phases if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)]
+    phases = [
+        ph
+        for ph in all_phases
+        if _phase_belongs_to_designer(
+            ph, projects_by_id.get(ph.project_id), designer_id
+        )
+    ]
 
     total_stages_completed = 0
     total_delays = 0
@@ -7385,7 +7414,9 @@ async def get_designer_overall_performance(
     return DesignerPerformanceResponse(
         designer_id=designer.id,
         designer_name=designer.name,
-        period_start=designer.created_at.strftime("%Y-%m-%d") if designer.created_at else "N/A",
+        period_start=designer.created_at.strftime("%Y-%m-%d")
+        if designer.created_at
+        else "N/A",
         period_end=datetime.now(IST).strftime("%Y-%m-%d"),
         projects=items,
         total_updates=len(items),
@@ -7397,7 +7428,7 @@ async def get_designer_overall_performance(
     )
 
 
-#  Monthly Trend for a Project 
+#  Monthly Trend for a Project
 
 
 @app.get(
@@ -7547,7 +7578,7 @@ async def get_project_monthly_trend(
     return result
 
 
-#  Designer Comparison 
+#  Designer Comparison
 
 
 @app.get(
@@ -7587,14 +7618,21 @@ async def get_designer_comparison(
     result = []
     for designer in all_designers:
         project_ids = list(_designer_project_ids(db, designer.id))
-        projects_by_id = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
+        projects_by_id = {
+            p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()
+        }
         if not project_ids:
             continue
 
-        all_project_phases = db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
+        all_project_phases = (
+            db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
+        )
         phases = [
-            ph for ph in all_project_phases
-            if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer.id)
+            ph
+            for ph in all_project_phases
+            if _phase_belongs_to_designer(
+                ph, projects_by_id.get(ph.project_id), designer.id
+            )
             and ph.completed_at is not None
             and ph.completed_at >= period_start
             and ph.completed_at < period_end
@@ -7694,14 +7732,22 @@ async def get_designer_responsibility_details(
 
     # Find all projects assigned to this designer (legacy + per-phase)
     project_ids = list(_designer_project_ids(db, designer_id))
-    projects_by_id = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
+    projects_by_id = {
+        p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()
+    }
 
     if not project_ids:
         return []
 
     # Get all phases for these projects
     all_phases = db.query(Phase).filter(Phase.project_id.in_(project_ids)).all()
-    phases = [ph for ph in all_phases if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)]
+    phases = [
+        ph
+        for ph in all_phases
+        if _phase_belongs_to_designer(
+            ph, projects_by_id.get(ph.project_id), designer_id
+        )
+    ]
 
     result = []
     for ph in phases:
@@ -7745,7 +7791,10 @@ async def get_designer_responsibility_details(
     return result
 
 
-@app.get("/api/designers/{designer_id}/delayed-stages", response_model=List[DelayResponsibilityDetail])
+@app.get(
+    "/api/designers/{designer_id}/delayed-stages",
+    response_model=List[DelayResponsibilityDetail],
+)
 def get_designer_delayed_stages(
     designer_id: int,
     user: User = Depends(get_current_user),
@@ -7766,7 +7815,12 @@ def get_designer_delayed_stages(
             delay_days = 0
             try:
                 completed_dt = None
-                for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"]:
+                for fmt in [
+                    "%Y-%m-%dT%H:%M:%S",
+                    "%Y-%m-%d %H:%M:%S",
+                    "%Y-%m-%d %H:%M",
+                    "%Y-%m-%d",
+                ]:
                     try:
                         completed_dt = datetime.strptime(ph.completed_at, fmt)
                         break
@@ -7799,7 +7853,9 @@ def get_designer_delayed_stages(
     return result
 
 
-@app.get("/api/dashboard/delayed-stages", response_model=List[DelayResponsibilityDetail])
+@app.get(
+    "/api/dashboard/delayed-stages", response_model=List[DelayResponsibilityDetail]
+)
 def get_all_delayed_stages(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
@@ -7837,7 +7893,7 @@ def get_all_delayed_stages(
     return result
 
 
-#  Designer Performance Trend (6 months) 
+#  Designer Performance Trend (6 months)
 
 
 @app.get(
@@ -7856,7 +7912,9 @@ async def get_designer_performance_trend(
 
     all_projects = get_user_owned_project_query(db, user).all()
     project_ids = [p.id for p in all_projects]
-    projects_by_id = {p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()}
+    projects_by_id = {
+        p.id: p for p in db.query(Project).filter(Project.id.in_(project_ids)).all()
+    }
     all_phases = (
         db.query(Phase)
         .filter(
@@ -7866,7 +7924,13 @@ async def get_designer_performance_trend(
         .order_by(Phase.completed_at)
         .all()
     )
-    phases = [ph for ph in all_phases if _phase_belongs_to_designer(ph, projects_by_id.get(ph.project_id), designer_id)]
+    phases = [
+        ph
+        for ph in all_phases
+        if _phase_belongs_to_designer(
+            ph, projects_by_id.get(ph.project_id), designer_id
+        )
+    ]
     if not phases:
         return []
 
@@ -7888,7 +7952,12 @@ async def get_designer_performance_trend(
         for ph in phases:
             try:
                 comp_dt = None
-                for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"]:
+                for fmt in [
+                    "%Y-%m-%dT%H:%M:%S",
+                    "%Y-%m-%d %H:%M:%S",
+                    "%Y-%m-%d %H:%M",
+                    "%Y-%m-%d",
+                ]:
                     try:
                         comp_dt = datetime.strptime(ph.completed_at, fmt)
                         break
@@ -7957,7 +8026,12 @@ async def get_designer_performance_trend(
         for ph in phases:
             try:
                 comp_dt = None
-                for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"]:
+                for fmt in [
+                    "%Y-%m-%dT%H:%M:%S",
+                    "%Y-%m-%d %H:%M:%S",
+                    "%Y-%m-%d %H:%M",
+                    "%Y-%m-%d",
+                ]:
                     try:
                         comp_dt = datetime.strptime(ph.completed_at, fmt)
                         break
@@ -8009,7 +8083,7 @@ async def get_designer_performance_trend(
     return result
 
 
-#  Report download endpoints (CSV / PDF) 
+#  Report download endpoints (CSV / PDF)
 
 
 def _project_report_to_csv(report: ProjectReportResponse) -> str:
@@ -9371,7 +9445,7 @@ async def download_designer_performance_csv(
     )
 
 
-#  Startup 
+#  Startup
 
 
 @app.on_event("startup")
@@ -9387,7 +9461,7 @@ def startup():
         )
 
 
-#  Serve Frontend 
+#  Serve Frontend
 
 
 @app.get("/{full_path:path}")

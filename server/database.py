@@ -113,7 +113,9 @@ def _migrate_slack_config_columns():
         logger.info("SlackConfig migration check completed successfully")
     except Exception as e:
         # Column might already exist (SQLite returns error on duplicate ADD COLUMN)
-        logger.warning("SlackConfig migration encountered an issue (likely no-op): %s", e)
+        logger.warning(
+            "SlackConfig migration encountered an issue (likely no-op): %s", e
+        )
 
 
 def _add_column_if_missing(table_name, column_name, column_ddl):
