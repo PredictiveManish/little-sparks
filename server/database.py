@@ -13,14 +13,24 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./smartivity.db")
 
 if "postgres" in DATABASE_URL:
     logger.info("Creating PostgreSQL database engine")
-    engine = create_engine(
-        DATABASE_URL,
-        pool_pre_ping=True,
-        pool_recycle=300,
-        pool_size=10,
-        max_overflow=20,
-    )
-    logger.info("PostgreSQL engine created successfully")
+    if os.getenv("SERVERLESS") == "true":
+        from sqlalchemy.pool import NullPool
+
+        engine = create_engine(
+            DATABASE_URL,
+            pool_pre_ping=True,
+            poolclass=NullPool,
+        )
+        logger.info("PostgreSQL engine created (serverless — NullPool)")
+    else:
+        engine = create_engine(
+            DATABASE_URL,
+            pool_pre_ping=True,
+            pool_recycle=300,
+            pool_size=10,
+            max_overflow=20,
+        )
+        logger.info("PostgreSQL engine created successfully")
 else:
     logger.info(
         "Creating SQLite database engine | path=%s",
@@ -103,7 +113,7 @@ def _migrate_slack_config_columns():
         logger.info("SlackConfig migration check completed successfully")
     except Exception as e:
         # Column might already exist (SQLite returns error on duplicate ADD COLUMN)
-        logger.warning("SlackConfig migration encountered issue (likely no-op): %s", e)
+        logger.warning("SlackConfig migration encountered an issue (likely no-op): %s", e)
 
 
 def _add_column_if_missing(table_name, column_name, column_ddl):

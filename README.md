@@ -29,13 +29,13 @@ A full-stack web application for managing the end-to-end product design lifecycl
 ## 1. Architecture & Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
+|-------|-|
 | **Frontend** | Vanilla JavaScript, TailwindCSS (CDN), Chart.js, Inter font |
-| **Backend** | FastAPI (Python), SQLAlchemy ORM, Pydantic v2 |
-| **Database** | SQLite (local), PostgreSQL (production on Render) |
+| **Backend** | FastAPI (Python), SQLAlchemy ORM, Pydantic v2, wrapped for serverless via Mangum |
+| **Database** | SQLite (local dev only), PostgreSQL via Supabase (production) |
 | **Auth** | Session cookies (HttpOnly), argon2 password hashing, Slack OIDC with PKCE |
 | **Slack** | Slack Bot (OAuth), Event Subscriptions (webhooks), Interactive Buttons, Modals |
-| **Deployment** | Frontend on Vercel, Backend on Render, Vercel rewrites `/api/*` to Render |
+| **Deployment** | Netlify — static frontend + one Python serverless function (`netlify/functions/api`) wrapping the whole FastAPI app; `netlify.toml` routes `/api/*` to it |
 
 ---
 
@@ -48,9 +48,10 @@ little-sparks/
 ├── app.js                  # Frontend logic: auth, routing, CRUD, UI rendering
 ├── api.js                  # API client: all fetch calls to backend
 ├── utils.js                # Shared utilities: stage lists, formatting, toast
-├── vercel.json             # Vercel config: rewrites /api/* to Render backend
+├── netlify.toml             # Netlify config: routes /api/* to the serverless function, SPA fallback
+├── netlify/functions/api/   # Serverless function wrapping the FastAPI app (Mangum)
+├── netlify/functions/reminder-cron/  # Scheduled function that triggers /api/cron/tick daily
 ├── .env.example            # Environment variable template
-├── Procfile                # Render startup command
 ├── server/
 │   ├── main.py             # FastAPI app, all endpoints, Slack bot logic
 │   ├── models.py           # SQLAlchemy ORM models (User, Project, Phase, etc.)
@@ -77,7 +78,7 @@ little-sparks/
 **Permission Matrix:**
 
 | Feature | Admin | Manager | Designer |
-|---------|-------|---------|----------|
+|---------|-------|---------||
 | View all projects | Yes | Own only | No |
 | Create/Edit projects | Yes | Own only | No |
 | Approve users | Yes | No | No |
@@ -152,7 +153,7 @@ The platform supports **two phase types**, each with its own set of workflow sta
 
 ### Project Status
 | Status | Condition |
-|--------|-----------|
+|--------|-|
 | **ON_TRACK** | Project is progressing as planned |
 | **DELAYED** | Current phase deadline has passed |
 | **COMPLETED** | All stages finished (progress = 100%) |
@@ -323,7 +324,7 @@ Admin-only section under Performance Reports → "Data" tab:
 Stage evaluation reports capture quality ratings across **8 categories** (1-5 scale):
 
 | # | Category | What to Evaluate |
-|---|----------|-----------------|
+|---||-------|
 | 1 | Costing | Is the product cost-effective for manufacturing? |
 | 2 | Willingness to Buy | Would target customers purchase this? |
 | 3 | Engagement Life | How long will it keep users engaged? |
@@ -346,7 +347,7 @@ Each report tracks: ratings, notes, actual completion date, delay days, and who 
 See `.env.example` for the full list:
 
 | Variable | Description |
-|----------|-------------|
+||---|
 | `SECRET_KEY` | JWT signing key (generate with `secrets.token_urlsafe(48)`) |
 | `ENCRYPTION_KEY` | Fernet key for Slack token encryption |
 | `SLACK_CLIENT_ID` | Slack App Client ID |
@@ -362,25 +363,25 @@ See `.env.example` for the full list:
 | `CRON_SECRET` | Secret for triggering reminder cron endpoint |
 | `DAILY_REMINDER_HOUR` | Hour for daily reminders (default: 10) |
 | `REMINDER_TIMEZONE` | Timezone for reminders (default: Asia/Kolkata) |
-| `SCHEDULER_INTERVAL_SECONDS` | Scheduler wake interval (default: 300) |
-| `ADMIN_EMAIL` | Seed admin email (default: `manish.tiwari.09@zohomail.in`) |
-| `ADMIN_PASSWORD` | Seed admin password |
+| `SCHEDULER_INTERVAL_SECONDS` | Scheduler wake interval (default: 300) — only relevant for local/non-serverless runs |
+| `ADMIN_EMAIL` | Seed admin email (must be set explicitly - no default) |
+| `ADMIN_PASSWORD` | Seed admin password (must be set explicitly - no default) |
 | `ADMIN_NAME` | Seed admin display name |
+| `SERVERLESS` | Set to `true` on Netlify - switches DB engine to NullPool for serverless-safe connections |
+| `SITE_URL` | Your Netlify site URL - used by the reminder-cron scheduled function to call back into the app |
 
 ---
 
 ## 14. Deployment
 
-### Backend (Render)
-- Python FastAPI app served by Uvicorn
-- Database: PostgreSQL on Render (SQLite for local dev)
+### Everything on Netlify
+- Frontend: static files (`index.html`, `app.js`, etc.) served directly by Netlify's CDN
+- Backend: `netlify/functions/api/api.py` wraps the entire FastAPI app via Mangum - all routes work unchanged, no per-route rewrite
+- `netlify.toml` routes `/api/*` to the function; everything else falls back to `index.html` (SPA routing)
+- Database: PostgreSQL via Supabase - use the **Transaction pooler** connection string (port 6543), not the direct connection (port 5432)
+- Daily reminders: `netlify/functions/reminder-cron/` runs on a schedule and calls `POST /api/cron/tick` (idempotent - safe even if triggered more than once a day)
 - Auto-migrations run on startup (adds missing columns/tables)
-- Admin user seeded on first startup
-
-### Frontend (Vercel)
-- Static files served from root
-- `/api/*` rewrites forwarded to Render backend
-- All other routes fall back to `index.html` (SPA routing)
+- Admin user seeded on first startup from `ADMIN_EMAIL`/`ADMIN_PASSWORD` env vars (required, no built-in default)
 
 ---
 
@@ -410,7 +411,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ### Key Endpoints
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
+|--------||---|
 | POST | `/api/auth/login` | Email/password login |
 | GET | `/api/auth/slack-auth-url` | Get Slack OIDC auth URL |
 | GET | `/api/auth/me` | Get current user |

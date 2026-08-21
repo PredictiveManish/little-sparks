@@ -4,7 +4,7 @@ from datetime import datetime
 import json
 
 
-# ---------- Auth ----------
+# Auth 
 
 
 class LoginRequest(BaseModel):
@@ -28,7 +28,7 @@ class SessionResponse(BaseModel):
     user: "UserResponse"
 
 
-# ---------- User ----------
+#  User 
 
 
 class UserBase(BaseModel):
@@ -72,7 +72,7 @@ class PromoteUserRequest(BaseModel):
     user_id: int
 
 
-# ---------- Phase ----------
+#  Phase 
 
 
 class PhaseCreate(BaseModel):
@@ -122,7 +122,7 @@ class DelayResponsibility(BaseModel):
         from_attributes = True
 
 
-# ---------- Project ----------
+#  Project 
 
 
 class ProjectCreate(BaseModel):
@@ -191,7 +191,7 @@ class ProjectManagerResponse(BaseModel):
         from_attributes = True
 
 
-# ---------- Dashboard ----------
+#  Dashboard 
 
 
 class DashboardStats(BaseModel):
@@ -260,14 +260,14 @@ class DesignerTrendPoint(BaseModel):
     delay_responsibility_count: int = 0
 
 
-# ---------- Stage Actions ----------
+#  Stage Actions 
 
 
 class StageCompleteRequest(BaseModel):
     stage_index: int
 
 
-# ---------- Slack ----------
+#  Slack 
 
 
 class SlackConfigCreate(BaseModel):
@@ -338,7 +338,7 @@ class SlackMessageResponse(BaseModel):
         from_attributes = True
 
 
-# ---------- Stage Reports ----------
+#  Stage Reports 
 
 
 class StageReportCreate(BaseModel):
@@ -406,7 +406,7 @@ class StageReportSummary(BaseModel):
     latest_submitted_at: Optional[datetime] = None
 
 
-# ---------- Project Reports (downloadable) ----------
+#  Project Reports (downloadable) 
 
 
 class ProjectReportResponse(BaseModel):
@@ -559,7 +559,7 @@ class DelayResponsibilityDetail(BaseModel):
     completed_at: Optional[str] = None
 
 
-# ---------- Slack Completion Tracker ----------
+#  Slack Completion Tracker 
 
 
 class SlackCompletionTrackerResponse(BaseModel):
